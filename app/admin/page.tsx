@@ -98,6 +98,12 @@ export default function AdminDashboard() {
   const [modalOpen, setModalOpen] = useState(false);
   const [checking, setChecking] = useState(true);
   const [authed, setAuthed] = useState(false);
+  const [explain, setExplain] = useState<{
+    q: Question;
+    text: string;
+    loading: boolean;
+    error: string;
+  } | null>(null);
 
   const router = useRouter();
 
@@ -139,6 +145,67 @@ export default function AdminDashboard() {
     await signOut(getAuthInstance());
     router.replace("/admin/login");
   };
+
+  const generateExplanation = async (q: Question) => {
+    const apiKey =
+      typeof window !== "undefined" ? localStorage.getItem(GROQ_STORAGE_KEY) : null;
+    const baseUrl =
+      (typeof window !== "undefined"
+        ? localStorage.getItem(GROQ_BASE_KEY) || GROQ_DEFAULT_BASE
+        : GROQ_DEFAULT_BASE
+      ).replace(/\/+$/, "");
+    const model =
+      typeof window !== "undefined" ? localStorage.getItem(GROQ_MODEL_KEY) : null;
+
+    if (!apiKey || !model) {
+      setExplain({ q, text: "", loading: false, error: "Add your Groq API key and pick a model in Settings first." });
+      return;
+    }
+
+    const correctLetters = q.options
+      .map((o, i) => ({ o, i }))
+      .filter(({ o }) => o.correct)
+      .map(({ i }) => String.fromCharCode(65 + i));
+    const optionLines = q.options
+      .map((o, i) => `${String.fromCharCode(65 + i)}. ${o.text}`)
+      .join("\n");
+
+    const prompt = `You are a JEE/NEET exam tutor. Explain the solution to this question clearly, step by step, and justify why the correct answer (${correctLetters.join(", ")}) is right and the others are wrong. Use plain text; you may use simple LaTeX-like notation for formulas if needed.\n\nQuestion: ${q.prompt}\n\nOptions:\n${optionLines}`;
+
+    setExplain({ q, text: "", loading: true, error: "" });
+    try {
+      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.3,
+        }),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new Error(`Request failed (${res.status}). ${detail.slice(0, 200)}`.trim());
+      }
+      const data = (await res.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const content = data?.choices?.[0]?.message?.content?.trim() ?? "";
+      setExplain({ q, text: content || "(No explanation returned.)", loading: false, error: "" });
+    } catch (err) {
+      setExplain({
+        q,
+        text: "",
+        loading: false,
+        error: err instanceof Error ? err.message : "Failed to generate explanation.",
+      });
+    }
+  };
+
+  const closeExplain = () => setExplain(null);
 
   if (checking || !authed) {
     return (
@@ -325,6 +392,27 @@ export default function AdminDashboard() {
         .ad-opt.correct { color: var(--accent); }
         .ad-opt.correct .k { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+        .ad-q-gen {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
+          letter-spacing: 0.1em; color: var(--dim); background: transparent;
+          border: 1px solid var(--rule); padding: 4px 10px; cursor: pointer; transition: all 0.15s ease;
+          display: inline-flex; align-items: center; gap: 6px;
+        }
+        .ad-q-gen:hover { color: var(--accent); border-color: var(--accent); }
+        .ad-q-gen:disabled { opacity: 0.55; cursor: not-allowed; }
+        .ad-q-gen .spark { color: var(--accent); }
+
+        .ad-explain-body {
+          font-family: 'Inter', sans-serif; font-size: 15px; line-height: 1.7; color: var(--ink-2);
+          white-space: pre-wrap; word-break: break-word; max-height: 52vh; overflow-y: auto;
+        }
+        .ad-explain-status {
+          font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.06em;
+          margin-top: 14px;
+        }
+        .ad-explain-status.loading { color: var(--dim); }
+        .ad-explain-status.err { color: #b3261e; }
+
         .ad-fab {
           position: fixed;
           bottom: 32px;
@@ -507,6 +595,79 @@ export default function AdminDashboard() {
         .ad-submit:hover { background: var(--accent-2); border-color: var(--accent-2); }
         .ad-img-preview { max-height: 90px; margin-top: 10px; border: 1px solid var(--rule); }
 
+        .ad-set-card {
+          border: 1px solid var(--rule);
+          background: var(--paper);
+          padding: 24px 26px;
+          max-width: 620px;
+          margin-bottom: 20px;
+        }
+        .ad-set-card-title {
+          font-family: 'Instrument Serif', serif; font-size: 22px; margin: 0 0 6px;
+        }
+        .ad-set-card-title em { font-style: italic; color: var(--accent); }
+        .ad-set-desc { font-size: 13px; line-height: 1.6; color: var(--ink-2); margin: 0 0 20px; }
+        .ad-set-desc code {
+          font-family: 'JetBrains Mono', monospace; font-size: 12px;
+          background: var(--paper-2); padding: 1px 5px; border: 1px solid var(--rule);
+        }
+        .ad-set-row { display: flex; gap: 10px; align-items: stretch; }
+        .ad-set-row input {
+          flex: 1; background: transparent; border: 1px solid var(--ink); border-radius: 0;
+          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px;
+          color: var(--ink); outline: none;
+        }
+        .ad-set-row input:focus { background: #fff; }
+        .ad-set-btn {
+          background: var(--accent); color: #fff; border: 1px solid var(--accent);
+          padding: 0 22px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14px;
+          letter-spacing: 0.04em; cursor: pointer; text-transform: uppercase; white-space: nowrap;
+        }
+        .ad-set-btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
+        .ad-set-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+        .ad-set-btn.ghost { background: transparent; color: var(--ink-2); border-color: var(--rule); }
+        .ad-set-btn.ghost:hover { color: var(--accent); border-color: var(--accent); }
+        .ad-set-status { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.06em; margin-top: 12px; }
+        .ad-set-status.ok { color: var(--accent); }
+        .ad-set-status.err { color: #b3261e; }
+        .ad-set-status.dim { color: var(--dim); }
+
+        .ad-set-model { max-width: 620px; margin-top: 8px; }
+        .ad-set-hint { font-size: 11px; color: var(--dim); margin-top: 8px; font-family: 'JetBrains Mono', monospace; }
+
+        .ad-model {
+          position: relative;
+        }
+        .ad-model-trigger {
+          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
+          padding: 13px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink);
+          outline: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        }
+        .ad-model-trigger:focus { background: #fff; }
+        .ad-model-trigger.placeholder { color: var(--dim); }
+        .ad-model-caret { transition: transform 0.18s ease; font-size: 12px; color: var(--dim); }
+        .ad-model-caret.open { transform: rotate(180deg); }
+        .ad-model-menu {
+          position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+          background: var(--paper); border: 1px solid var(--ink);
+          box-shadow: 6px 6px 0 rgba(20,17,13,0.12); display: flex; flex-direction: column;
+          max-height: 320px;
+        }
+        .ad-model-search {
+          border: 0; border-bottom: 1px solid var(--rule); background: var(--paper-2);
+          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink); outline: none;
+        }
+        .ad-model-list { list-style: none; margin: 0; padding: 4px; overflow-y: auto; }
+        .ad-model-opt {
+          padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+          color: var(--ink-2); cursor: pointer; border: 1px solid transparent;
+          display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        }
+        .ad-model-opt:hover { background: var(--paper-2); color: var(--ink); }
+        .ad-model-opt.sel { color: var(--accent); border-color: var(--rule); background: var(--paper-2); }
+        .ad-model-opt .tag { font-size: 10px; color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; }
+        .ad-model-empty { padding: 14px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--dim); }
+
         @media (max-width: 720px) {
           .ad-root { grid-template-columns: 1fr; }
           .ad-side { display: none; }
@@ -562,6 +723,14 @@ export default function AdminDashboard() {
                     <span className="ad-q-meta">+{q.marks} / -{q.negative}</span>
                     <button
                       type="button"
+                      className="ad-q-gen"
+                      onClick={() => generateExplanation(q)}
+                      aria-label="Generate explanation"
+                    >
+                      <span className="spark">✦</span> Generate
+                    </button>
+                    <button
+                      type="button"
                       className="ad-q-del"
                       onClick={() => handleDelete(q.id)}
                       aria-label="Delete question"
@@ -587,7 +756,17 @@ export default function AdminDashboard() {
           </>
         )}
 
-        {active !== "questions" && (
+        {active === "settings" && (
+          <>
+            <div className="ad-head">
+              <h1 className="ad-title">AI <em>Settings</em></h1>
+              <span className="ad-count">Groq</span>
+            </div>
+            <SettingsPanel />
+          </>
+        )}
+
+        {active !== "questions" && active !== "settings" && (
           <div className="ad-head">
             <h1 className="ad-title">{NAV.find((n) => n.key === active)?.label}</h1>
             <span className="ad-count">coming soon</span>
@@ -603,6 +782,16 @@ export default function AdminDashboard() {
 
       {modalOpen && (
         <AddQuestionModal onClose={() => setModalOpen(false)} onSave={addQuestion} />
+      )}
+
+      {explain && (
+        <ExplanationDialog
+          q={explain.q}
+          text={explain.text}
+          loading={explain.loading}
+          error={explain.error}
+          onClose={closeExplain}
+        />
       )}
     </div>
   );
@@ -1033,6 +1222,267 @@ function MathField({
         />
       )}
       <MathPreview text={value} />
+    </div>
+  );
+}
+
+const GROQ_STORAGE_KEY = "examsite.groqApiKey";
+const GROQ_MODEL_KEY = "examsite.groqModel";
+const GROQ_BASE_KEY = "examsite.groqBaseUrl";
+const GROQ_DEFAULT_BASE = "https://api.groq.com/openai/v1";
+
+interface OrModel {
+  id: string;
+  owned_by?: string;
+}
+
+function SettingsPanel() {
+  const [baseUrl, setBaseUrl] = useState(() =>
+    typeof window !== "undefined"
+      ? localStorage.getItem(GROQ_BASE_KEY) || GROQ_DEFAULT_BASE
+      : GROQ_DEFAULT_BASE
+  );
+  const [apiKey, setApiKey] = useState("");
+  const [savedKey, setSavedKey] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem(GROQ_STORAGE_KEY) || "" : ""
+  );
+  const [status, setStatus] = useState<{ kind: "ok" | "err" | "dim"; text: string }>(
+    typeof window !== "undefined" && localStorage.getItem(GROQ_STORAGE_KEY)
+      ? { kind: "ok", text: "API key loaded from this browser." }
+      : { kind: "dim", text: "" }
+  );
+
+  const [models, setModels] = useState<OrModel[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [selected, setSelected] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem(GROQ_MODEL_KEY) || "" : ""
+  );
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const modelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (modelRef.current && !modelRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const saveKey = async () => {
+    const trimmed = apiKey.trim();
+    const base = (baseUrl.trim() || GROQ_DEFAULT_BASE).replace(/\/+$/, "");
+    if (!trimmed) {
+      setStatus({ kind: "err", text: "Enter a Groq API key to continue." });
+      return;
+    }
+    setLoadingModels(true);
+    setStatus({ kind: "dim", text: "Verifying key and fetching models…" });
+    try {
+      const res = await fetch(`${base}/v1/models`, {
+        headers: { Authorization: `Bearer ${trimmed}` },
+      });
+      if (!res.ok) {
+        throw new Error(`Request failed (${res.status}). Check your key and base URL.`);
+      }
+      const data = (await res.json()) as { data?: OrModel[] };
+      const list = Array.isArray(data?.data) ? data.data : [];
+      list.sort((a, b) => a.id.localeCompare(b.id));
+      setModels(list);
+      setSavedKey(trimmed);
+      setBaseUrl(base);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(GROQ_STORAGE_KEY, trimmed);
+        localStorage.setItem(GROQ_BASE_KEY, base);
+      }
+      setStatus({
+        kind: "ok",
+        text: list.length
+          ? `Connected. ${list.length} model${list.length === 1 ? "" : "s"} available — pick one below.`
+          : "Connected, but no models were returned.",
+      });
+      if (list.length && !list.some((m) => m.id === selected)) setOpen(true);
+    } catch (err) {
+      setStatus({
+        kind: "err",
+        text: err instanceof Error ? err.message : "Could not reach Groq.",
+      });
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
+  const clearKey = () => {
+    setApiKey("");
+    setSavedKey("");
+    setModels([]);
+    setSelected("");
+    setSearch("");
+    setOpen(false);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(GROQ_STORAGE_KEY);
+      localStorage.removeItem(GROQ_BASE_KEY);
+      localStorage.removeItem(GROQ_MODEL_KEY);
+    }
+    setStatus({ kind: "dim", text: "API key cleared from this browser." });
+  };
+
+  const pickModel = (id: string) => {
+    setSelected(id);
+    setOpen(false);
+    setSearch("");
+    if (typeof window !== "undefined") localStorage.setItem(GROQ_MODEL_KEY, id);
+  };
+
+  const filtered = models.filter((m) =>
+    m.id.toLowerCase().includes(search.trim().toLowerCase())
+  );
+
+  return (
+    <>
+      <div className="ad-set-card">
+        <h2 className="ad-set-card-title">Groq <em>API</em></h2>
+        <p className="ad-set-desc">
+          Supply your Groq API key to enable AI explanations. We call{" "}
+          <code>{`${baseUrl}/v1/models`}</code> (OpenAI-compatible) to list available
+          models. The key is stored only in this browser&apos;s local storage.
+        </p>
+        <div className="ad-field" style={{ marginBottom: 12 }}>
+          <label>Base URL</label>
+          <div className="ad-set-row">
+            <input
+              type="text"
+              value={baseUrl}
+              spellCheck={false}
+              autoComplete="off"
+              placeholder={GROQ_DEFAULT_BASE}
+              onChange={(e) => setBaseUrl(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="ad-field" style={{ marginBottom: 12 }}>
+          <label>API Key</label>
+          <div className="ad-set-row">
+            <input
+              type="password"
+              value={apiKey}
+              spellCheck={false}
+              autoComplete="off"
+              placeholder={savedKey ? "•••••••• (stored locally)" : "gsk_..."}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+            <button className="ad-set-btn" onClick={saveKey} disabled={loadingModels}>
+              {loadingModels ? "Verifying…" : savedKey ? "Update" : "Save"}
+            </button>
+          </div>
+        </div>
+        {savedKey && (
+          <button className="ad-set-btn ghost" onClick={clearKey} disabled={loadingModels}>
+            Clear key
+          </button>
+        )}
+        {status.text && (
+          <div className={`ad-set-status ${status.kind}`}>{status.text}</div>
+        )}
+      </div>
+
+      {models.length > 0 && (
+        <div className="ad-set-model">
+          <h2 className="ad-set-card-title">AI <em>Model</em></h2>
+          <p className="ad-set-desc">
+            Choose the model used for explanations. Type to search the list.
+          </p>
+          <div className="ad-model" ref={modelRef}>
+            <button
+              type="button"
+              className={`ad-model-trigger${selected ? "" : " placeholder"}`}
+              onClick={() => setOpen((o) => !o)}
+              aria-haspopup="listbox"
+              aria-expanded={open}
+            >
+              <span>{selected || "Select a model…"}</span>
+              <span className={`ad-model-caret${open ? " open" : ""}`}>▾</span>
+            </button>
+            {open && (
+              <div className="ad-model-menu" role="listbox">
+                <input
+                  className="ad-model-search"
+                  type="text"
+                  value={search}
+                  autoFocus
+                  placeholder="Search models…"
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <ul className="ad-model-list">
+                  {filtered.length === 0 && (
+                    <li className="ad-model-empty">No models match “{search}”.</li>
+                  )}
+                  {filtered.map((m) => (
+                    <li
+                      key={m.id}
+                      role="option"
+                      aria-selected={m.id === selected}
+                      className={`ad-model-opt${m.id === selected ? " sel" : ""}`}
+                      onClick={() => pickModel(m.id)}
+                    >
+                      <span>{m.id}</span>
+                      {m.owned_by && <span className="tag">{m.owned_by}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          {selected && <div className="ad-set-hint">Selected: {selected}</div>}
+        </div>
+      )}
+    </>
+  );
+}
+
+function ExplanationDialog({
+  q,
+  text,
+  loading,
+  error,
+  onClose,
+}: {
+  q: Question;
+  text: string;
+  loading: boolean;
+  error: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="ad-overlay" onClick={onClose}>
+      <div className="ad-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680 }}>
+        <button className="ad-close" onClick={onClose} aria-label="Close">×</button>
+        <h3 className="ad-form-title">AI <em>Explanation</em></h3>
+        <div className="ad-q-prompt" style={{ marginBottom: 18 }}>
+          <MathPreview text={q.prompt} compact />
+        </div>
+        {loading && (
+          <div className="ad-explain-body" style={{ color: "var(--dim)" }}>
+            Generating explanation…
+          </div>
+        )}
+        {!loading && error && <div className="ad-explain-status err">{error}</div>}
+        {!loading && !error && <div className="ad-explain-body">{text}</div>}
+        <div className="ad-set-status dim" style={{ marginTop: 18 }}>
+          Powered by Groq · {localStorage.getItem(GROQ_MODEL_KEY) || "no model selected"}
+        </div>
+      </div>
     </div>
   );
 }
