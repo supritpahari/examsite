@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthState } from "@/lib/firebase/client";
@@ -22,6 +22,31 @@ const NAV = [
 ];
 
 const PLACEHOLDER = "Type using LaTeX-style syntax: $x^2$, $\\frac{a}{b}$, $\\vec{v}$, $\\sqrt{x}$";
+
+interface ToolItem {
+  label: string;
+  title: string;
+  snippet: string;
+  wrap?: boolean;
+}
+
+const TOOLBAR: ToolItem[] = [
+  { label: "x²", title: "Exponent", snippet: "^{}", wrap: true },
+  { label: "x₂", title: "Subscript", snippet: "_{}", wrap: true },
+  { label: "√", title: "Square root", snippet: "\\sqrt{}", wrap: true },
+  { label: "a/b", title: "Fraction", snippet: "\\frac{}{}", wrap: true },
+  { label: "v⃗", title: "Vector", snippet: "\\vec{}", wrap: true },
+  { label: "∫", title: "Integral", snippet: "\\int_{}^{} " },
+  { label: "∑", title: "Summation", snippet: "\\sum_{}^{} " },
+  { label: "lim", title: "Limit", snippet: "\\lim_{x \\to } " },
+  { label: "α", title: "Alpha", snippet: "\\alpha " },
+  { label: "β", title: "Beta", snippet: "\\beta " },
+  { label: "θ", title: "Theta", snippet: "\\theta " },
+  { label: "π", title: "Pi", snippet: "\\pi " },
+  { label: "Δ", title: "Delta", snippet: "\\Delta " },
+  { label: "∞", title: "Infinity", snippet: "\\infty " },
+  { label: "$…$", title: "Math mode", snippet: "$ $", wrap: true },
+];
 
 export default function AdminDashboard() {
   const [collapsed, setCollapsed] = useState(false);
@@ -79,9 +104,9 @@ export default function AdminDashboard() {
           }
         `}</style>
         Checking session…
-      </div>
-    );
-  }
+    </div>
+  );
+}
 
   return (
     <div
@@ -290,10 +315,70 @@ export default function AdminDashboard() {
         }
         .ad-field textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
         .ad-field input:focus, .ad-field textarea:focus, .ad-field select:focus { background: #fff; }
+
+        .ad-select { position: relative; }
+        .ad-select-trigger {
+          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
+          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink);
+          outline: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        }
+        .ad-select-trigger:focus { background: #fff; }
+        .ad-caret { transition: transform 0.18s ease; font-size: 12px; color: var(--dim); }
+        .ad-caret.open { transform: rotate(180deg); }
+        .ad-select-menu {
+          position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+          list-style: none; margin: 0; padding: 4px; background: var(--paper);
+          border: 1px solid var(--ink); box-shadow: 6px 6px 0 rgba(20,17,13,0.12);
+        }
+        .ad-select-opt {
+          padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+          color: var(--ink-2); cursor: pointer; border: 1px solid transparent;
+        }
+        .ad-select-opt:hover { background: var(--paper-2); color: var(--ink); }
+        .ad-select-opt.sel { color: var(--accent); border-color: var(--rule); background: var(--paper-2); }
+
+        .ad-stepper { display: flex; align-items: stretch; }
+        .ad-stepper input {
+          flex: 1; width: 100%; background: transparent; border: 1px solid var(--ink); border-right: 0;
+          border-radius: 0; padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px;
+          color: var(--ink); outline: none;
+        }
+        .ad-stepper input:focus { background: #fff; }
+        .ad-stepper-btns { display: flex; flex-direction: column; border: 1px solid var(--ink); border-left: 0; }
+        .ad-stepper-btns button {
+          flex: 1; width: 34px; background: transparent; border: 0; border-bottom: 1px solid var(--ink);
+          cursor: pointer; color: var(--ink-2); font-size: 9px; line-height: 1; display: grid; place-items: center;
+        }
+        .ad-stepper-btns button:last-child { border-bottom: 0; }
+        .ad-stepper-btns button:hover { background: var(--accent); color: #fff; }
+
         .ad-hint { font-size: 11px; color: var(--dim); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
 
-        .ad-opt-edit { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .ad-q-label {
+          display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px;
+          text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-2); margin-bottom: 8px;
+        }
+        .ad-toolbar {
+          display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 0;
+          border: 1px solid var(--rule); border-bottom: 0; padding: 8px;
+          background: var(--paper-2);
+        }
+        .ad-tool {
+          min-width: 34px; height: 32px; padding: 0 8px; background: var(--paper);
+          border: 1px solid var(--rule); cursor: pointer; font-family: 'JetBrains Mono', monospace;
+          font-size: 13px; color: var(--ink-2); line-height: 1;
+        }
+        .ad-tool:hover { color: var(--accent); border-color: var(--accent); }
+        .ad-tool:active { transform: translateY(1px); }
+        .ad-field > .ad-toolbar + textarea,
+        .ad-field > .ad-toolbar + input { border-top: 0; }
+        .ad-field > .ad-toolbar + textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
+        .MathField-input { width: 100%; }
+        .ad-opt-edit .ad-field { flex: 1; margin-bottom: 0; }
+
+        .ad-opt-edit { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
         .ad-opt-edit input[type="text"] { flex: 1; }
+        .ad-opt-edit > span:first-child { padding-top: 30px; }
         .ad-opt-edit .ad-mark {
           font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-2);
           display: flex; align-items: center; gap: 6px; white-space: nowrap;
@@ -427,6 +512,19 @@ function AddQuestionModal({
     { id: "d", text: "", correct: false },
   ]);
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
+  const [typeOpen, setTypeOpen] = useState(false);
+  const typeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!typeOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (typeRef.current && !typeRef.current.contains(e.target as Node)) {
+        setTypeOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [typeOpen]);
 
   const setOptText = (id: string, text: string) =>
     setOptions((prev) => prev.map((o) => (o.id === id ? { ...o, text } : o)));
@@ -474,29 +572,58 @@ function AddQuestionModal({
         <div className="ad-row">
           <div className="ad-field">
             <label>Type</label>
-            <select value={type} onChange={(e) => setType(e.target.value as QuestionType)}>
-              <option value="single">Single Correct</option>
-              <option value="mcq">MCQ (Multiple)</option>
-            </select>
+            <div className="ad-select" ref={typeRef}>
+              <button
+                type="button"
+                className="ad-select-trigger"
+                onClick={() => setTypeOpen((o) => !o)}
+                aria-haspopup="listbox"
+                aria-expanded={typeOpen}
+              >
+                <span>{type === "single" ? "Single Correct" : "MCQ (Multiple)"}</span>
+                <span className={`ad-caret${typeOpen ? " open" : ""}`}>▾</span>
+              </button>
+              {typeOpen && (
+                <ul className="ad-select-menu" role="listbox">
+                  <li
+                    role="option"
+                    aria-selected={type === "single"}
+                    className={`ad-select-opt${type === "single" ? " sel" : ""}`}
+                    onClick={() => {
+                      setType("single");
+                      setTypeOpen(false);
+                    }}
+                  >
+                    Single Correct
+                  </li>
+                  <li
+                    role="option"
+                    aria-selected={type === "mcq"}
+                    className={`ad-select-opt${type === "mcq" ? " sel" : ""}`}
+                    onClick={() => {
+                      setType("mcq");
+                      setTypeOpen(false);
+                    }}
+                  >
+                    MCQ (Multiple)
+                  </li>
+                </ul>
+              )}
+            </div>
           </div>
-          <div className="ad-field">
-            <label>Marks</label>
-            <input type="number" value={marks} onChange={(e) => setMarks(e.target.value)} />
-          </div>
-          <div className="ad-field">
-            <label>Negative</label>
-            <input type="number" value={negative} onChange={(e) => setNegative(e.target.value)} />
-          </div>
+          <Stepper label="Marks" value={marks} onChange={setMarks} />
+          <Stepper label="Negative" value={negative} onChange={setNegative} />
         </div>
 
-        <div className="ad-field" style={{ marginBottom: 16 }}>
-          <label>Question {type === "mcq" ? "(select all correct)" : "(select one correct)"}</label>
-          <textarea
+        <div style={{ marginBottom: 16 }}>
+          <label className="ad-q-label">Question {type === "mcq" ? "(select all correct)" : "(select one correct)"}</label>
+          <MathField
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
+            onChange={setPrompt}
             placeholder={PLACEHOLDER}
+            multiline
           />
-          <div className="ad-hint">Supports regex / LaTeX-style notation for formulae, exponents, fractions, vectors.</div>
+          <div className="ad-hint">Use the toolbar to insert formulae, exponents, fractions, vectors and Greek symbols.</div>
         </div>
 
         <div className="ad-field" style={{ marginBottom: 16 }}>
@@ -504,10 +631,9 @@ function AddQuestionModal({
           {options.map((o, i) => (
             <div className="ad-opt-edit" key={o.id}>
               <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, width: 18 }}>{String.fromCharCode(65 + i)}</span>
-              <input
-                type="text"
+              <MathField
                 value={o.text}
-                onChange={(e) => setOptText(o.id, e.target.value)}
+                onChange={(v) => setOptText(o.id, v)}
                 placeholder="Option text — e.g. $\\vec{F} = m\\vec{a}$"
               />
               <label className="ad-mark">
@@ -535,6 +661,127 @@ function AddQuestionModal({
 
         <button className="ad-submit" onClick={save}>Save Question</button>
       </div>
+    </div>
+  );
+}
+
+function Stepper({
+  label,
+  value,
+  onChange,
+  step = 1,
+  min = 0,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  step?: number;
+  min?: number;
+}) {
+  const num = Number(value) || 0;
+  const set = (v: number) => onChange(String(Math.max(min, v)));
+  return (
+    <div className="ad-field">
+      <label>{label}</label>
+      <div className="ad-stepper">
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => {
+            const cleaned = e.target.value.replace(/[^0-9.-]/g, "");
+            onChange(cleaned);
+          }}
+        />
+        <div className="ad-stepper-btns">
+          <button type="button" aria-label={`Increase ${label}`} onClick={() => set(num + step)}>▲</button>
+          <button type="button" aria-label={`Decrease ${label}`} onClick={() => set(num - step)}>▼</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function insertAtCursor(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+  setValue: (v: string) => void,
+  snippet: string,
+  wrap: boolean
+) {
+  const start = el.selectionStart ?? value.length;
+  const end = el.selectionEnd ?? value.length;
+  const selected = value.slice(start, end);
+  let insert = snippet;
+  let caret = start + snippet.length;
+  if (wrap) {
+    const innerOpen = snippet.indexOf("{") + 1;
+    insert = snippet.replace("{}", `{${selected}}`);
+    caret = start + innerOpen + selected.length;
+  }
+  const next = value.slice(0, start) + insert + value.slice(end);
+  setValue(next);
+  requestAnimationFrame(() => {
+    el.focus();
+    el.setSelectionRange(caret, caret);
+  });
+}
+
+function MathField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  multiline,
+}: {
+  label?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  multiline?: boolean;
+}) {
+  const ref = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+
+  const apply = (item: ToolItem) => {
+    const el = ref.current;
+    if (!el) return;
+    insertAtCursor(el, value, onChange, item.snippet, item.wrap ?? false);
+  };
+
+  return (
+    <div className="ad-field" style={label ? undefined : { marginBottom: 8 }}>
+      {label && <label>{label}</label>}
+      <div className="ad-toolbar">
+        {TOOLBAR.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            className="ad-tool"
+            title={item.title}
+            onClick={() => apply(item)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {multiline ? (
+        <textarea
+          ref={ref as React.RefObject<HTMLTextAreaElement>}
+          className="MathField-input"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+        />
+      ) : (
+        <input
+          type="text"
+          ref={ref as React.RefObject<HTMLInputElement>}
+          className="MathField-input"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+        />
+      )}
     </div>
   );
 }
