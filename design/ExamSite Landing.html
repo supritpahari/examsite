@@ -1,0 +1,1171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ExamSite — Landing (3 directions)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0a0a0a; }
+  body { font-family: 'Inter', system-ui, sans-serif; color: #fff; }
+
+  /* Variation switcher */
+  .switcher {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 1000; display: flex; gap: 4px;
+    background: rgba(20,20,20,0.85); backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 999px; padding: 4px;
+    font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500;
+  }
+  .switcher button {
+    background: transparent; border: 0; color: #999; padding: 8px 16px;
+    border-radius: 999px; cursor: pointer; letter-spacing: 0.02em;
+    transition: all 0.2s ease;
+  }
+  .switcher button:hover { color: #fff; }
+  .switcher button.active { background: #fff; color: #000; }
+  .switcher .num { opacity: 0.4; margin-right: 6px; font-variant-numeric: tabular-nums; }
+  .switcher button.active .num { opacity: 0.5; }
+
+  /* Stage */
+  .stage { min-height: 100vh; width: 100%; }
+  .stage[hidden] { display: none; }
+</style>
+</head>
+<body>
+
+<nav class="switcher" role="tablist" aria-label="Design variations">
+  <button data-var="v1" class="active"><span class="num">01</span>Exam Hall</button>
+  <button data-var="v2"><span class="num">02</span>The Portal</button>
+  <button data-var="v3"><span class="num">03</span>Countdown</button>
+</nav>
+
+<!-- =================== V1: EXAM HALL =================== -->
+<section id="v1" class="stage" data-screen-label="01 Exam Hall">
+  <div class="v1-root">
+    <style>
+      .v1-root {
+        --bg: #0a0a0a;
+        --bg-2: #111111;
+        --fg: #f4f4f2;
+        --dim: #8a8a86;
+        --line: rgba(255,255,255,0.08);
+        --accent: oklch(0.72 0.19 250);
+        --accent-2: oklch(0.62 0.22 255);
+        min-height: 100vh; background: var(--bg); color: var(--fg);
+        font-family: 'Space Grotesk', sans-serif;
+        overflow-x: hidden; position: relative;
+      }
+      .v1-root .mono { font-family: 'JetBrains Mono', monospace; }
+
+      /* Nav */
+      .v1-nav {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 28px 56px; border-bottom: 1px solid var(--line);
+        position: relative; z-index: 5;
+      }
+      .v1-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.01em; font-size: 20px; }
+      .v1-logo-mark {
+        width: 28px; height: 28px; background: var(--accent);
+        display: grid; place-items: center; color: #000; font-weight: 700; font-size: 14px;
+        border-radius: 6px; box-shadow: 0 0 0 1px rgba(255,255,255,0.1);
+      }
+      .v1-nav-links { display: flex; gap: 32px; font-size: 14px; color: var(--dim); }
+      .v1-nav-links a { color: inherit; text-decoration: none; transition: color 0.2s; }
+      .v1-nav-links a:hover { color: var(--fg); }
+      .v1-nav-cta { font-size: 13px; color: var(--dim); font-family: 'JetBrains Mono', monospace; }
+      .v1-nav-cta strong { color: var(--accent); }
+
+      /* Ticker */
+      .v1-ticker {
+        border-bottom: 1px solid var(--line);
+        overflow: hidden; padding: 14px 0;
+        font-family: 'JetBrains Mono', monospace; font-size: 12px;
+        color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase;
+      }
+      .v1-ticker-track { display: flex; gap: 48px; white-space: nowrap; animation: v1-scroll 45s linear infinite; }
+      .v1-ticker-item { display: inline-flex; align-items: center; gap: 12px; }
+      .v1-ticker-item::before { content: ""; width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
+      @keyframes v1-scroll { to { transform: translateX(-50%); } }
+
+      /* Hero */
+      .v1-hero {
+        display: grid; grid-template-columns: 1.1fr 1fr; gap: 56px;
+        padding: 72px 56px 56px; align-items: center;
+        position: relative;
+      }
+      .v1-hero::before {
+        content: ""; position: absolute; inset: 0;
+        background:
+          radial-gradient(600px 400px at 15% 40%, oklch(0.35 0.15 250 / 0.25), transparent 70%);
+        pointer-events: none;
+      }
+      .v1-hero > * { position: relative; }
+
+      .v1-eyebrow {
+        display: inline-flex; align-items: center; gap: 10px;
+        font-family: 'JetBrains Mono', monospace; font-size: 12px;
+        color: var(--accent); letter-spacing: 0.1em; text-transform: uppercase;
+        padding: 6px 12px; border: 1px solid oklch(0.72 0.19 250 / 0.35);
+        border-radius: 999px; background: oklch(0.72 0.19 250 / 0.08);
+        margin-bottom: 32px;
+      }
+      .v1-eyebrow .dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 12px var(--accent); animation: v1-pulse 1.6s ease-in-out infinite; }
+      @keyframes v1-pulse { 50% { opacity: 0.4; } }
+
+      .v1-h1 {
+        font-size: clamp(48px, 6.4vw, 96px);
+        line-height: 0.95; letter-spacing: -0.035em; font-weight: 700;
+        margin: 0 0 24px;
+      }
+      .v1-h1 em { font-style: normal; color: var(--accent); position: relative; }
+      .v1-h1 em::after {
+        content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 4px;
+        background: var(--accent); opacity: 0.35;
+      }
+
+      .v1-sub {
+        font-size: 18px; line-height: 1.5; color: var(--dim); max-width: 480px;
+        margin: 0 0 40px;
+      }
+
+      /* Code CTA */
+      .v1-cta-label {
+        display: flex; align-items: center; gap: 10px;
+        font-family: 'JetBrains Mono', monospace; font-size: 12px;
+        color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em;
+        margin-bottom: 12px;
+      }
+      .v1-cta-label::before { content: ""; width: 14px; height: 1px; background: var(--dim); }
+      .v1-cta {
+        display: flex; align-items: stretch; max-width: 480px;
+        background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+        overflow: hidden; transition: border-color 0.2s;
+      }
+      .v1-cta:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px oklch(0.72 0.19 250 / 0.15); }
+      .v1-cta input {
+        flex: 1; background: transparent; border: 0; outline: none;
+        color: var(--fg); font-family: 'JetBrains Mono', monospace;
+        font-size: 18px; letter-spacing: 0.15em; padding: 20px 24px;
+        text-transform: uppercase;
+      }
+      .v1-cta input::placeholder { color: #555; letter-spacing: 0.15em; }
+      .v1-cta button {
+        background: var(--accent); color: #000; border: 0; padding: 0 28px;
+        font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px;
+        letter-spacing: 0.02em; cursor: pointer; display: flex; align-items: center; gap: 8px;
+        transition: background 0.2s;
+      }
+      .v1-cta button:hover { background: var(--accent-2); color: #fff; }
+      .v1-cta button svg { width: 14px; height: 14px; }
+
+      .v1-cta-hint {
+        margin-top: 14px; font-size: 12px; color: var(--dim);
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .v1-cta-hint a { color: var(--accent); text-decoration: none; }
+
+      /* Right: CBT preview */
+      .v1-preview-wrap {
+        position: relative; perspective: 2000px;
+      }
+      .v1-preview {
+        background: #0f0f0f; border: 1px solid var(--line); border-radius: 14px;
+        overflow: hidden;
+        transform: rotateY(-6deg) rotateX(4deg);
+        box-shadow: 0 40px 80px -20px rgba(0,0,0,0.8), 0 0 80px oklch(0.72 0.19 250 / 0.1);
+      }
+      .v1-preview-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 14px 20px; background: #050505; border-bottom: 1px solid var(--line);
+        font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      }
+      .v1-preview-bar-left { display: flex; gap: 6px; align-items: center; }
+      .v1-preview-bar-left span { width: 8px; height: 8px; border-radius: 50%; background: #333; }
+      .v1-preview-title { color: var(--dim); letter-spacing: 0.05em; }
+      .v1-preview-body { display: grid; grid-template-columns: 1fr 220px; }
+
+      .v1-q { padding: 28px 28px 20px; border-right: 1px solid var(--line); }
+      .v1-q-meta { display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 20px; }
+      .v1-q-meta strong { color: var(--fg); }
+      .v1-q-text { font-family: 'Inter', sans-serif; font-size: 14px; line-height: 1.55; color: var(--fg); margin: 0 0 22px; }
+      .v1-q-text .var { font-family: 'JetBrains Mono', monospace; color: var(--accent); }
+      .v1-opts { display: flex; flex-direction: column; gap: 8px; }
+      .v1-opt {
+        display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+        border: 1px solid var(--line); border-radius: 8px; font-size: 13px;
+        transition: all 0.15s;
+      }
+      .v1-opt:hover { border-color: rgba(255,255,255,0.2); }
+      .v1-opt.sel { border-color: var(--accent); background: oklch(0.72 0.19 250 / 0.08); }
+      .v1-opt-key {
+        width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line);
+        display: grid; place-items: center; font-family: 'JetBrains Mono', monospace;
+        font-size: 11px; color: var(--dim); flex-shrink: 0;
+      }
+      .v1-opt.sel .v1-opt-key { background: var(--accent); border-color: var(--accent); color: #000; }
+      .v1-opt-txt { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+
+      .v1-side { padding: 20px 18px; background: #080808; }
+      .v1-timer {
+        text-align: center; padding: 16px 0 20px; border-bottom: 1px dashed var(--line);
+        margin-bottom: 18px;
+      }
+      .v1-timer-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 6px; }
+      .v1-timer-val { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; color: var(--accent); letter-spacing: 0.02em; }
+      .v1-palette-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 10px; }
+      .v1-palette { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+      .v1-pdot {
+        aspect-ratio: 1; border-radius: 4px; display: grid; place-items: center;
+        font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600;
+      }
+      .v1-pdot.answered { background: var(--accent); color: #000; }
+      .v1-pdot.marked   { background: #f5b100; color: #000; }
+      .v1-pdot.visited  { background: #6b1e1e; color: #fff; }
+      .v1-pdot.unseen   { background: #1a1a1a; color: var(--dim); border: 1px solid var(--line); }
+      .v1-legend { margin-top: 16px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--dim); display: flex; flex-direction: column; gap: 5px; }
+      .v1-legend span { display: flex; align-items: center; gap: 6px; }
+      .v1-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+      /* Bottom strip */
+      .v1-strip {
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+      }
+      .v1-strip > div { padding: 32px 40px; border-right: 1px solid var(--line); }
+      .v1-strip > div:last-child { border-right: 0; }
+      .v1-strip-n { font-family: 'Space Grotesk', sans-serif; font-size: 44px; font-weight: 600; letter-spacing: -0.03em; margin-bottom: 4px; }
+      .v1-strip-n .u { color: var(--accent); }
+      .v1-strip-l { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; }
+
+      /* Footer */
+      .v1-foot {
+        padding: 32px 56px; display: flex; justify-content: space-between;
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
+        text-transform: uppercase; letter-spacing: 0.08em;
+      }
+
+      @media (max-width: 960px) {
+        .v1-nav-links { display: none; }
+        .v1-nav, .v1-hero, .v1-foot { padding-left: 24px; padding-right: 24px; }
+        .v1-hero { grid-template-columns: 1fr; gap: 40px; padding-top: 48px; }
+        .v1-preview { transform: none; }
+        .v1-strip { grid-template-columns: repeat(2, 1fr); }
+        .v1-strip > div:nth-child(2) { border-right: 0; }
+        .v1-strip > div:nth-child(1), .v1-strip > div:nth-child(2) { border-bottom: 1px solid var(--line); }
+      }
+    </style>
+
+    <header class="v1-nav">
+      <div class="v1-logo"><div class="v1-logo-mark">E</div>ExamSite</div>
+      <div class="v1-nav-links">
+        <a href="#">Tests</a>
+        <a href="#">How it works</a>
+        <a href="#">Analytics</a>
+        <a href="#">About Dr. Verma</a>
+      </div>
+      <div class="v1-nav-cta">Session: <strong>OPEN</strong></div>
+    </header>
+
+    <div class="v1-ticker" aria-hidden="true">
+      <div class="v1-ticker-track">
+        <span class="v1-ticker-item">JEE Main 2026 · Session 1 begins Jan 22</span>
+        <span class="v1-ticker-item">4,812 students tested this week</span>
+        <span class="v1-ticker-item">NEET UG · full-length mocks every Sunday</span>
+        <span class="v1-ticker-item">JEE Advanced · 720 questions in bank</span>
+        <span class="v1-ticker-item">Physics · Dr. R. Verma · 14 years teaching</span>
+        <span class="v1-ticker-item">Analytics rebuilt for the 2026 pattern</span>
+        <span class="v1-ticker-item">JEE Main 2026 · Session 1 begins Jan 22</span>
+        <span class="v1-ticker-item">4,812 students tested this week</span>
+        <span class="v1-ticker-item">NEET UG · full-length mocks every Sunday</span>
+        <span class="v1-ticker-item">JEE Advanced · 720 questions in bank</span>
+        <span class="v1-ticker-item">Physics · Dr. R. Verma · 14 years teaching</span>
+        <span class="v1-ticker-item">Analytics rebuilt for the 2026 pattern</span>
+      </div>
+    </div>
+
+    <section class="v1-hero">
+      <div>
+        <div class="v1-eyebrow"><span class="dot"></span>Physics · JEE &amp; NEET · Dr. R. Verma</div>
+        <h1 class="v1-h1">Train in the <em>exact</em> exam you'll take.</h1>
+        <p class="v1-sub">
+          Not another practice app. ExamSite is a bit-for-bit CBT clone of the
+          real JEE and NEET portals — same timer, same palette, same feel.
+          Enter the test code your teacher shared to begin.
+        </p>
+
+        <div class="v1-cta-label">Test code</div>
+        <form class="v1-cta" onsubmit="event.preventDefault(); document.getElementById('v1-code').blur();">
+          <input id="v1-code" type="text" placeholder="e.g.  PHY-2026-04" maxlength="16" spellcheck="false" autocomplete="off" />
+          <button type="submit">
+            Start test
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </button>
+        </form>
+        <div class="v1-cta-hint">
+          Don't have a code? <a href="#">Try the free demo test →</a>
+        </div>
+      </div>
+
+      <div class="v1-preview-wrap">
+        <div class="v1-preview">
+          <div class="v1-preview-bar">
+            <div class="v1-preview-bar-left"><span></span><span></span><span></span></div>
+            <div class="v1-preview-title">JEE MAIN 2026 · MOCK 04 · SECTION A</div>
+            <div class="v1-preview-title" style="color:#f5b100">● LIVE</div>
+          </div>
+          <div class="v1-preview-body">
+            <div class="v1-q">
+              <div class="v1-q-meta"><span>Question <strong>17</strong> / 75</span><span>+4 / −1</span></div>
+              <p class="v1-q-text">
+                A block of mass <span class="var">m</span> slides down a smooth incline of angle
+                <span class="var">θ = 30°</span>. If the length of the incline is
+                <span class="var">L = 2 m</span>, the velocity of the block at the bottom is
+                closest to <span class="var">(g = 10 m/s²)</span>:
+              </p>
+              <div class="v1-opts">
+                <div class="v1-opt"><div class="v1-opt-key">A</div><div class="v1-opt-txt">3.2 m/s</div></div>
+                <div class="v1-opt sel"><div class="v1-opt-key">B</div><div class="v1-opt-txt">4.5 m/s</div></div>
+                <div class="v1-opt"><div class="v1-opt-key">C</div><div class="v1-opt-txt">5.6 m/s</div></div>
+                <div class="v1-opt"><div class="v1-opt-key">D</div><div class="v1-opt-txt">6.3 m/s</div></div>
+              </div>
+            </div>
+            <aside class="v1-side">
+              <div class="v1-timer">
+                <div class="v1-timer-label">Time left</div>
+                <div class="v1-timer-val">01:42:08</div>
+              </div>
+              <div class="v1-palette-label">Question palette</div>
+              <div class="v1-palette">
+                <div class="v1-pdot answered">1</div>
+                <div class="v1-pdot answered">2</div>
+                <div class="v1-pdot visited">3</div>
+                <div class="v1-pdot answered">4</div>
+                <div class="v1-pdot marked">5</div>
+                <div class="v1-pdot answered">6</div>
+                <div class="v1-pdot unseen">7</div>
+                <div class="v1-pdot answered">8</div>
+                <div class="v1-pdot marked">9</div>
+                <div class="v1-pdot answered">10</div>
+                <div class="v1-pdot visited">11</div>
+                <div class="v1-pdot answered">12</div>
+                <div class="v1-pdot unseen">13</div>
+                <div class="v1-pdot answered">14</div>
+                <div class="v1-pdot answered">15</div>
+                <div class="v1-pdot marked">16</div>
+                <div class="v1-pdot answered" style="background:oklch(0.72 0.19 250);outline:2px solid #fff;outline-offset:1px">17</div>
+                <div class="v1-pdot unseen">18</div>
+              </div>
+              <div class="v1-legend">
+                <span><i style="background:oklch(0.72 0.19 250)"></i>Answered</span>
+                <span><i style="background:#f5b100"></i>Marked</span>
+                <span><i style="background:#6b1e1e"></i>Visited</span>
+                <span><i style="background:#1a1a1a;border:1px solid #333"></i>Not visited</span>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="v1-strip">
+      <div><div class="v1-strip-n">12<span class="u">k</span>+</div><div class="v1-strip-l">Students trained</div></div>
+      <div><div class="v1-strip-n">840</div><div class="v1-strip-l">Full mock tests</div></div>
+      <div><div class="v1-strip-n">97<span class="u">%</span></div><div class="v1-strip-l">Report exam-day confidence</div></div>
+      <div><div class="v1-strip-n">1:1</div><div class="v1-strip-l">Interface parity with NTA CBT</div></div>
+    </div>
+
+    <footer class="v1-foot">
+      <span>ExamSite · Physics prep by Dr. R. Verma</span>
+      <span>© 2026 · New Delhi</span>
+    </footer>
+  </div>
+</section>
+
+<!-- =================== V2: THE PORTAL =================== -->
+<section id="v2" class="stage" data-screen-label="02 The Portal" hidden>
+  <div class="v2-root">
+    <style>
+      .v2-root {
+        --paper: #f4f0e8;
+        --paper-2: #ebe6da;
+        --ink: #14110d;
+        --ink-2: #3a352c;
+        --dim: #8a8275;
+        --rule: #d9d1bf;
+        --accent: oklch(0.52 0.20 25);
+        --accent-2: oklch(0.42 0.22 25);
+        min-height: 100vh; background: var(--paper); color: var(--ink);
+        font-family: 'Inter', sans-serif;
+        position: relative;
+      }
+      .v2-root::before {
+        content: ""; position: absolute; inset: 0; pointer-events: none;
+        background-image: radial-gradient(rgba(20,17,13,0.04) 1px, transparent 1px);
+        background-size: 4px 4px; opacity: 0.6;
+      }
+      .v2-root .serif { font-family: 'Instrument Serif', 'Times New Roman', serif; font-weight: 400; }
+      .v2-root .mono { font-family: 'JetBrains Mono', monospace; }
+
+      .v2-nav {
+        display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+        padding: 24px 48px; border-bottom: 1px solid var(--rule);
+        position: relative; z-index: 3;
+      }
+      .v2-nav-left { display: flex; gap: 28px; font-size: 13px; color: var(--ink-2); }
+      .v2-nav-left a { color: inherit; text-decoration: none; border-bottom: 1px solid transparent; padding-bottom: 2px; }
+      .v2-nav-left a:hover { border-color: var(--accent); color: var(--accent); }
+      .v2-logo {
+        font-family: 'Instrument Serif', serif; font-size: 24px; letter-spacing: -0.01em;
+        display: flex; align-items: baseline; gap: 6px;
+      }
+      .v2-logo em { font-style: italic; color: var(--accent); }
+      .v2-nav-right { display: flex; justify-content: flex-end; align-items: center; gap: 20px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; }
+      .v2-nav-right .live { color: var(--accent); display: flex; align-items: center; gap: 6px; }
+      .v2-nav-right .live::before { content: ""; width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
+
+      /* Masthead ruled line */
+      .v2-rule {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 12px 48px; border-bottom: 1px solid var(--rule);
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-2);
+        text-transform: uppercase; letter-spacing: 0.12em;
+      }
+      .v2-rule .dot { width: 4px; height: 4px; background: var(--ink); border-radius: 50%; display: inline-block; margin: 0 10px; vertical-align: middle; }
+
+      /* Hero */
+      .v2-hero {
+        padding: 80px 48px 48px; text-align: center; position: relative;
+        max-width: 1200px; margin: 0 auto;
+      }
+      .v2-eyebrow {
+        font-family: 'JetBrains Mono', monospace; font-size: 11px;
+        color: var(--accent); letter-spacing: 0.24em; text-transform: uppercase;
+        margin-bottom: 32px;
+        display: inline-flex; align-items: center; gap: 14px;
+      }
+      .v2-eyebrow::before, .v2-eyebrow::after { content: ""; width: 24px; height: 1px; background: var(--accent); }
+      .v2-h1 {
+        font-family: 'Instrument Serif', serif;
+        font-size: clamp(56px, 8.5vw, 128px);
+        line-height: 0.92; letter-spacing: -0.025em; font-weight: 400;
+        margin: 0 auto 32px; max-width: 12ch;
+      }
+      .v2-h1 em { font-style: italic; color: var(--accent); }
+      .v2-sub {
+        font-size: 19px; line-height: 1.55; color: var(--ink-2); max-width: 560px;
+        margin: 0 auto 48px;
+      }
+
+      /* CTA "entrance form" */
+      .v2-cta-frame {
+        max-width: 540px; margin: 0 auto;
+        background: var(--paper);
+        border: 1px solid var(--ink); position: relative;
+        padding: 32px 32px 28px;
+        text-align: left;
+      }
+      .v2-cta-frame::before, .v2-cta-frame::after {
+        content: ""; position: absolute; width: 12px; height: 12px; background: var(--ink);
+      }
+      .v2-cta-frame::before { top: -1px; left: -1px; }
+      .v2-cta-frame::after { bottom: -1px; right: -1px; }
+      .v2-cta-num {
+        position: absolute; top: -14px; left: 24px; background: var(--paper);
+        padding: 0 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+        text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink);
+      }
+      .v2-cta-title {
+        font-family: 'Instrument Serif', serif; font-size: 24px; line-height: 1.2;
+        margin: 0 0 4px;
+      }
+      .v2-cta-title em { font-style: italic; color: var(--accent); }
+      .v2-cta-desc {
+        font-size: 13px; color: var(--dim); margin: 0 0 22px;
+        font-family: 'JetBrains Mono', monospace; letter-spacing: 0.02em;
+      }
+      .v2-cta-row {
+        display: flex; align-items: stretch; gap: 10px;
+      }
+      .v2-cta-row input {
+        flex: 1; background: transparent; border: 1px solid var(--ink); border-radius: 0;
+        padding: 16px 18px; font-family: 'JetBrains Mono', monospace; font-size: 18px;
+        letter-spacing: 0.18em; color: var(--ink); outline: none; text-transform: uppercase;
+      }
+      .v2-cta-row input::placeholder { color: #b8ad96; }
+      .v2-cta-row input:focus { background: #fff; }
+      .v2-cta-row button {
+        background: var(--accent); color: #fff; border: 1px solid var(--accent);
+        padding: 0 24px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14px;
+        letter-spacing: 0.02em; cursor: pointer; display: flex; align-items: center; gap: 8px;
+        text-transform: uppercase;
+      }
+      .v2-cta-row button:hover { background: var(--accent-2); border-color: var(--accent-2); }
+      .v2-cta-foot {
+        margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--rule);
+        display: flex; justify-content: space-between; align-items: center;
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
+        text-transform: uppercase; letter-spacing: 0.08em;
+      }
+      .v2-cta-foot a { color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor; }
+
+      /* Section rule */
+      .v2-sec-rule {
+        display: flex; align-items: center; gap: 20px;
+        padding: 64px 48px 20px; max-width: 1400px; margin: 0 auto;
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink);
+        text-transform: uppercase; letter-spacing: 0.16em;
+      }
+      .v2-sec-rule::before, .v2-sec-rule::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+
+      /* Preview */
+      .v2-preview-wrap {
+        padding: 0 48px 64px; max-width: 1400px; margin: 0 auto;
+      }
+      .v2-preview {
+        border: 1px solid var(--ink); background: #0f0d0a; color: #eee6d5;
+        position: relative;
+        box-shadow: 12px 12px 0 var(--ink);
+      }
+      .v2-preview-bar {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 12px 18px; background: #14110d; border-bottom: 1px solid #2a251d;
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #b8ad96;
+        letter-spacing: 0.06em;
+      }
+      .v2-preview-body { display: grid; grid-template-columns: 1fr 240px; }
+      .v2-q2 { padding: 32px 32px 28px; border-right: 1px solid #2a251d; }
+      .v2-q2-meta {
+        display: flex; justify-content: space-between;
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #b8ad96;
+        text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 18px;
+      }
+      .v2-q2-meta strong { color: var(--accent); }
+      .v2-q2-text {
+        font-family: 'Instrument Serif', serif; font-size: 20px; line-height: 1.45;
+        color: #f4ecd8; margin: 0 0 24px;
+      }
+      .v2-q2-text .var { color: var(--accent); font-style: italic; }
+      .v2-opts2 { display: flex; flex-direction: column; gap: 8px; }
+      .v2-opt2 {
+        display: flex; align-items: center; gap: 14px; padding: 12px 14px;
+        border: 1px solid #2a251d;
+      }
+      .v2-opt2.sel { border-color: var(--accent); background: rgba(200,50,30,0.08); }
+      .v2-opt2-k {
+        width: 26px; height: 26px; border: 1px solid #2a251d;
+        display: grid; place-items: center; font-family: 'JetBrains Mono', monospace;
+        font-size: 12px; color: #b8ad96;
+      }
+      .v2-opt2.sel .v2-opt2-k { background: var(--accent); border-color: var(--accent); color: #fff; }
+      .v2-opt2-t { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+
+      .v2-side2 { padding: 22px 20px; background: #0b0908; }
+      .v2-tlabel { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #8a8275; letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 8px; }
+      .v2-tval { font-family: 'JetBrains Mono', monospace; font-size: 32px; font-weight: 500; color: var(--accent); letter-spacing: 0.02em; margin-bottom: 22px; }
+      .v2-pal { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-bottom: 18px; }
+      .v2-pdot2 { aspect-ratio: 1; display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+      .v2-pdot2.ans { background: var(--accent); color: #fff; }
+      .v2-pdot2.mk  { background: #d9a300; color: #14110d; }
+      .v2-pdot2.vis { background: #4a2a14; color: #f4ecd8; }
+      .v2-pdot2.un  { background: transparent; color: #8a8275; border: 1px solid #2a251d; }
+
+      /* Marquee credentials */
+      .v2-credentials {
+        border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
+        overflow: hidden; padding: 24px 0; background: var(--ink); color: var(--paper);
+      }
+      .v2-cred-track {
+        display: flex; gap: 64px; white-space: nowrap; animation: v2-scroll 40s linear infinite;
+        font-family: 'Instrument Serif', serif; font-size: 32px; line-height: 1;
+      }
+      .v2-cred-track span { display: inline-flex; align-items: center; gap: 24px; }
+      .v2-cred-track span::after {
+        content: "✦"; color: var(--accent); font-family: 'Inter', sans-serif;
+        font-size: 20px;
+      }
+      @keyframes v2-scroll { to { transform: translateX(-50%); } }
+
+      /* Footer */
+      .v2-foot {
+        display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: end;
+        padding: 48px 48px 32px; gap: 24px;
+      }
+      .v2-foot-title { font-family: 'Instrument Serif', serif; font-size: 40px; line-height: 1; letter-spacing: -0.02em; }
+      .v2-foot-title em { font-style: italic; color: var(--accent); }
+      .v2-foot-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; text-align: right; }
+
+      @media (max-width: 960px) {
+        .v2-nav { grid-template-columns: 1fr auto; padding: 20px 24px; }
+        .v2-nav-left { display: none; }
+        .v2-rule, .v2-hero, .v2-preview-wrap, .v2-sec-rule, .v2-foot { padding-left: 24px; padding-right: 24px; }
+        .v2-preview-body { grid-template-columns: 1fr; }
+        .v2-q2 { border-right: 0; border-bottom: 1px solid #2a251d; }
+        .v2-foot { grid-template-columns: 1fr; }
+        .v2-foot-meta { text-align: left; }
+      }
+    </style>
+
+    <header class="v2-nav">
+      <div class="v2-nav-left">
+        <a href="#">The Test</a>
+        <a href="#">Analytics</a>
+        <a href="#">Faculty</a>
+      </div>
+      <div class="v2-logo">Exam<em>Site</em></div>
+      <div class="v2-nav-right">
+        <span>Vol. II · Issue 04</span>
+        <span class="live">Session open</span>
+      </div>
+    </header>
+
+    <div class="v2-rule">
+      <span>Established 2026<span class="dot"></span>Physics, JEE &amp; NEET</span>
+      <span>A preparatory instrument by Dr. R. Verma</span>
+      <span>New Delhi<span class="dot"></span>10 Aug 2026</span>
+    </div>
+
+    <section class="v2-hero">
+      <div class="v2-eyebrow">The Real Portal — Rehearsed</div>
+      <h1 class="v2-h1">The exam <em>before</em> the exam.</h1>
+      <p class="v2-sub">
+        ExamSite is a faithful reproduction of the JEE and NEET computer-based
+        test portals — every button, every timer, every keystroke.
+        You will not be surprised on the day that matters.
+      </p>
+
+      <div class="v2-cta-frame">
+        <div class="v2-cta-num">§ 01 · Entrance</div>
+        <h3 class="v2-cta-title">Enter your <em>test code</em></h3>
+        <p class="v2-cta-desc">Codes are issued by Dr. Verma before each mock. Case-insensitive.</p>
+        <form class="v2-cta-row" onsubmit="event.preventDefault();">
+          <input type="text" placeholder="PHY-JEE-2026-04" maxlength="18" spellcheck="false" autocomplete="off" />
+          <button type="submit">Begin →</button>
+        </form>
+        <div class="v2-cta-foot">
+          <span>New here?</span>
+          <a href="#">Take the free demo test</a>
+        </div>
+      </div>
+    </section>
+
+    <div class="v2-sec-rule"><span>§ 02 · The Interface</span></div>
+
+    <div class="v2-preview-wrap">
+      <div class="v2-preview">
+        <div class="v2-preview-bar">
+          <span>NTA CBT · JEE MAIN 2026 · MOCK IV</span>
+          <span>Candidate: R. Sharma · Roll 24011745</span>
+          <span style="color:#d9a300">● Recording</span>
+        </div>
+        <div class="v2-preview-body">
+          <div class="v2-q2">
+            <div class="v2-q2-meta"><span>Section A · Physics</span><span><strong>Q. 24</strong> of 90</span></div>
+            <p class="v2-q2-text">
+              A thin uniform rod of length <span class="var">L</span> and mass <span class="var">M</span>
+              rotates about a perpendicular axis through one end. Its moment of inertia is:
+            </p>
+            <div class="v2-opts2">
+              <div class="v2-opt2"><div class="v2-opt2-k">A</div><div class="v2-opt2-t">ML² / 12</div></div>
+              <div class="v2-opt2"><div class="v2-opt2-k">B</div><div class="v2-opt2-t">ML² / 6</div></div>
+              <div class="v2-opt2 sel"><div class="v2-opt2-k">C</div><div class="v2-opt2-t">ML² / 3</div></div>
+              <div class="v2-opt2"><div class="v2-opt2-k">D</div><div class="v2-opt2-t">ML²</div></div>
+            </div>
+          </div>
+          <aside class="v2-side2">
+            <div class="v2-tlabel">Time remaining</div>
+            <div class="v2-tval">02:14:37</div>
+            <div class="v2-tlabel">Palette · Section A</div>
+            <div class="v2-pal">
+              <div class="v2-pdot2 ans">1</div><div class="v2-pdot2 ans">2</div><div class="v2-pdot2 vis">3</div>
+              <div class="v2-pdot2 ans">4</div><div class="v2-pdot2 mk">5</div><div class="v2-pdot2 ans">6</div>
+              <div class="v2-pdot2 un">7</div><div class="v2-pdot2 ans">8</div><div class="v2-pdot2 mk">9</div>
+              <div class="v2-pdot2 ans">10</div><div class="v2-pdot2 ans">11</div><div class="v2-pdot2 ans">12</div>
+              <div class="v2-pdot2 vis">13</div><div class="v2-pdot2 ans">14</div><div class="v2-pdot2 ans">15</div>
+              <div class="v2-pdot2 mk">16</div><div class="v2-pdot2 ans">17</div><div class="v2-pdot2 ans">18</div>
+              <div class="v2-pdot2 un">19</div><div class="v2-pdot2 vis">20</div><div class="v2-pdot2 ans">21</div>
+              <div class="v2-pdot2 ans">22</div><div class="v2-pdot2 mk">23</div>
+              <div class="v2-pdot2 ans" style="outline:2px solid #f4ecd8;outline-offset:1px">24</div>
+            </div>
+            <div class="v2-tlabel" style="margin-bottom:6px">Legend</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#8a8275;display:flex;flex-direction:column;gap:4px">
+              <span><i style="width:8px;height:8px;background:oklch(0.52 0.20 25);display:inline-block;margin-right:6px"></i>Answered</span>
+              <span><i style="width:8px;height:8px;background:#d9a300;display:inline-block;margin-right:6px"></i>Marked</span>
+              <span><i style="width:8px;height:8px;background:#4a2a14;display:inline-block;margin-right:6px"></i>Visited</span>
+              <span><i style="width:8px;height:8px;border:1px solid #2a251d;display:inline-block;margin-right:6px"></i>Not visited</span>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <div class="v2-credentials">
+      <div class="v2-cred-track">
+        <span>14 years teaching Physics</span>
+        <span>IIT Delhi · M.Tech</span>
+        <span>4,812 students · 2024–25</span>
+        <span>All-India top 100 · 37 selections</span>
+        <span>Weekly full mocks</span>
+        <span>1:1 doubt clearing</span>
+        <span>14 years teaching Physics</span>
+        <span>IIT Delhi · M.Tech</span>
+        <span>4,812 students · 2024–25</span>
+        <span>All-India top 100 · 37 selections</span>
+        <span>Weekly full mocks</span>
+        <span>1:1 doubt clearing</span>
+      </div>
+    </div>
+
+    <footer class="v2-foot">
+      <div class="v2-foot-title">Practice like it's <em>the day</em>.</div>
+      <div></div>
+      <div class="v2-foot-meta">
+        ExamSite · © 2026<br/>
+        Dr. R. Verma · Physics<br/>
+        New Delhi, IN
+      </div>
+    </footer>
+  </div>
+</section>
+
+<!-- =================== V3: COUNTDOWN =================== -->
+<section id="v3" class="stage" data-screen-label="03 Countdown" hidden>
+  <div class="v3-root">
+    <style>
+      .v3-root {
+        --bg: #0c0d10;
+        --bg-2: #14161b;
+        --fg: #f2f0ea;
+        --dim: #7a7c85;
+        --line: rgba(255,255,255,0.07);
+        --accent: oklch(0.82 0.15 78);
+        --accent-2: oklch(0.72 0.17 65);
+        min-height: 100vh; background: var(--bg); color: var(--fg);
+        font-family: 'Inter Tight', 'Inter', sans-serif;
+        overflow-x: hidden; position: relative;
+      }
+      .v3-root::before {
+        content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+        background:
+          radial-gradient(800px 500px at 80% -10%, oklch(0.72 0.17 65 / 0.15), transparent 60%),
+          radial-gradient(600px 400px at 10% 100%, oklch(0.72 0.17 65 / 0.08), transparent 60%);
+      }
+      .v3-root::after {
+        /* subtle equation grid */
+        content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+        background-image:
+          linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px);
+        background-size: 80px 80px;
+      }
+      .v3-root > * { position: relative; z-index: 1; }
+      .v3-root .mono { font-family: 'JetBrains Mono', monospace; }
+
+      /* Countdown bar */
+      .v3-bar {
+        display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 32px;
+        padding: 20px 40px;
+        border-bottom: 1px solid var(--line);
+      }
+      .v3-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.01em; font-size: 18px; }
+      .v3-logo-mark {
+        width: 26px; height: 26px; border: 1.5px solid var(--accent); color: var(--accent);
+        display: grid; place-items: center; font-weight: 700; font-size: 12px; border-radius: 4px;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .v3-count {
+        display: flex; align-items: center; justify-content: center; gap: 8px;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .v3-count-lbl { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.14em; margin-right: 12px; }
+      .v3-count .unit {
+        background: var(--bg-2); border: 1px solid var(--line); padding: 6px 10px;
+        display: flex; flex-direction: column; align-items: center; min-width: 48px;
+      }
+      .v3-count .unit b { font-size: 18px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+      .v3-count .unit i { font-style: normal; font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; }
+      .v3-count .to { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.12em; margin-left: 12px; }
+      .v3-count .to b { color: var(--fg); }
+      .v3-bar-right { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.12em; display: flex; align-items: center; gap: 20px; }
+      .v3-bar-right a { color: var(--fg); text-decoration: none; }
+
+      /* Hero */
+      .v3-hero { padding: 96px 40px 56px; max-width: 1400px; margin: 0 auto; }
+      .v3-hero-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 40px; margin-bottom: 48px; }
+      .v3-eyebrow-row { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.16em; display: flex; align-items: center; gap: 14px; }
+      .v3-eyebrow-row .dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 12px var(--accent); animation: v3-pulse 1.4s ease-in-out infinite; }
+      @keyframes v3-pulse { 50% { opacity: 0.4; } }
+      .v3-hero-right { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.14em; text-align: right; line-height: 1.6; }
+      .v3-hero-right b { color: var(--accent); font-weight: 500; }
+
+      .v3-h1 {
+        font-family: 'Inter Tight', sans-serif; font-weight: 800;
+        font-size: clamp(64px, 10vw, 152px);
+        line-height: 0.9; letter-spacing: -0.045em;
+        margin: 0 0 32px;
+      }
+      .v3-h1 .glow { color: var(--accent); }
+      .v3-h1 .strike { position: relative; }
+      .v3-h1 .strike::after {
+        content: ""; position: absolute; left: -2%; right: -2%; top: 52%; height: 6px;
+        background: var(--accent); opacity: 0.9; transform: rotate(-2deg);
+      }
+
+      .v3-hero-lower {
+        display: grid; grid-template-columns: 1fr 520px; gap: 56px; align-items: end;
+        margin-top: 24px;
+      }
+      .v3-sub { font-size: 18px; line-height: 1.55; color: var(--dim); max-width: 480px; margin: 0; }
+      .v3-sub b { color: var(--fg); font-weight: 500; }
+
+      /* CTA */
+      .v3-cta-block {
+        background: var(--bg-2); border: 1px solid var(--line);
+        padding: 24px; position: relative;
+      }
+      .v3-cta-block::before {
+        content: ""; position: absolute; top: -1px; left: -1px; width: 12px; height: 12px;
+        border-top: 2px solid var(--accent); border-left: 2px solid var(--accent);
+      }
+      .v3-cta-block::after {
+        content: ""; position: absolute; bottom: -1px; right: -1px; width: 12px; height: 12px;
+        border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent);
+      }
+      .v3-cta-head {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 16px;
+        font-family: 'JetBrains Mono', monospace; font-size: 11px;
+        color: var(--dim); text-transform: uppercase; letter-spacing: 0.14em;
+      }
+      .v3-cta-head b { color: var(--accent); font-weight: 500; }
+      .v3-cta-row { display: flex; gap: 10px; margin-bottom: 14px; }
+      .v3-cta-row input {
+        flex: 1; background: #0a0b0e; border: 1px solid var(--line); border-radius: 0;
+        padding: 20px 22px; font-family: 'JetBrains Mono', monospace; font-size: 20px;
+        letter-spacing: 0.18em; color: var(--fg); outline: none; text-transform: uppercase;
+        transition: border-color 0.15s, background 0.15s;
+      }
+      .v3-cta-row input::placeholder { color: #444; }
+      .v3-cta-row input:focus { border-color: var(--accent); background: #050608; box-shadow: 0 0 0 3px oklch(0.82 0.15 78 / 0.12); }
+      .v3-cta-row button {
+        background: var(--accent); color: #14110d; border: 0;
+        padding: 0 28px; font-family: 'Inter Tight', sans-serif; font-weight: 700; font-size: 15px;
+        letter-spacing: 0.02em; cursor: pointer; display: flex; align-items: center; gap: 10px;
+        text-transform: uppercase;
+      }
+      .v3-cta-row button:hover { background: var(--fg); color: #14110d; }
+      .v3-cta-row button svg { width: 14px; height: 14px; }
+      .v3-cta-foot {
+        display: flex; justify-content: space-between; align-items: center;
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
+        text-transform: uppercase; letter-spacing: 0.08em;
+      }
+      .v3-cta-foot a { color: var(--accent); text-decoration: none; }
+
+      /* CBT slab */
+      .v3-slab {
+        margin: 0 auto; max-width: 1400px; padding: 40px;
+      }
+      .v3-slab-head {
+        display: flex; justify-content: space-between; align-items: end;
+        margin-bottom: 24px;
+      }
+      .v3-slab-title { font-family: 'Inter Tight', sans-serif; font-weight: 700; font-size: 32px; letter-spacing: -0.02em; margin: 0; }
+      .v3-slab-title em { font-style: normal; color: var(--accent); }
+      .v3-slab-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.14em; text-align: right; }
+
+      .v3-cbt {
+        background: #050608; border: 1px solid var(--line); overflow: hidden;
+        display: grid; grid-template-columns: 260px 1fr 260px;
+      }
+      .v3-cbt-left { padding: 22px; border-right: 1px solid var(--line); background: #08090c; }
+      .v3-cbt-right { padding: 22px; border-left: 1px solid var(--line); background: #08090c; }
+      .v3-cbt-mid { padding: 32px; }
+
+      .v3-sec {
+        display: flex; flex-direction: column; gap: 4px; margin-bottom: 20px;
+      }
+      .v3-sec-lbl { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 8px; }
+      .v3-sec-item {
+        padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+        display: flex; justify-content: space-between; align-items: center; color: var(--dim);
+        border-left: 2px solid transparent;
+      }
+      .v3-sec-item.on { color: var(--accent); border-left-color: var(--accent); background: rgba(255,255,255,0.02); }
+      .v3-sec-item b { color: inherit; font-weight: 500; }
+
+      .v3-cand {
+        padding: 14px; border: 1px dashed var(--line); margin-top: 20px;
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
+        text-transform: uppercase; letter-spacing: 0.1em;
+      }
+      .v3-cand div { color: var(--fg); font-size: 13px; letter-spacing: 0.04em; margin-top: 4px; }
+
+      .v3-qmeta { display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 22px; }
+      .v3-qmeta strong { color: var(--accent); }
+      .v3-qtext { font-size: 17px; line-height: 1.55; margin: 0 0 26px; color: var(--fg); font-family: 'Inter Tight', sans-serif; font-weight: 400; }
+      .v3-qtext .var { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 15px; }
+      .v3-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
+      .v3-opt { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); background: #0a0b0e; }
+      .v3-opt.sel { border-color: var(--accent); background: oklch(0.82 0.15 78 / 0.08); }
+      .v3-opt-k { width: 24px; height: 24px; border: 1px solid var(--line); display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); }
+      .v3-opt.sel .v3-opt-k { background: var(--accent); border-color: var(--accent); color: #14110d; }
+      .v3-opt-t { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+
+      .v3-actions { display: flex; gap: 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+      .v3-btn {
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase;
+        letter-spacing: 0.1em; padding: 10px 14px; border: 1px solid var(--line);
+        background: transparent; color: var(--fg); cursor: pointer;
+      }
+      .v3-btn.primary { background: var(--accent); color: #14110d; border-color: var(--accent); font-weight: 600; }
+      .v3-btn.warn { border-color: rgba(217,163,0,0.5); color: #d9a300; }
+
+      .v3-timer3 {
+        text-align: center; padding: 12px 0 18px; border-bottom: 1px dashed var(--line);
+        margin-bottom: 18px;
+      }
+      .v3-timer3-l { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.16em; margin-bottom: 4px; }
+      .v3-timer3-v { font-family: 'JetBrains Mono', monospace; font-size: 32px; font-weight: 700; color: var(--accent); letter-spacing: 0.02em; }
+      .v3-pal3 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+      .v3-pd3 { aspect-ratio: 1; display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+      .v3-pd3.a { background: var(--accent); color: #14110d; }
+      .v3-pd3.m { background: #d9a300; color: #14110d; }
+      .v3-pd3.v { background: #402c14; color: #f2f0ea; }
+      .v3-pd3.u { background: transparent; color: var(--dim); border: 1px solid var(--line); }
+
+      /* Equations floating deco */
+      .v3-eq {
+        position: absolute; font-family: 'JetBrains Mono', monospace;
+        color: rgba(255,255,255,0.04); font-size: 14px; pointer-events: none; user-select: none;
+        z-index: 0;
+      }
+
+      /* Footer */
+      .v3-foot {
+        padding: 40px; border-top: 1px solid var(--line);
+        display: flex; justify-content: space-between; align-items: center;
+        font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
+        text-transform: uppercase; letter-spacing: 0.1em;
+      }
+
+      @media (max-width: 1100px) {
+        .v3-cbt { grid-template-columns: 1fr; }
+        .v3-cbt-left, .v3-cbt-right { border: 0; border-top: 1px solid var(--line); }
+      }
+      @media (max-width: 900px) {
+        .v3-bar { grid-template-columns: 1fr auto; padding: 16px 20px; }
+        .v3-count { display: none; }
+        .v3-hero, .v3-slab, .v3-foot { padding-left: 20px; padding-right: 20px; }
+        .v3-hero-lower { grid-template-columns: 1fr; }
+        .v3-hero-top { flex-direction: column; align-items: flex-start; }
+        .v3-opts { grid-template-columns: 1fr; }
+      }
+    </style>
+
+    <header class="v3-bar">
+      <div class="v3-logo"><div class="v3-logo-mark">E</div>ExamSite</div>
+      <div class="v3-count" aria-label="Countdown to JEE Main 2026">
+        <span class="v3-count-lbl">JEE Main 2026 · Session I</span>
+        <div class="unit"><b id="v3-d">164</b><i>days</i></div>
+        <div class="unit"><b id="v3-h">08</b><i>hrs</i></div>
+        <div class="unit"><b id="v3-m">22</b><i>min</i></div>
+        <div class="unit"><b id="v3-s">47</b><i>sec</i></div>
+        <span class="to">to <b>22 Jan 2027</b></span>
+      </div>
+      <div class="v3-bar-right">
+        <a href="#">Analytics</a>
+        <a href="#">Faculty</a>
+        <a href="#">Support</a>
+      </div>
+    </header>
+
+    <section class="v3-hero">
+      <div class="v3-hero-top">
+        <div class="v3-eyebrow-row"><span class="dot"></span>Live · Physics prep by Dr. R. Verma</div>
+        <div class="v3-hero-right">
+          <b>4,812</b> students tested last month<br/>
+          <b>97%</b> report exam-day confidence
+        </div>
+      </div>
+
+      <h1 class="v3-h1">
+        The clock is <span class="glow">already</span><br/>
+        <span class="strike">running.</span>
+      </h1>
+
+      <div class="v3-hero-lower">
+        <p class="v3-sub">
+          <b>ExamSite</b> is a 1:1 clone of the NTA CBT portals for JEE and NEET.
+          Every mock is timed, palette-driven, and reviewed by Dr. Verma personally.
+          Enter your code to enter the arena.
+        </p>
+
+        <div class="v3-cta-block">
+          <div class="v3-cta-head">
+            <span>§ Test entry</span>
+            <span>Status: <b>ACCEPTING</b></span>
+          </div>
+          <form class="v3-cta-row" onsubmit="event.preventDefault();">
+            <input type="text" placeholder="ENTER CODE" maxlength="16" spellcheck="false" autocomplete="off" />
+            <button type="submit">
+              Start
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </button>
+          </form>
+          <div class="v3-cta-foot">
+            <span>No code?</span>
+            <a href="#">Take a free demo →</a>
+          </div>
+        </div>
+      </div>
+
+      <span class="v3-eq" style="top: 20%; right: 8%">F = ma</span>
+      <span class="v3-eq" style="top: 65%; left: 3%">∮ B·dl = μ₀I</span>
+      <span class="v3-eq" style="bottom: 10%; right: 22%">E = mc²</span>
+      <span class="v3-eq" style="top: 42%; left: 55%">λ = h/p</span>
+    </section>
+
+    <section class="v3-slab">
+      <div class="v3-slab-head">
+        <h2 class="v3-slab-title">The <em>interface</em>, exactly as it will appear.</h2>
+        <div class="v3-slab-meta">Rendered live · WebGL-free · zero-lag<br/>Runs on the same event model as NTA CBT</div>
+      </div>
+
+      <div class="v3-cbt">
+        <aside class="v3-cbt-left">
+          <div class="v3-sec-lbl">Sections</div>
+          <div class="v3-sec-item on"><b>Physics</b><span>24/30</span></div>
+          <div class="v3-sec-item"><b>Chemistry</b><span>18/30</span></div>
+          <div class="v3-sec-item"><b>Mathematics</b><span>6/30</span></div>
+
+          <div class="v3-cand">
+            Candidate
+            <div>R. Sharma · 24011745</div>
+          </div>
+          <div class="v3-cand">
+            Test code
+            <div>PHY-JEE-2026-04</div>
+          </div>
+        </aside>
+
+        <div class="v3-cbt-mid">
+          <div class="v3-qmeta">
+            <span>Section · Physics</span>
+            <span><strong>Q. 24</strong> of 30 · +4 / −1</span>
+          </div>
+          <p class="v3-qtext">
+            An LCR series circuit has <span class="var">L = 2 H</span>,
+            <span class="var">C = 32 μF</span>, and <span class="var">R = 10 Ω</span>.
+            The resonant angular frequency (in rad/s) is closest to:
+          </p>
+          <div class="v3-opts">
+            <div class="v3-opt"><div class="v3-opt-k">A</div><div class="v3-opt-t">62.5</div></div>
+            <div class="v3-opt sel"><div class="v3-opt-k">B</div><div class="v3-opt-t">125</div></div>
+            <div class="v3-opt"><div class="v3-opt-k">C</div><div class="v3-opt-t">250</div></div>
+            <div class="v3-opt"><div class="v3-opt-k">D</div><div class="v3-opt-t">500</div></div>
+          </div>
+          <div class="v3-actions">
+            <button class="v3-btn primary">Save &amp; Next</button>
+            <button class="v3-btn warn">Mark for review</button>
+            <button class="v3-btn">Clear</button>
+            <button class="v3-btn" style="margin-left:auto">← Previous</button>
+            <button class="v3-btn">Next →</button>
+          </div>
+        </div>
+
+        <aside class="v3-cbt-right">
+          <div class="v3-timer3">
+            <div class="v3-timer3-l">Time remaining</div>
+            <div class="v3-timer3-v">02:14:37</div>
+          </div>
+          <div class="v3-sec-lbl">Question palette</div>
+          <div class="v3-pal3">
+            <div class="v3-pd3 a">1</div><div class="v3-pd3 a">2</div><div class="v3-pd3 v">3</div><div class="v3-pd3 a">4</div><div class="v3-pd3 m">5</div>
+            <div class="v3-pd3 a">6</div><div class="v3-pd3 u">7</div><div class="v3-pd3 a">8</div><div class="v3-pd3 m">9</div><div class="v3-pd3 a">10</div>
+            <div class="v3-pd3 a">11</div><div class="v3-pd3 a">12</div><div class="v3-pd3 v">13</div><div class="v3-pd3 a">14</div><div class="v3-pd3 a">15</div>
+            <div class="v3-pd3 m">16</div><div class="v3-pd3 a">17</div><div class="v3-pd3 a">18</div><div class="v3-pd3 u">19</div><div class="v3-pd3 v">20</div>
+            <div class="v3-pd3 a">21</div><div class="v3-pd3 a">22</div><div class="v3-pd3 m">23</div>
+            <div class="v3-pd3 a" style="outline:2px solid #f2f0ea;outline-offset:1px">24</div>
+            <div class="v3-pd3 u">25</div>
+          </div>
+          <div style="margin-top:16px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--dim);display:flex;flex-direction:column;gap:5px">
+            <span><i style="width:8px;height:8px;background:var(--accent);display:inline-block;margin-right:6px"></i>Answered</span>
+            <span><i style="width:8px;height:8px;background:#d9a300;display:inline-block;margin-right:6px"></i>Marked</span>
+            <span><i style="width:8px;height:8px;background:#402c14;display:inline-block;margin-right:6px"></i>Visited</span>
+            <span><i style="width:8px;height:8px;border:1px solid var(--line);display:inline-block;margin-right:6px"></i>Not visited</span>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <footer class="v3-foot">
+      <span>ExamSite · Physics prep by Dr. R. Verma · Est. 2026</span>
+      <span>Made for the students who can't afford to be surprised.</span>
+    </footer>
+  </div>
+</section>
+
+<script>
+  // Variation switcher
+  (function () {
+    const btns = document.querySelectorAll('.switcher button');
+    const stages = { v1: document.getElementById('v1'), v2: document.getElementById('v2'), v3: document.getElementById('v3') };
+    const KEY = 'examsite_variation';
+    function activate(v) {
+      Object.keys(stages).forEach(k => { stages[k].hidden = (k !== v); });
+      btns.forEach(b => b.classList.toggle('active', b.dataset.var === v));
+      try { localStorage.setItem(KEY, v); } catch(e) {}
+      // reset body background per variation for letterboxing
+      const bgMap = { v1: '#0a0a0a', v2: '#f4f0e8', v3: '#0c0d10' };
+      document.body.style.background = bgMap[v] || '#0a0a0a';
+    }
+    btns.forEach(b => b.addEventListener('click', () => activate(b.dataset.var)));
+    let saved = 'v1';
+    try { saved = localStorage.getItem(KEY) || 'v1'; } catch(e) {}
+    activate(saved);
+
+    // Keyboard nav (1/2/3 or arrows)
+    document.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      const order = ['v1','v2','v3'];
+      const cur = document.querySelector('.switcher button.active')?.dataset.var || 'v1';
+      const idx = order.indexOf(cur);
+      if (e.key === '1') activate('v1');
+      else if (e.key === '2') activate('v2');
+      else if (e.key === '3') activate('v3');
+      else if (e.key === 'ArrowRight') activate(order[(idx+1) % 3]);
+      else if (e.key === 'ArrowLeft')  activate(order[(idx+2) % 3]);
+    });
+  })();
+
+  // V3 countdown ticker
+  (function () {
+    const d = document.getElementById('v3-d');
+    const h = document.getElementById('v3-h');
+    const m = document.getElementById('v3-m');
+    const s = document.getElementById('v3-s');
+    if (!d) return;
+    const target = new Date('2027-01-22T09:00:00+05:30').getTime();
+    function tick() {
+      const now = Date.now();
+      let diff = Math.max(0, target - now);
+      const days = Math.floor(diff / 86400000); diff -= days*86400000;
+      const hrs = Math.floor(diff / 3600000); diff -= hrs*3600000;
+      const min = Math.floor(diff / 60000); diff -= min*60000;
+      const sec = Math.floor(diff / 1000);
+      d.textContent = String(days).padStart(3,'0');
+      h.textContent = String(hrs).padStart(2,'0');
+      m.textContent = String(min).padStart(2,'0');
+      s.textContent = String(sec).padStart(2,'0');
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+</script>
+
+</body>
+</html>
