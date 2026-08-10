@@ -2,6 +2,8 @@ import { getFirestoreDb } from "./firebase/client";
 import {
   collection,
   addDoc,
+  deleteDoc,
+  doc,
   getDocs,
   serverTimestamp,
   type QueryDocumentSnapshot,
@@ -58,9 +60,20 @@ export async function addQuestion(
   q: Omit<Question, "id" | "createdAt">
 ): Promise<Question> {
   const db = getFirestoreDb();
-  const ref = await addDoc(collection(db, COLLECTION), {
-    ...q,
+  const data: Record<string, unknown> = {
+    type: q.type,
+    prompt: q.prompt,
+    options: q.options,
+    marks: q.marks,
+    negative: q.negative,
     createdAt: serverTimestamp(),
-  });
+  };
+  if (q.imageUrl) data.imageUrl = q.imageUrl;
+  const ref = await addDoc(collection(db, COLLECTION), data);
   return { ...q, id: ref.id };
+}
+
+export async function deleteQuestion(id: string): Promise<void> {
+  const db = getFirestoreDb();
+  await deleteDoc(doc(db, COLLECTION, id));
 }

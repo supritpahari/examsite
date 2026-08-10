@@ -8,6 +8,7 @@ import { signOut } from "firebase/auth";
 import {
   fetchQuestions,
   addQuestion as saveQuestion,
+  deleteQuestion,
   type Question,
   type QuestionOption as Option,
   type QuestionType,
@@ -20,6 +21,47 @@ const NAV = [
   { key: "faculty", label: "Faculty" },
   { key: "settings", label: "Settings" },
 ];
+
+function NavIcon({ name }: { name: string }) {
+  const common = {
+    width: 18,
+    height: 18,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+  switch (name) {
+    case "questions":
+      return (
+        <svg {...common}><path d="M9.1 9a3 3 0 1 1 4.2 2.7c-.8.4-1.3 1.1-1.3 2.1V14" /><line x1="12" y1="17.5" x2="12" y2="17.5" /></svg>
+      );
+    case "exams":
+      return (
+        <svg {...common}><path d="M5 4h11l3 3v13H5z" /><path d="M9 9h6M9 13h6" /></svg>
+      );
+    case "results":
+      return (
+        <svg {...common}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
+      );
+    case "faculty":
+      return (
+        <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5 20a7 7 0 0 1 14 0" /></svg>
+      );
+    case "settings":
+      return (
+        <svg {...common}><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1" /></svg>
+      );
+    case "signout":
+      return (
+        <svg {...common}><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" /><path d="M10 12h10M17 9l3 3-3 3" /></svg>
+      );
+    default:
+      return null;
+  }
+}
 
 const PLACEHOLDER = "Type using LaTeX-style syntax: $x^2$, $\\frac{a}{b}$, $\\vec{v}$, $\\sqrt{x}$";
 
@@ -81,6 +123,17 @@ export default function AdminDashboard() {
     setModalOpen(false);
   };
 
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Delete this question? This cannot be undone.")) return;
+    setQuestions((prev) => prev.filter((q) => q.id !== id));
+    try {
+      await deleteQuestion(id);
+    } catch {
+      // reload to restore state if delete failed
+      fetchQuestions().then(setQuestions).catch(() => {});
+    }
+  };
+
   const handleSignOut = async () => {
     const { getAuthInstance } = await import("@/lib/firebase/client");
     await signOut(getAuthInstance());
@@ -126,7 +179,8 @@ export default function AdminDashboard() {
     >
       <style>{`
         .ad-root {
-          min-height: 100vh;
+          height: 100vh;
+          overflow: hidden;
           background: var(--paper);
           color: var(--ink);
           font-family: 'Inter', sans-serif;
@@ -151,6 +205,7 @@ export default function AdminDashboard() {
           display: flex;
           flex-direction: column;
           gap: 6px;
+          overflow-y: auto;
         }
         .ad-brand {
           font-family: 'Instrument Serif', serif;
@@ -214,10 +269,18 @@ export default function AdminDashboard() {
           overflow: hidden; width: 100%; text-align: left;
         }
         .ad-signout:hover { color: var(--accent); border-color: var(--accent); }
-        .ad-collapsed-label { display: none; }
-        .ad-root.collapsed .ad-brand span,
-        .ad-root.collapsed .ad-nav-item span:not(.dot) { display: none; }
-        .ad-root.collapsed .ad-nav-item { justify-content: center; }
+        .ad-nav-icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; color: inherit; }
+        .ad-brand-text { white-space: nowrap; }
+        .ad-root.collapsed .ad-brand-text { display: none; }
+        .ad-root.collapsed .ad-nav-label {
+          opacity: 0;
+          max-width: 0;
+          overflow: hidden;
+          transition: opacity 0.18s ease;
+        }
+        .ad-root.collapsed .ad-nav-item,
+        .ad-root.collapsed .ad-signout { justify-content: center; padding-left: 0; padding-right: 0; }
+        .ad-root:not(.collapsed) .ad-nav-label { opacity: 1; transition: opacity 0.18s ease; }
 
         .ad-main {
           position: relative;
@@ -241,12 +304,19 @@ export default function AdminDashboard() {
           padding: 20px 22px;
           margin-bottom: 16px;
         }
-        .ad-q-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .ad-q-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; }
+        .ad-q-top-right { display: flex; align-items: center; gap: 12px; }
         .ad-q-type {
           font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
           letter-spacing: 0.14em; color: var(--accent); border: 1px solid var(--rule); padding: 3px 8px;
         }
         .ad-q-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); }
+        .ad-q-del {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
+          letter-spacing: 0.1em; color: var(--dim); background: transparent;
+          border: 1px solid var(--rule); padding: 4px 10px; cursor: pointer; transition: all 0.15s ease;
+        }
+        .ad-q-del:hover { color: #fff; background: #b3261e; border-color: #b3261e; }
         .ad-q-prompt { font-family: 'Instrument Serif', serif; font-size: 19px; line-height: 1.4; color: var(--ink); margin-bottom: 14px; }
         .ad-q-img { max-height: 160px; border: 1px solid var(--rule); margin-bottom: 14px; }
         .ad-opts { display: grid; gap: 8px; }
@@ -375,17 +445,47 @@ export default function AdminDashboard() {
         .ad-field > .ad-toolbar + textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
         .MathField-input { width: 100%; }
         .ad-opt-edit .ad-field { flex: 1; margin-bottom: 0; }
-
-        .ad-opt-edit { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
-        .ad-opt-edit input[type="text"] { flex: 1; }
-        .ad-opt-edit > span:first-child { padding-top: 30px; }
-        .ad-opt-edit .ad-mark {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-2);
-          display: flex; align-items: center; gap: 6px; white-space: nowrap;
+        .ad-preview {
+          margin-top: 10px; border: 1px solid var(--ink); background: #fffdf8;
+          box-shadow: 4px 4px 0 var(--rule);
         }
+        .ad-preview-label {
+          display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+          text-transform: uppercase; letter-spacing: 0.18em; color: var(--dim);
+          padding: 6px 12px 0;
+        }
+        .ad-preview-body {
+          padding: 8px 12px 12px; font-family: 'Georgia', 'Times New Roman', serif;
+          font-size: 18px; color: var(--ink); line-height: 1.7; word-break: break-word;
+          min-height: 24px;
+        }
+        .ad-prev-math { padding: 0 1px; }
+        .ad-frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 2px; font-size: 0.78em; }
+        .ad-frac-num { border-bottom: 1px solid var(--ink); padding: 0 5px; }
+        .ad-frac-den { padding: 0 5px; }
+        .ad-vec { position: relative; }
+        .ad-vec-arrow { display: inline-block; margin-left: 1px; }
+        .ad-sqrt { border-top: 1px solid var(--ink); padding: 0 2px; }
+        .ad-sqrt-body { border-top: 1px solid var(--ink); padding: 0 2px; }
+        .ad-preview-inline {
+          font-family: 'Georgia', 'Times New Roman', serif; font-size: 17px;
+          color: var(--ink); line-height: 1.6; word-break: break-word;
+        }
+
+        .ad-opt-edit { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; transition: background 0.15s ease; }
+        .ad-opt-edit.correct-row { background: rgba(220, 60, 40, 0.08); border: 1px solid var(--accent); padding: 6px; }
+        .ad-opt-edit input[type="text"] { flex: 1; }
+        .ad-opt-key {
+          flex: 0 0 auto; width: 32px; height: 32px; border: 1px solid var(--rule);
+          background: var(--paper); color: var(--ink-2); cursor: pointer;
+          font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600;
+          display: grid; place-items: center; transition: all 0.15s ease;
+        }
+        .ad-opt-key:hover { border-color: var(--accent); color: var(--accent); }
+        .ad-opt-key.correct { background: var(--accent); color: #fff; border-color: var(--accent); }
         .ad-opt-del {
           background: transparent; border: 1px solid var(--rule); color: var(--dim);
-          width: 28px; height: 28px; cursor: pointer; flex: 0 0 auto;
+          width: 28px; height: 28px; cursor: pointer; flex: 0 0 auto; align-self: center;
         }
         .ad-opt-del:hover { color: var(--accent); border-color: var(--accent); }
         .ad-add-opt {
@@ -419,20 +519,22 @@ export default function AdminDashboard() {
           {collapsed ? "»" : "«"}
         </button>
         <div className="ad-brand">
-          Exam<em>Site</em>
+          <span className="ad-brand-text">Exam<em>Site</em></span>
         </div>
         {NAV.map((n) => (
           <button
             key={n.key}
             className={`ad-nav-item${active === n.key ? " active" : ""}`}
             onClick={() => setActive(n.key)}
+            title={n.label}
           >
-            <span className="dot" />
-            <span>{n.label}</span>
+            <span className="ad-nav-icon"><NavIcon name={n.key} /></span>
+            <span className="ad-nav-label">{n.label}</span>
           </button>
         ))}
-        <button className="ad-signout" onClick={handleSignOut}>
-          <span className="dot" /> Sign out
+        <button className="ad-signout" onClick={handleSignOut} title="Sign out">
+          <span className="ad-nav-icon"><NavIcon name="signout" /></span>
+          <span className="ad-nav-label">Sign out</span>
         </button>
       </aside>
 
@@ -456,15 +558,27 @@ export default function AdminDashboard() {
               <div className="ad-q" key={q.id}>
                 <div className="ad-q-top">
                   <span className="ad-q-type">{q.type === "mcq" ? "MCQ · Multi" : "Single Correct"}</span>
-                  <span className="ad-q-meta">+{q.marks} / -{q.negative}</span>
+                  <span className="ad-q-top-right">
+                    <span className="ad-q-meta">+{q.marks} / -{q.negative}</span>
+                    <button
+                      type="button"
+                      className="ad-q-del"
+                      onClick={() => handleDelete(q.id)}
+                      aria-label="Delete question"
+                    >
+                      Delete
+                    </button>
+                  </span>
                 </div>
-                <div className="ad-q-prompt">{q.prompt}</div>
+                <div className="ad-q-prompt">
+                  <MathPreview text={q.prompt} compact />
+                </div>
                 {q.imageUrl && <img className="ad-q-img" src={q.imageUrl} alt="question" />}
                 <div className="ad-opts">
                   {q.options.map((o, i) => (
                     <div className={`ad-opt${o.correct ? " correct" : ""}`} key={o.id}>
                       <span className="k">{String.fromCharCode(65 + i)}</span>
-                      <span>{o.text}</span>
+                      <span className="ad-opt-text"><MathPreview text={o.text} compact /></span>
                     </div>
                   ))}
                 </div>
@@ -629,17 +743,21 @@ function AddQuestionModal({
         <div className="ad-field" style={{ marginBottom: 16 }}>
           <label>Options (max 4)</label>
           {options.map((o, i) => (
-            <div className="ad-opt-edit" key={o.id}>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, width: 18 }}>{String.fromCharCode(65 + i)}</span>
+            <div className={`ad-opt-edit${o.correct ? " correct-row" : ""}`} key={o.id}>
+              <button
+                type="button"
+                className={`ad-opt-key${o.correct ? " correct" : ""}`}
+                onClick={() => toggleCorrect(o.id)}
+                aria-pressed={o.correct}
+                title={type === "single" ? "Select correct answer" : "Toggle correct answer"}
+              >
+                {String.fromCharCode(65 + i)}
+              </button>
               <MathField
                 value={o.text}
                 onChange={(v) => setOptText(o.id, v)}
                 placeholder="Option text — e.g. $\\vec{F} = m\\vec{a}$"
               />
-              <label className="ad-mark">
-                <input type="checkbox" checked={o.correct} onChange={() => toggleCorrect(o.id)} />
-                correct
-              </label>
               {options.length > 2 && (
                 <button className="ad-opt-del" onClick={() => removeOption(o.id)} aria-label="Remove">×</button>
               )}
@@ -698,6 +816,138 @@ function Stepper({
           <button type="button" aria-label={`Decrease ${label}`} onClick={() => set(num - step)}>▼</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+const GREEK: Record<string, string> = {
+  alpha: "α", beta: "β", gamma: "γ", delta: "δ", Delta: "Δ", epsilon: "ε",
+  theta: "θ", Theta: "Θ", lambda: "λ", mu: "μ", pi: "π", Pi: "Π", rho: "ρ",
+  sigma: "σ", Sigma: "Σ", tau: "τ", phi: "φ", Phi: "Φ", psi: "ψ", omega: "ω",
+  Omega: "Ω", eta: "η", kappa: "κ", nu: "ν", xi: "ξ", zeta: "ζ", Gamma: "Γ",
+};
+
+const SIMPLE: Record<string, string> = {
+  infty: "∞", to: "→", cdot: "·", times: "×", div: "÷", pm: "±", mp: "∓",
+  leq: "≤", geq: "≥", neq: "≠", approx: "≈", equiv: "≡", propto: "∝",
+  partial: "∂", nabla: "∇", sum: "∑", int: "∫", prod: "∏", cup: "∪", cap: "∩",
+  in: "∈", notin: "∉", subset: "⊂", supset: "⊃", forall: "∀", exists: "∃",
+  rightarrow: "→", leftarrow: "←", Rightarrow: "⇒", Leftarrow: "⇐",
+  langle: "⟨", rangle: "⟩", ldots: "…", cdots: "⋯", ll: "«", gg: "»",
+  angle: "∠", circ: "°", prime: "′",
+};
+
+function readGroup(str: string, i: number): [string, number] {
+  if (str[i] !== "{") return [str[i] ?? "", i + 1];
+  let depth = 0;
+  let j = i;
+  for (; j < str.length; j++) {
+    if (str[j] === "{") depth++;
+    else if (str[j] === "}") {
+      depth--;
+      if (depth === 0) return [str.slice(i + 1, j), j + 1];
+    }
+  }
+  return [str.slice(i + 1), j];
+}
+
+function parseMath(str: string, keyBase = "m"): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  let i = 0;
+  let k = 0;
+  const push = (n: React.ReactNode) => out.push(<span key={`${keyBase}-${k++}`}>{n}</span>);
+
+  while (i < str.length) {
+    const c = str[i];
+    if (c === "\\") {
+      let j = i + 1;
+      while (j < str.length && /[a-zA-Z]/.test(str[j])) j++;
+      const cmd = str.slice(i + 1, j);
+      if (cmd === "frac") {
+        const [num, n1] = readGroup(str, j);
+        const [den, n2] = readGroup(str, n1);
+        i = n2;
+        push(
+          <span key={`${keyBase}-${k++}`} className="ad-frac">
+            <span className="ad-frac-num">{parseMath(num, keyBase + "n")}</span>
+            <span className="ad-frac-den">{parseMath(den, keyBase + "d")}</span>
+          </span>
+        );
+        continue;
+      }
+      if (cmd === "vec") {
+        const [body, n1] = readGroup(str, j);
+        i = n1;
+        push(
+          <span key={`${keyBase}-${k++}`} className="ad-vec">
+            {parseMath(body, keyBase + "v")}
+            <span className="ad-vec-arrow">⃗</span>
+          </span>
+        );
+        continue;
+      }
+      if (cmd === "sqrt") {
+        const [body, n1] = readGroup(str, j);
+        i = n1;
+        push(
+          <span key={`${keyBase}-${k++}`} className="ad-sqrt">
+            √<span className="ad-sqrt-body">{parseMath(body, keyBase + "s")}</span>
+          </span>
+        );
+        continue;
+      }
+      if (cmd in GREEK) { push(GREEK[cmd as keyof typeof GREEK]); i = j; continue; }
+      if (SIMPLE[cmd]) { push(SIMPLE[cmd]); i = j; continue; }
+      push(cmd);
+      i = j;
+      continue;
+    }
+    if (c === "^" || c === "_") {
+      const [body, n1] = readGroup(str, i + 1);
+      i = n1;
+      push(
+        c === "^" ? (
+          <sup key={`${keyBase}-${k++}`}>{parseMath(body, keyBase + "sup")}</sup>
+        ) : (
+          <sub key={`${keyBase}-${k++}`}>{parseMath(body, keyBase + "sub")}</sub>
+        )
+      );
+      continue;
+    }
+    if (c === "{") {
+      const [body, n1] = readGroup(str, i);
+      i = n1;
+      push(parseMath(body, keyBase + "g"));
+      continue;
+    }
+    push(c);
+    i++;
+  }
+  return out;
+}
+
+function MathPreview({ text, compact }: { text: string; compact?: boolean }) {
+  if (!text.trim()) return null;
+  // Render the whole string as math-capable text, treating $...$ as explicit
+  // math regions but ALSO parsing LaTeX commands outside of $ delimiters.
+  const segments = text.split(/(\$[^$]*\$)/g).filter((s) => s !== "");
+  const nodes = segments.map((seg, idx) => {
+    if (seg.startsWith("$") && seg.endsWith("$") && seg.length >= 2) {
+      return (
+        <span key={idx} className="ad-prev-math">
+          {parseMath(seg.slice(1, -1), "p" + idx)}
+        </span>
+      );
+    }
+    return <span key={idx}>{parseMath(seg, "p" + idx)}</span>;
+  });
+  if (compact) {
+    return <span className="ad-preview-inline">{nodes}</span>;
+  }
+  return (
+    <div className="ad-preview">
+      <span className="ad-preview-label">Live preview</span>
+      <div className="ad-preview-body">{nodes}</div>
     </div>
   );
 }
@@ -782,6 +1032,7 @@ function MathField({
           placeholder={placeholder}
         />
       )}
+      <MathPreview text={value} />
     </div>
   );
 }
