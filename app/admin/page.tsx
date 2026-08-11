@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthState } from "@/lib/firebase/client";
@@ -13,12 +13,16 @@ import {
   type QuestionOption as Option,
   type QuestionType,
 } from "@/lib/questions";
+import {
+  fetchExams,
+  addExam as saveExam,
+  type Exam as AdminExam,
+} from "@/lib/exams";
 
 const NAV = [
   { key: "questions", label: "Questions" },
   { key: "exams", label: "Exams" },
-  { key: "results", label: "Results" },
-  { key: "faculty", label: "Faculty" },
+  { key: "information", label: "Information" },
   { key: "settings", label: "Settings" },
 ];
 
@@ -49,6 +53,10 @@ function NavIcon({ name }: { name: string }) {
     case "faculty":
       return (
         <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5 20a7 7 0 0 1 14 0" /></svg>
+      );
+    case "information":
+      return (
+        <svg {...common}><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
       );
     case "settings":
       return (
@@ -96,6 +104,9 @@ export default function AdminDashboard() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [examModalOpen, setExamModalOpen] = useState(false);
+  const [exams, setExams] = useState<AdminExam[]>([]);
+  const [loadingExams, setLoadingExams] = useState(true);
   const [checking, setChecking] = useState(true);
   const [authed, setAuthed] = useState(false);
   const [explain, setExplain] = useState<{
@@ -116,6 +127,10 @@ export default function AdminDashboard() {
           .then(setQuestions)
           .catch(() => setQuestions([]))
           .finally(() => setLoadingQuestions(false));
+        fetchExams()
+          .then((list) => setExams(list.length ? list : SAMPLE_EXAMS))
+          .catch(() => setExams(SAMPLE_EXAMS))
+          .finally(() => setLoadingExams(false));
       } else {
         router.replace("/admin/login");
       }
@@ -148,17 +163,17 @@ export default function AdminDashboard() {
 
   const generateExplanation = async (q: Question) => {
     const apiKey =
-      typeof window !== "undefined" ? localStorage.getItem(GROQ_STORAGE_KEY) : null;
+      typeof window !== "undefined" ? localStorage.getItem(GEM_STORAGE_KEY) : null;
     const baseUrl =
       (typeof window !== "undefined"
-        ? localStorage.getItem(GROQ_BASE_KEY) || GROQ_DEFAULT_BASE
-        : GROQ_DEFAULT_BASE
+        ? localStorage.getItem(GEM_BASE_KEY) || GEM_DEFAULT_BASE
+        : GEM_DEFAULT_BASE
       ).replace(/\/+$/, "");
     const model =
-      typeof window !== "undefined" ? localStorage.getItem(GROQ_MODEL_KEY) : null;
+      typeof window !== "undefined" ? localStorage.getItem(GEM_MODEL_KEY) : null;
 
     if (!apiKey || !model) {
-      setExplain({ q, text: "", loading: false, error: "Add your Groq API key and pick a model in Settings first." });
+      setExplain({ q, text: "", loading: false, error: "Add your Google Gemini API key and pick a model in Settings first." });
       return;
     }
 
@@ -174,26 +189,27 @@ export default function AdminDashboard() {
 
     setExplain({ q, text: "", loading: true, error: "" });
     try {
-      const res = await fetch(`${baseUrl}/v1/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.3,
-        }),
-      });
+      const res = await fetch(
+        `${baseUrl}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3 },
+          }),
+        }
+      );
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
         throw new Error(`Request failed (${res.status}). ${detail.slice(0, 200)}`.trim());
       }
       const data = (await res.json()) as {
-        choices?: { message?: { content?: string } }[];
+        candidates?: { content?: { parts?: { text?: string }[] } }[];
       };
-      const content = data?.choices?.[0]?.message?.content?.trim() ?? "";
+      const content =
+        data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("").trim() ??
+        "";
       setExplain({ q, text: content || "(No explanation returned.)", loading: false, error: "" });
     } catch (err) {
       setExplain({
@@ -413,6 +429,49 @@ export default function AdminDashboard() {
         .ad-explain-status.loading { color: var(--dim); }
         .ad-explain-status.err { color: #b3261e; }
 
+        .ad-explain-body h2 {
+          font-family: 'Instrument Serif', serif; font-size: 22px; line-height: 1.2;
+          margin: 22px 0 8px; color: var(--ink);
+        }
+        .ad-explain-body h2:first-child { margin-top: 0; }
+        .ad-explain-body h3 {
+          font-family: 'JetBrains Mono', monospace; font-size: 12px; text-transform: uppercase;
+          letter-spacing: 0.12em; color: var(--accent); margin: 18px 0 6px;
+        }
+        .ad-explain-body p { margin: 0 0 12px; }
+        .ad-explain-body ul { margin: 0 0 12px; padding-left: 20px; }
+        .ad-explain-body li { margin-bottom: 6px; }
+        .ad-explain-block {
+          background: #fffdf8; border: 1px solid var(--rule); box-shadow: 4px 4px 0 var(--rule);
+          padding: 12px 16px; margin: 0 0 12px; overflow-x: auto;
+          font-family: 'Georgia', 'Times New Roman', serif; font-size: 17px;
+        }
+        .ad-explain-body strong { color: var(--ink); font-weight: 700; }
+        .ad-explain-body em { font-style: italic; }
+        .ad-explain-body code, .ad-explain-inline {
+          font-family: 'JetBrains Mono', monospace; font-size: 0.9em;
+          background: var(--paper-2); padding: 1px 5px; border: 1px solid var(--rule);
+        }
+        .ad-explain-body .ad-prev-math { font-family: 'Georgia', serif; }
+
+        .ad-share {
+          display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px;
+          border-top: 1px dashed var(--rule); padding-top: 16px;
+        }
+        .ad-share-label {
+          width: 100%; font-family: 'JetBrains Mono', monospace; font-size: 10px;
+          text-transform: uppercase; letter-spacing: 0.16em; color: var(--dim); margin-bottom: 2px;
+        }
+        .ad-share-btn {
+          display: inline-flex; align-items: center; gap: 7px;
+          background: transparent; border: 1px solid var(--rule); color: var(--ink-2);
+          padding: 9px 13px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+          letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: all 0.15s ease;
+        }
+        .ad-share-btn:hover { color: var(--accent); border-color: var(--accent); }
+        .ad-share-btn.done { color: var(--accent); border-color: var(--accent); }
+        .ad-share-ico { font-size: 13px; line-height: 1; }
+
         .ad-fab {
           position: fixed;
           bottom: 32px;
@@ -475,6 +534,11 @@ export default function AdminDashboard() {
         .ad-field input:focus, .ad-field textarea:focus, .ad-field select:focus { background: #fff; }
 
         .ad-select { position: relative; }
+        .ad-select select {
+          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
+          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink); outline: none;
+        }
+        .ad-select select:focus { background: #fff; }
         .ad-select-trigger {
           width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
           padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink);
@@ -668,6 +732,32 @@ export default function AdminDashboard() {
         .ad-model-opt .tag { font-size: 10px; color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; }
         .ad-model-empty { padding: 14px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--dim); }
 
+        .ad-exam-list { display: flex; flex-direction: column; gap: 12px; }
+        .ad-exam-row {
+          border: 1px solid var(--rule); background: var(--paper);
+          padding: 18px 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+        }
+        .ad-exam-main { flex: 1; min-width: 240px; }
+        .ad-exam-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+        .ad-exam-title { font-family: 'Instrument Serif', serif; font-size: 21px; color: var(--ink); }
+        .ad-exam-meta {
+          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
+          letter-spacing: 0.04em; display: flex; gap: 8px; flex-wrap: wrap;
+        }
+        .ad-exam-side { display: flex; align-items: center; gap: 22px; }
+        .ad-exam-stat { display: flex; flex-direction: column; align-items: center; min-width: 56px; }
+        .ad-exam-stat-val { font-family: 'Instrument Serif', serif; font-size: 26px; color: var(--accent); line-height: 1; }
+        .ad-exam-stat-lbl { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim); margin-top: 4px; }
+        .ad-exam-actions { display: flex; gap: 8px; }
+        .ad-exam-btn {
+          font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase;
+          letter-spacing: 0.08em; background: var(--accent); color: #fff; border: 1px solid var(--accent);
+          padding: 8px 14px; cursor: pointer; transition: all 0.15s ease;
+        }
+        .ad-exam-btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
+        .ad-exam-btn.ghost { background: transparent; color: var(--ink-2); border-color: var(--rule); }
+        .ad-exam-btn.ghost:hover { color: var(--accent); border-color: var(--accent); }
+
         @media (max-width: 720px) {
           .ad-root { grid-template-columns: 1fr; }
           .ad-side { display: none; }
@@ -760,13 +850,15 @@ export default function AdminDashboard() {
           <>
             <div className="ad-head">
               <h1 className="ad-title">AI <em>Settings</em></h1>
-              <span className="ad-count">Groq</span>
+              <span className="ad-count">Gemini</span>
             </div>
             <SettingsPanel />
           </>
         )}
 
-        {active !== "questions" && active !== "settings" && (
+        {active === "exams" && <ExamsPanel exams={exams} />}
+
+        {active !== "questions" && active !== "settings" && active !== "exams" && (
           <div className="ad-head">
             <h1 className="ad-title">{NAV.find((n) => n.key === active)?.label}</h1>
             <span className="ad-count">coming soon</span>
@@ -780,8 +872,25 @@ export default function AdminDashboard() {
         </button>
       )}
 
+      {active === "exams" && (
+        <button className="ad-fab" onClick={() => setExamModalOpen(true)} aria-label="New exam">
+          <span className="plus">+</span> New Exam
+        </button>
+      )}
+
       {modalOpen && (
         <AddQuestionModal onClose={() => setModalOpen(false)} onSave={addQuestion} />
+      )}
+
+      {examModalOpen && (
+        <NewExamModal
+          onClose={() => setExamModalOpen(false)}
+          onSave={async (exam) => {
+            const saved = await saveExam(exam);
+            setExams((prev) => [saved, ...prev]);
+            setExamModalOpen(false);
+          }}
+        />
       )}
 
       {explain && (
@@ -815,6 +924,7 @@ function AddQuestionModal({
     { id: "d", text: "", correct: false },
   ]);
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
+  const [uploading, setUploading] = useState(false);
   const [typeOpen, setTypeOpen] = useState(false);
   const typeRef = useRef<HTMLDivElement>(null);
 
@@ -848,9 +958,31 @@ function AddQuestionModal({
   };
   const removeOption = (id: string) =>
     setOptions((prev) => prev.filter((o) => o.id !== id).slice(0, 4));
-  const onImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) setImageUrl(URL.createObjectURL(f));
+    if (!f) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("image", f);
+      const res = await fetch(
+        "https://api.imgbb.com/1/upload?key=4125525efeb9a21fe49db324919cdeaf",
+        { method: "POST", body: form }
+      );
+      const data = (await res.json()) as {
+        success?: boolean;
+        data?: { url?: string; display_url?: string };
+      };
+      if (data.success && data.data?.url) {
+        setImageUrl(data.data.url);
+      } else {
+        throw new Error("Upload failed");
+      }
+    } catch {
+      setImageUrl(URL.createObjectURL(f));
+    } finally {
+      setUploading(false);
+    }
   };
 
   const save = () => {
@@ -960,10 +1092,19 @@ function AddQuestionModal({
         <div className="ad-field" style={{ marginBottom: 20 }}>
           <label>Image (optional, max 1)</label>
           <label className="ad-file">
-            {imageUrl ? "Image attached ✓ (change)" : "Choose image…"}
-            <input type="file" accept="image/*" onChange={onImage} />
+            {uploading
+              ? "Uploading to ImgBB…"
+              : imageUrl
+                ? "Image attached ✓ (change)"
+                : "Choose image…"}
+            <input type="file" accept="image/*" onChange={onImage} disabled={uploading} />
           </label>
           {imageUrl && <img className="ad-img-preview" src={imageUrl} alt="preview" />}
+          {imageUrl && (
+            <div className="ad-hint" style={{ wordBreak: "break-all" }}>
+              Stored: {imageUrl}
+            </div>
+          )}
         </div>
 
         <button className="ad-submit" onClick={save}>Save Question</button>
@@ -1083,6 +1224,12 @@ function parseMath(str: string, keyBase = "m"): React.ReactNode[] {
             √<span className="ad-sqrt-body">{parseMath(body, keyBase + "s")}</span>
           </span>
         );
+        continue;
+      }
+      if (cmd === "text") {
+        const [body, n1] = readGroup(str, j);
+        i = n1;
+        push(body);
         continue;
       }
       if (cmd in GREEK) { push(GREEK[cmd as keyof typeof GREEK]); i = j; continue; }
@@ -1226,36 +1373,37 @@ function MathField({
   );
 }
 
-const GROQ_STORAGE_KEY = "examsite.groqApiKey";
-const GROQ_MODEL_KEY = "examsite.groqModel";
-const GROQ_BASE_KEY = "examsite.groqBaseUrl";
-const GROQ_DEFAULT_BASE = "https://api.groq.com/openai/v1";
+const GEM_STORAGE_KEY = "examsite.gemApiKey";
+const GEM_MODEL_KEY = "examsite.gemModel";
+const GEM_BASE_KEY = "examsite.gemBaseUrl";
+const GEM_DEFAULT_BASE = "https://generativelanguage.googleapis.com";
 
-interface OrModel {
+interface GemModel {
   id: string;
-  owned_by?: string;
+  displayName?: string;
+  description?: string;
 }
 
 function SettingsPanel() {
   const [baseUrl, setBaseUrl] = useState(() =>
     typeof window !== "undefined"
-      ? localStorage.getItem(GROQ_BASE_KEY) || GROQ_DEFAULT_BASE
-      : GROQ_DEFAULT_BASE
+      ? localStorage.getItem(GEM_BASE_KEY) || GEM_DEFAULT_BASE
+      : GEM_DEFAULT_BASE
   );
   const [apiKey, setApiKey] = useState("");
   const [savedKey, setSavedKey] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem(GROQ_STORAGE_KEY) || "" : ""
+    typeof window !== "undefined" ? localStorage.getItem(GEM_STORAGE_KEY) || "" : ""
   );
   const [status, setStatus] = useState<{ kind: "ok" | "err" | "dim"; text: string }>(
-    typeof window !== "undefined" && localStorage.getItem(GROQ_STORAGE_KEY)
+    typeof window !== "undefined" && localStorage.getItem(GEM_STORAGE_KEY)
       ? { kind: "ok", text: "API key loaded from this browser." }
       : { kind: "dim", text: "" }
   );
 
-  const [models, setModels] = useState<OrModel[]>([]);
+  const [models, setModels] = useState<GemModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [selected, setSelected] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem(GROQ_MODEL_KEY) || "" : ""
+    typeof window !== "undefined" ? localStorage.getItem(GEM_MODEL_KEY) || "" : ""
   );
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
@@ -1274,41 +1422,46 @@ function SettingsPanel() {
 
   const saveKey = async () => {
     const trimmed = apiKey.trim();
-    const base = (baseUrl.trim() || GROQ_DEFAULT_BASE).replace(/\/+$/, "");
+    const base = (baseUrl.trim() || GEM_DEFAULT_BASE).replace(/\/+$/, "");
     if (!trimmed) {
-      setStatus({ kind: "err", text: "Enter a Groq API key to continue." });
+      setStatus({ kind: "err", text: "Enter a Google AI (Gemini) API key to continue." });
       return;
     }
     setLoadingModels(true);
     setStatus({ kind: "dim", text: "Verifying key and fetching models…" });
     try {
-      const res = await fetch(`${base}/v1/models`, {
-        headers: { Authorization: `Bearer ${trimmed}` },
-      });
+      const res = await fetch(`${base}/v1beta/models?key=${encodeURIComponent(trimmed)}`);
       if (!res.ok) {
-        throw new Error(`Request failed (${res.status}). Check your key and base URL.`);
+        throw new Error(`Request failed (${res.status}). Check your API key.`);
       }
-      const data = (await res.json()) as { data?: OrModel[] };
-      const list = Array.isArray(data?.data) ? data.data : [];
+      const data = (await res.json()) as { models?: { name?: string; displayName?: string; description?: string }[] };
+      const raw = Array.isArray(data?.models) ? data.models : [];
+      const list: GemModel[] = raw
+        .map((m) => ({
+          id: (m.name || "").replace(/^models\//, ""),
+          displayName: m.displayName,
+          description: m.description,
+        }))
+        .filter((m) => m.id && m.id.startsWith("gemini"));
       list.sort((a, b) => a.id.localeCompare(b.id));
       setModels(list);
       setSavedKey(trimmed);
       setBaseUrl(base);
       if (typeof window !== "undefined") {
-        localStorage.setItem(GROQ_STORAGE_KEY, trimmed);
-        localStorage.setItem(GROQ_BASE_KEY, base);
+        localStorage.setItem(GEM_STORAGE_KEY, trimmed);
+        localStorage.setItem(GEM_BASE_KEY, base);
       }
       setStatus({
         kind: "ok",
         text: list.length
-          ? `Connected. ${list.length} model${list.length === 1 ? "" : "s"} available — pick one below.`
-          : "Connected, but no models were returned.",
+          ? `Connected. ${list.length} Gemini model${list.length === 1 ? "" : "s"} available — pick one below.`
+          : "Connected, but no Gemini models were returned.",
       });
       if (list.length && !list.some((m) => m.id === selected)) setOpen(true);
     } catch (err) {
       setStatus({
         kind: "err",
-        text: err instanceof Error ? err.message : "Could not reach Groq.",
+        text: err instanceof Error ? err.message : "Could not reach Google AI.",
       });
     } finally {
       setLoadingModels(false);
@@ -1323,9 +1476,9 @@ function SettingsPanel() {
     setSearch("");
     setOpen(false);
     if (typeof window !== "undefined") {
-      localStorage.removeItem(GROQ_STORAGE_KEY);
-      localStorage.removeItem(GROQ_BASE_KEY);
-      localStorage.removeItem(GROQ_MODEL_KEY);
+      localStorage.removeItem(GEM_STORAGE_KEY);
+      localStorage.removeItem(GEM_BASE_KEY);
+      localStorage.removeItem(GEM_MODEL_KEY);
     }
     setStatus({ kind: "dim", text: "API key cleared from this browser." });
   };
@@ -1334,7 +1487,7 @@ function SettingsPanel() {
     setSelected(id);
     setOpen(false);
     setSearch("");
-    if (typeof window !== "undefined") localStorage.setItem(GROQ_MODEL_KEY, id);
+    if (typeof window !== "undefined") localStorage.setItem(GEM_MODEL_KEY, id);
   };
 
   const filtered = models.filter((m) =>
@@ -1344,10 +1497,10 @@ function SettingsPanel() {
   return (
     <>
       <div className="ad-set-card">
-        <h2 className="ad-set-card-title">Groq <em>API</em></h2>
+        <h2 className="ad-set-card-title">Google <em>Gemini</em></h2>
         <p className="ad-set-desc">
-          Supply your Groq API key to enable AI explanations. We call{" "}
-          <code>{`${baseUrl}/v1/models`}</code> (OpenAI-compatible) to list available
+          Supply your Google AI (Gemini) API key to enable AI explanations. We call{" "}
+          <code>{`${baseUrl}/v1beta/models`}</code> to list available Gemini
           models. The key is stored only in this browser&apos;s local storage.
         </p>
         <div className="ad-field" style={{ marginBottom: 12 }}>
@@ -1358,7 +1511,7 @@ function SettingsPanel() {
               value={baseUrl}
               spellCheck={false}
               autoComplete="off"
-              placeholder={GROQ_DEFAULT_BASE}
+              placeholder={GEM_DEFAULT_BASE}
               onChange={(e) => setBaseUrl(e.target.value)}
             />
           </div>
@@ -1371,7 +1524,7 @@ function SettingsPanel() {
               value={apiKey}
               spellCheck={false}
               autoComplete="off"
-              placeholder={savedKey ? "•••••••• (stored locally)" : "gsk_..."}
+              placeholder={savedKey ? "•••••••• (stored locally)" : "AIza..."}
               onChange={(e) => setApiKey(e.target.value)}
             />
             <button className="ad-set-btn" onClick={saveKey} disabled={loadingModels}>
@@ -1428,8 +1581,8 @@ function SettingsPanel() {
                       className={`ad-model-opt${m.id === selected ? " sel" : ""}`}
                       onClick={() => pickModel(m.id)}
                     >
-                      <span>{m.id}</span>
-                      {m.owned_by && <span className="tag">{m.owned_by}</span>}
+                      <span>{m.displayName || m.id}</span>
+                      <span className="tag">{m.id}</span>
                     </li>
                   ))}
                 </ul>
@@ -1441,6 +1594,75 @@ function SettingsPanel() {
       )}
     </>
   );
+}
+
+function renderRich(seg: string, keyBase: string): React.ReactNode[] {
+  // Inline math: $...$. Bold: **...**. Inline code: `...`.
+  const parts = seg.split(/(\$[^$]*\$|\*\*[^*]+\*\*|`[^`]+`)/g).filter((s) => s !== "");
+  return parts.map((p, i) => {
+    if (p.startsWith("$") && p.endsWith("$") && p.length >= 2) {
+      return (
+        <span key={`${keyBase}-${i}`} className="ad-prev-math">
+          {parseMath(p.slice(1, -1), `${keyBase}m${i}`)}
+        </span>
+      );
+    }
+    if (p.startsWith("**") && p.endsWith("**")) {
+      return <strong key={`${keyBase}-${i}`}>{renderRich(p.slice(2, -2), `${keyBase}b${i}`)}</strong>;
+    }
+    if (p.startsWith("`") && p.endsWith("`")) {
+      return <span key={`${keyBase}-${i}`} className="ad-explain-inline">{p.slice(1, -1)}</span>;
+    }
+    return (
+      <Fragment key={`${keyBase}-${i}`}>{parseMath(p, `${keyBase}t${i}`)}</Fragment>
+    );
+  });
+}
+
+function renderExplanation(src: string): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  const blocks = src.split(/\n{2,}/);
+  let k = 0;
+  for (const block of blocks) {
+    const b = block.trim();
+    if (!b) continue;
+    if (b.startsWith("$$") && b.endsWith("$$")) {
+      out.push(
+        <div className="ad-explain-block" key={`blk-${k++}`}>
+          {parseMath(b.slice(2, -2), `d${k}`)}
+        </div>
+      );
+      continue;
+    }
+    if (b.startsWith("### ")) {
+      out.push(<h2 key={`blk-${k++}`}>{renderRich(b.slice(4), `h${k}`)}</h2>);
+      continue;
+    }
+    if (b.startsWith("## ")) {
+      out.push(<h2 key={`blk-${k++}`}>{renderRich(b.slice(3), `h${k}`)}</h2>);
+      continue;
+    }
+    if (b.startsWith("#### ") || b.startsWith("**") && b.endsWith("**") && !b.includes("\n")) {
+      out.push(<h3 key={`blk-${k++}`}>{renderRich(b.replace(/^#### /, "").replace(/^\*\*|\*\*$/g, ""), `h${k}`)}</h3>);
+      continue;
+    }
+    if (b.startsWith("- ") || b.startsWith("* ")) {
+      const items = b
+        .split(/\n/)
+        .map((l) => l.replace(/^[-*]\s+/, "").trim())
+        .filter(Boolean);
+      out.push(
+        <ul key={`blk-${k++}`}>
+          {items.map((it, i) => (
+            <li key={i}>{renderRich(it, `li${k}-${i}`)}</li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+    out.push(<p key={`blk-${k++}`}>{renderRich(b, `p${k}`)}</p>);
+  }
+  return out;
 }
 
 function ExplanationDialog({
@@ -1456,6 +1678,8 @@ function ExplanationDialog({
   error: string;
   onClose: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -1463,6 +1687,37 @@ function ExplanationDialog({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const shareText = `Question: ${q.prompt}\n\nAI Explanation:\n${text}`;
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
+  const shareTo = (target: "whatsapp" | "x" | "email") => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const encoded = encodeURIComponent(shareText);
+    const encodedUrl = encodeURIComponent(url);
+    if (target === "whatsapp") {
+      window.open(`https://wa.me/?text=${encoded}`, "_blank", "noopener,noreferrer");
+    } else if (target === "x") {
+      window.open(
+        `https://twitter.com/intent/tweet?text=${encoded}&url=${encodedUrl}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+    } else {
+      window.location.href = `mailto:?subject=${encodeURIComponent(
+        "AI Explanation · ExamSite"
+      )}&body=${encoded}`;
+    }
+  };
 
   return (
     <div className="ad-overlay" onClick={onClose}>
@@ -1478,10 +1733,210 @@ function ExplanationDialog({
           </div>
         )}
         {!loading && error && <div className="ad-explain-status err">{error}</div>}
-        {!loading && !error && <div className="ad-explain-body">{text}</div>}
+        {!loading && !error && <div className="ad-explain-body">{renderExplanation(text)}</div>}
+        {!loading && !error && (
+          <div className="ad-share">
+            <span className="ad-share-label">Share explanation</span>
+            <button className="ad-share-btn" onClick={() => shareTo("whatsapp")}>
+              <span className="ad-share-ico">✆</span> WhatsApp
+            </button>
+            <button className="ad-share-btn" onClick={() => shareTo("x")}>
+              <span className="ad-share-ico">𝕏</span> X
+            </button>
+            <button className="ad-share-btn" onClick={() => shareTo("email")}>
+              <span className="ad-share-ico">✉</span> Email
+            </button>
+            <button
+              className={`ad-share-btn${copied ? " done" : ""}`}
+              onClick={copyLink}
+            >
+              <span className="ad-share-ico">{copied ? "✓" : "⧉"}</span>
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+        )}
         <div className="ad-set-status dim" style={{ marginTop: 18 }}>
-          Powered by Groq · {localStorage.getItem(GROQ_MODEL_KEY) || "no model selected"}
+          Powered by Google Gemini · {localStorage.getItem(GEM_MODEL_KEY) || "no model selected"}
         </div>
+      </div>
+    </div>
+  );
+}
+
+const SAMPLE_EXAMS: AdminExam[] = [
+  {
+    id: "jee-2026-mock-iv",
+    title: "JEE Main 2026 · Mock IV",
+    subject: "Physics",
+    takenOn: "Aug 09, 2026",
+    status: "completed",
+    attempts: 42,
+    avgScore: 71,
+    duration: "3h 00m",
+  },
+  {
+    id: "neet-bio-12",
+    title: "NEET Biology · Practice Set 12",
+    subject: "Biology",
+    takenOn: "Aug 07, 2026",
+    status: "completed",
+    attempts: 38,
+    avgScore: 89,
+    duration: "3h 20m",
+  },
+  {
+    id: "jee-math-sprint-03",
+    title: "JEE Math · Sprint 03",
+    subject: "Mathematics",
+    takenOn: "Aug 05, 2026",
+    status: "completed",
+    attempts: 51,
+    avgScore: 64,
+    duration: "1h 30m",
+  },
+  {
+    id: "neet-chem-full",
+    title: "NEET Chemistry · Full Syllabus",
+    subject: "Chemistry",
+    takenOn: "Aug 12, 2026",
+    status: "scheduled",
+    attempts: 0,
+    avgScore: 0,
+    duration: "2h 00m",
+  },
+  {
+    id: "jee-2025-paper",
+    title: "JEE Advanced 2025 · Paper 1",
+    subject: "Mixed",
+    takenOn: "—",
+    status: "draft",
+    attempts: 0,
+    avgScore: 0,
+    duration: "3h 00m",
+  },
+];
+
+const EXAM_STATUS_META: Record<AdminExam["status"], { label: string; cls: string }> = {
+  completed: { label: "Completed", cls: "bg-green-100 text-green-800" },
+  scheduled: { label: "Scheduled", cls: "bg-blue-100 text-blue-800" },
+  draft: { label: "Draft", cls: "bg-gray-100 text-gray-700" },
+};
+
+function ExamsPanel({ exams }: { exams: AdminExam[] }) {
+  return (
+    <>
+      <div className="ad-head">
+        <h1 className="ad-title">All <em>Exams</em></h1>
+        <span className="ad-count">{exams.length} total</span>
+      </div>
+
+      <div className="ad-exam-list">
+        {exams.map((exam) => {
+          const meta = EXAM_STATUS_META[exam.status];
+          return (
+            <div className="ad-exam-row" key={exam.id}>
+              <div className="ad-exam-main">
+                <div className="ad-exam-top">
+                  <span className="ad-exam-title">{exam.title}</span>
+                  <span className={`badge ${meta.cls}`}>{meta.label}</span>
+                </div>
+                <div className="ad-exam-meta">
+                  <span>{exam.subject}</span>
+                  <span>·</span>
+                  <span>{exam.duration}</span>
+                  <span>·</span>
+                  <span>{exam.status === "draft" ? "Not published" : `Taken ${exam.takenOn}`}</span>
+                </div>
+              </div>
+              <div className="ad-exam-side">
+                <div className="ad-exam-stat">
+                  <span className="ad-exam-stat-val">{exam.attempts}</span>
+                  <span className="ad-exam-stat-lbl">attempts</span>
+                </div>
+                <div className="ad-exam-stat">
+                  <span className="ad-exam-stat-val">{exam.avgScore}%</span>
+                  <span className="ad-exam-stat-lbl">avg score</span>
+                </div>
+                <div className="ad-exam-actions">
+                  <button className="ad-exam-btn">Open</button>
+                  <button className="ad-exam-btn ghost">Edit</button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function NewExamModal({
+  onClose,
+  onSave,
+}: {
+  onClose: () => void;
+  onSave: (exam: AdminExam) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [subject, setSubject] = useState("Physics");
+  const [duration, setDuration] = useState("60");
+
+  const save = () => {
+    if (!title.trim()) return;
+    onSave({
+      id: `exam-${Date.now()}`,
+      title: title.trim(),
+      subject,
+      takenOn: "—",
+      status: "draft",
+      attempts: 0,
+      avgScore: 0,
+      duration: `${duration} min`,
+    });
+  };
+
+  return (
+    <div className="ad-overlay" onClick={onClose}>
+      <div className="ad-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="ad-close" onClick={onClose} aria-label="Close">×</button>
+        <h3 className="ad-form-title">New <em>Exam</em></h3>
+
+        <div className="ad-field" style={{ marginBottom: 16 }}>
+          <label>Title</label>
+          <input
+            type="text"
+            value={title}
+            autoFocus
+            placeholder="e.g. JEE Main 2026 · Mock V"
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </div>
+
+        <div className="ad-row" style={{ marginBottom: 16 }}>
+          <div className="ad-field">
+            <label>Subject</label>
+            <div className="ad-select">
+              <select value={subject} onChange={(e) => setSubject(e.target.value)}>
+                <option>Physics</option>
+                <option>Chemistry</option>
+                <option>Mathematics</option>
+                <option>Biology</option>
+                <option>Mixed</option>
+              </select>
+            </div>
+          </div>
+          <div className="ad-field">
+            <label>Duration (min)</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value.replace(/[^0-9]/g, ""))}
+            />
+          </div>
+        </div>
+
+        <button className="ad-submit" onClick={save}>Create Exam</button>
       </div>
     </div>
   );
