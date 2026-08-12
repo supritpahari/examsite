@@ -1,16 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { loadSiteInfo, DEFAULT_SITE_INFO, type SiteInfo } from "@/lib/settings";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
   const [code, setCode] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [siteInfo, setSiteInfo] = useState<SiteInfo>(DEFAULT_SITE_INFO);
+
+  useEffect(() => {
+    loadSiteInfo()
+      .then(setSiteInfo)
+      .catch(() => setSiteInfo(DEFAULT_SITE_INFO));
+  }, []);
+
+  const router = useRouter();
+
+  const sanitizeCode = (raw: string): string =>
+    raw
+      .toUpperCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^A-Z0-9-]/g, "")
+      .replace(/-{2,}/g, "-");
 
   const openDialog = () => setDialogOpen(true);
   const closeDialog = () => setDialogOpen(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const trimmed = code.trim().replace(/^-+|-+$/g, "");
+    if (!trimmed) return;
+    router.push(`/exam?id=${encodeURIComponent(trimmed)}`);
   };
 
   return (
@@ -429,7 +450,7 @@ export default function Home() {
               spellCheck={false}
               autoComplete="off"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => setCode(sanitizeCode(e.target.value))}
             />
             <button type="submit">Begin →</button>
           </form>
@@ -493,8 +514,8 @@ export default function Home() {
         <div>
           <div className="v2-foot-title">Practice like it&apos;s <em>the day</em>.</div>
           <p className="v2-foot-blurb">
-            ExamSite is a faithful rehearsal of the JEE &amp; NEET computer-based
-            test portals — built by Mr. Biman Dhawa to take the surprise out of exam day.
+            {siteInfo.siteName} is a faithful rehearsal of the JEE &amp; NEET computer-based
+            test portals — built by {siteInfo.contactName} to take the surprise out of exam day.
           </p>
         </div>
         <div className="v2-foot-col">
@@ -506,13 +527,13 @@ export default function Home() {
         </div>
         <div className="v2-foot-col">
           <h4>Contact</h4>
-          <p>Mr. Biman Dhawa · Physics</p>
-          <p>Belda, IN</p>
-          <a href="mailto:hello@examsite.in">hello@examsite.in</a>
-          <a href="#">+91 00000 00000</a>
+          <p>{siteInfo.contactName}</p>
+          <p>{siteInfo.address}</p>
+          <a href={`mailto:${siteInfo.email}`}>{siteInfo.email}</a>
+          <a href={`tel:${siteInfo.phone.replace(/\s+/g, "")}`}>{siteInfo.phone}</a>
         </div>
         <div className="v2-foot-bottom">
-          <span>ExamSite · © 2026 Mr. Biman Dhawa</span>
+          <span>{siteInfo.siteName} · © 2026 {siteInfo.contactName}</span>
           <a href="https://obliqllc.xyz" target="_blank" rel="noopener noreferrer" className="v2-watermark">Developed by Team Obliq. · obliqllc.xyz</a>
           <span>Not affiliated with NTA · For practice only</span>
         </div>
@@ -532,7 +553,7 @@ export default function Home() {
                 spellCheck={false}
                 autoComplete="off"
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={(e) => setCode(sanitizeCode(e.target.value))}
               />
               <button type="submit">Begin →</button>
             </form>

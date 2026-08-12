@@ -24,6 +24,7 @@ export interface Question {
   options: QuestionOption[];
   marks: number;
   negative: number;
+  chapter?: string;
   imageUrl?: string;
   createdAt?: unknown;
 }
@@ -39,6 +40,7 @@ function fromDoc(doc: QueryDocumentSnapshot): Question {
     options: Array.isArray(data.options) ? data.options : [],
     marks: data.marks ?? 0,
     negative: data.negative ?? 0,
+    chapter: data.chapter,
     imageUrl: data.imageUrl,
     createdAt: data.createdAt,
   };
@@ -68,6 +70,7 @@ export async function addQuestion(
     negative: q.negative,
     createdAt: serverTimestamp(),
   };
+  if (q.chapter) data.chapter = q.chapter;
   if (q.imageUrl) data.imageUrl = q.imageUrl;
   const ref = await addDoc(collection(db, COLLECTION), data);
   return { ...q, id: ref.id };

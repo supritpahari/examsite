@@ -1,0 +1,1433 @@
+"use client";
+
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import {
+  fetchExamByCode,
+  fetchExamQuestionIds,
+  type Exam,
+} from "@/lib/exams";
+import { fetchQuestions, type Question, type QuestionType } from "@/lib/questions";
+import { saveAttempt, hasAttemptBySession, hasAttemptByName } from "@/lib/attempts";
+import { getDeviceId, claimExamSession, releaseExamSession } from "@/lib/session";
+import { renderMathHtml, extractImageUrls } from "@/lib/render-math";
+
+interface RuntimeOption {
+  id: string;
+  text: string;
+}
+
+interface RuntimeQuestion {
+  id: string;
+  prompt: string;
+  type: QuestionType;
+  marks: number;
+  negative: number;
+  chapter?: string;
+  imageUrl?: string;
+  options: RuntimeOption[];
+  correctIndex: number;
+}
+
+type PaletteState = "un" | "vis" | "ans" | "mk";
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildRuntime(questions: Question[]): RuntimeQuestion[] {
+  return shuffle(questions).map((q) => {
+    const options = q.options.map((o) => ({ id: o.id, text: o.text }));
+    const shuffled = shuffle(options);
+    const correctIndex = shuffled.findIndex((o) => {
+      const original = q.options.find((opt) => opt.id === o.id);
+      return original?.correct === true;
+    });
+    return {
+      id: q.id,
+      prompt: q.prompt,
+      type: q.type,
+      marks: q.marks,
+      negative: q.negative,
+      chapter: q.chapter,
+      imageUrl: q.imageUrl,
+      options: shuffled,
+      correctIndex: correctIndex < 0 ? 0 : correctIndex,
+    };
+  });
+}
+
+function parseMinutes(duration: string): number {
+  const match = duration.match(/\d+/);
+  if (!match) return 60;
+  return Math.max(1, parseInt(match[0], 10));
+}
+
+function formatTime(totalSeconds: number): string {
+  const s = Math.max(0, totalSeconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(h)}:${pad(m)}:${pad(sec)}`;
+}
+
+const OPTION_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+
+function ExamContent() {
+  const searchParams = useSearchParams();
+  const code = searchParams.get("id") ?? "";
+
+  const [exam, setExam] = useState<Exam | null>(null);
+  const [ordered, setOrdered] = useState<Question[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const [stage, setStage] = useState<"lobby" | "test" | "result">("lobby");
+
+  const [name, setName] = useState("");
+  const [agreed, setAgreed] = useState(false);
+
+  const [sessionId] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return getDeviceId();
+  });
+
+  const runtimeRef = useRef<RuntimeQuestion[]>([]);
+  const [runtime, setRuntime] = useState<RuntimeQuestion[]>([]);
+  const totalQuestions = runtime.length;
+
+  const [current, setCurrent] = useState(0);
+  const [answers, setAnswers] = useState<(number | null)[]>([]);
+  const [visited, setVisited] = useState<boolean[]>([]);
+  const [marked, setMarked] = useState<boolean[]>([]);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [result, setResult] = useState<{
+    score: number;
+    correct: number;
+    wrong: number;
+    unattempted: number;
+    total: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const found = await fetchExamByCode(code);
+        if (!active) return;
+        if (!found) {
+          setError(
+            "We couldn't find an exam for this link. Double-check the code with your instructor."
+          );
+          setLoading(false);
+          return;
+        }
+        const questionIds = await fetchExamQuestionIds(found.id);
+        const allQuestions = await fetchQuestions();
+        const byId = new Map(allQuestions.map((q) => [q.id, q]));
+        const ord = questionIds
+          .map((id) => byId.get(id))
+          .filter((q): q is Question => Boolean(q));
+        if (!active) return;
+        if (ord.length === 0) {
+          setError(
+            "This exam has no questions yet. Ask your instructor to add some before you begin."
+          );
+          setExam(found);
+          setLoading(false);
+          return;
+        }
+        const already = await hasAttemptBySession(found.id, sessionId);
+        if (!active) return;
+        if (already) {
+          setError(
+            "You already attempted this test from this device. One attempt per candidate."
+          );
+          setExam(found);
+          setLoading(false);
+          return;
+        }
+        setOrdered(ord);
+        setExam(found);
+      } catch {
+        if (!active) return;
+        setError("Something went wrong loading the exam. Please try again.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
+  const durationMinutes = exam ? parseMinutes(exam.duration) : 60;
+
+  const join = async () => {
+    if (!exam || !name.trim() || !agreed || ordered.length === 0) return;
+    if (!sessionId) return;
+    try {
+      const already = await hasAttemptBySession(exam.id, sessionId);
+      if (already) {
+        setError(
+          "You already attempted this test from this device. One attempt per candidate."
+        );
+        return;
+      }
+      const sameName = await hasAttemptByName(exam.id, name.trim());
+      if (sameName) {
+        setError(
+          "An attempt already exists for the name you entered. One attempt per candidate."
+        );
+        return;
+      }
+    } catch {
+      /* offline guards fail open */
+    }
+    const claim = await claimExamSession(
+      exam.id,
+      sessionId,
+      name.trim(),
+      durationMinutes
+    );
+    if (!claim.ok) {
+      setError(
+        claim.reason === "occupied"
+          ? "This test is already in progress by someone else. Wait for the current session to finish."
+          : "Could not lock this test session. Please try again."
+      );
+      return;
+    }
+    const rt = buildRuntime(ordered);
+    runtimeRef.current = rt;
+    setRuntime(rt);
+    setAnswers(new Array(rt.length).fill(null));
+    setVisited(new Array(rt.length).fill(false));
+    setMarked(new Array(rt.length).fill(false));
+    setSecondsLeft(durationMinutes * 60);
+    setCurrent(0);
+    setStage("test");
+  };
+
+  const submit = () => {
+    const rt = runtimeRef.current;
+    let score = 0;
+    let correct = 0;
+    let wrong = 0;
+    let unattempted = 0;
+    let total = 0;
+    const answerRecords = rt.map((q, i) => {
+      const a = answers[i];
+      const isCorrect = a === q.correctIndex;
+      const marks = a == null ? 0 : isCorrect ? q.marks : -q.negative;
+      total += q.marks;
+      if (a == null) {
+        unattempted++;
+      } else if (isCorrect) {
+        score += q.marks;
+        correct++;
+      } else {
+        score -= q.negative;
+        wrong++;
+      }
+      return {
+        questionId: q.id,
+        chosen: a == null ? null : a,
+        chosenOptionId: a == null ? null : q.options[a].id,
+        correctOptionId: q.options[q.correctIndex].id,
+        correct: isCorrect,
+        marks,
+      };
+    });
+    score = Math.max(0, score);
+    setResult({ score, correct, wrong, unattempted, total });
+    if (exam) {
+      saveAttempt({
+        examId: exam.id,
+        examCode: exam.code,
+        studentName: name.trim() || "Anonymous",
+        sessionId,
+        score,
+        total,
+        correct,
+        wrong,
+        unattempted,
+        answers: answerRecords,
+        submittedAt: Date.now(),
+      }).catch(() => {
+        /* best-effort persistence; result still shown */
+      });
+      if (sessionId) {
+        releaseExamSession(exam.id, sessionId);
+      }
+    }
+    setStage("result");
+    setConfirmOpen(false);
+  };
+
+  // Disable right-click / context menu while the test is active
+  useEffect(() => {
+    if (stage !== "test") return;
+    const block = (e: MouseEvent) => {
+      e.preventDefault();
+      return false;
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key === "ContextMenu" ||
+        (e.key === "F12") ||
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "u")
+      ) {
+        e.preventDefault();
+      }
+    };
+    const onBlur = () => {
+      submit();
+    };
+    window.addEventListener("contextmenu", block);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("contextmenu", block);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("blur", onBlur);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage]);
+
+  // Timer
+  useEffect(() => {
+    if (stage !== "test") return;
+    if (secondsLeft <= 0) {
+      const t = setTimeout(() => submit(), 0);
+      return () => clearTimeout(t);
+    }
+    const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secondsLeft, stage]);
+
+  const visit = (idx: number) => {
+    setVisited((v) => {
+      const next = [...v];
+      next[idx] = true;
+      return next;
+    });
+    setCurrent(idx);
+  };
+
+  const selectOption = (optIdx: number) => {
+    setAnswers((a) => {
+      const next = [...a];
+      next[current] = optIdx;
+      return next;
+    });
+    setVisited((v) => {
+      const next = [...v];
+      next[current] = true;
+      return next;
+    });
+  };
+
+  const toggleMark = () => {
+    setMarked((m) => {
+      const next = [...m];
+      next[current] = !next[current];
+      return next;
+    });
+  };
+
+  const paletteState = (idx: number): PaletteState => {
+    if (marked[idx]) return "mk";
+    if (answers[idx] != null) return "ans";
+    if (visited[idx]) return "vis";
+    return "un";
+  };
+
+  const answeredCount = useMemo(
+    () => answers.filter((a) => a != null).length,
+    [answers]
+  );
+  const markedCount = useMemo(() => marked.filter(Boolean).length, [marked]);
+
+  return (
+    <div
+      className="v2-root"
+      style={
+        {
+          "--paper": "#f4f0e8",
+          "--paper-2": "#ebe6da",
+          "--ink": "#14110d",
+          "--ink-2": "#3a352c",
+          "--dim": "#8a8275",
+          "--rule": "#d9d1bf",
+          "--accent": "oklch(0.52 0.20 25)",
+          "--accent-2": "oklch(0.42 0.22 25)",
+        } as React.CSSProperties
+      }
+    >
+      <style>{CSS}</style>
+
+      {loading && (
+        <div className="v2-center">
+          <div className="v2-loading">Loading your exam…</div>
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="v2-center">
+          <div className="v2-lobby-card">
+            <div className="v2-cta-num">§ 00 · Not Found</div>
+            <h1 className="v2-lobby-title">
+              Exam <em>unavailable</em>
+            </h1>
+            <p className="v2-lobby-desc">{error}</p>
+            <Link href="/" className="v2-join">
+              Return home →
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && exam && stage === "lobby" && (
+        <Lobby
+          exam={exam}
+          questionCount={ordered.length}
+          name={name}
+          setName={setName}
+          agreed={agreed}
+          setAgreed={setAgreed}
+          onJoin={join}
+        />
+      )}
+
+      {!loading && !error && exam && stage === "test" && runtime.length > 0 && (
+        (() => {
+          const currentQuestion = runtime[current];
+          const imageUrls = [
+            ...(currentQuestion.imageUrl ? [currentQuestion.imageUrl] : []),
+            ...extractImageUrls(currentQuestion.prompt),
+          ].filter((u, i, arr) => arr.indexOf(u) === i);
+          return (
+        <div className="v2-preview-wrap v2-test-wrap">
+          <div className="v2-preview">
+            <div className="v2-preview-bar">
+              <span>NTA CBT · {exam.title}</span>
+              <span>Candidate: {name.trim() || "—"}</span>
+              <span style={{ color: "#d9a300" }}>● Recording</span>
+            </div>
+
+            <div className="v2-preview-body">
+              <div className="v2-q2">
+                <div className="v2-q2-meta">
+                  <span>Section A · {exam.subject}</span>
+                  <span>
+                    <strong>Q. {current + 1}</strong> of {totalQuestions}
+                  </span>
+                </div>
+
+                <p
+                  className="v2-q2-text"
+                  dangerouslySetInnerHTML={{
+                    __html: renderMathHtml(currentQuestion.prompt),
+                  }}
+                />
+
+                {(imageUrls.length > 0) && (
+                  <div className="v2-q-imgs">
+                    {imageUrls.map((src, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={`${src}-${i}`}
+                        src={src}
+                        alt="Question diagram"
+                        className="v2-q-img"
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <div className="v2-opts2">
+                  {currentQuestion.options.map((opt, i) => {
+                    const selected = answers[current] === i;
+                    return (
+                      <div
+                        key={opt.id}
+                        className={`v2-opt2${selected ? " sel" : ""}`}
+                        onClick={() => selectOption(i)}
+                      >
+                        <div className="v2-opt2-k">{OPTION_KEYS[i]}</div>
+                        <div
+                          className="v2-opt2-t"
+                          dangerouslySetInnerHTML={{ __html: renderMathHtml(opt.text) }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="v2-nav">
+                  <button
+                    className="v2-nav-btn"
+                    disabled={current === 0}
+                    onClick={() => visit(current - 1)}
+                  >
+                    ← Previous
+                  </button>
+                  <button
+                    className={`v2-nav-btn v2-mark${marked[current] ? " on" : ""}`}
+                    onClick={toggleMark}
+                  >
+                    {marked[current] ? "★ Marked" : "☆ Mark for review"}
+                  </button>
+                  <button
+                    className="v2-nav-btn"
+                    disabled={current === totalQuestions - 1}
+                    onClick={() => visit(current + 1)}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+
+              <aside className="v2-side2">
+                <div className="v2-tlabel">Time remaining</div>
+                <div
+                  className="v2-tval"
+                  style={{
+                    color: secondsLeft <= 300 ? "#d9a300" : "var(--accent)",
+                  }}
+                >
+                  {formatTime(secondsLeft)}
+                </div>
+
+                <div className="v2-tlabel">Progress</div>
+                <div className="v2-prog">
+                  <span>
+                    <strong>{answeredCount}</strong> answered
+                  </span>
+                  <span>
+                    <strong>{markedCount}</strong> marked
+                  </span>
+                </div>
+
+                <div className="v2-tlabel" style={{ marginTop: 18 }}>
+                  Palette · Section A
+                </div>
+                <div className="v2-pal">
+                  {runtime.map((_, i) => {
+                    const st = paletteState(i);
+                    const isCurrent = i === current;
+                    return (
+                      <button
+                        key={i}
+                        className={`v2-pdot2 ${st}${isCurrent ? " cur" : ""}`}
+                        onClick={() => visit(i)}
+                      >
+                        {i + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="v2-tlabel" style={{ margin: "14px 0 6px" }}>
+                  Legend
+                </div>
+                <div className="v2-legend">
+                  <span>
+                    <i className="v2-lg ans" />
+                    Answered
+                  </span>
+                  <span>
+                    <i className="v2-lg mk" />
+                    Marked
+                  </span>
+                  <span>
+                    <i className="v2-lg vis" />
+                    Visited
+                  </span>
+                  <span>
+                    <i className="v2-lg un" />
+                    Not visited
+                  </span>
+                </div>
+
+                <button className="v2-submit-btn" onClick={() => setConfirmOpen(true)}>
+                  Submit Test
+                </button>
+              </aside>
+            </div>
+          </div>
+        </div>
+          );
+        })()
+      )}
+
+      {!loading && !error && exam && stage === "result" && result && (
+        <ResultScreen
+          exam={exam}
+          name={name}
+          result={result}
+          runtime={runtime}
+          answers={answers}
+        />
+      )}
+
+      {confirmOpen && (
+        <div className="v2-overlay" onClick={() => setConfirmOpen(false)}>
+          <div className="v2-dialog" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="v2-dialog-close"
+              onClick={() => setConfirmOpen(false)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h3 className="v2-cta-title">
+              Submit your <em>test</em>?
+            </h3>
+            <p className="v2-cta-desc">
+              Answered {answeredCount} of {totalQuestions}. You can&apos;t return
+              after submitting.
+            </p>
+            <div className="v2-modal-foot">
+              <button
+                className="v2-set-btn ghost"
+                onClick={() => setConfirmOpen(false)}
+              >
+                Keep going
+              </button>
+              <button className="v2-submit" onClick={submit}>
+                Submit now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Lobby({
+  exam,
+  questionCount,
+  name,
+  setName,
+  agreed,
+  setAgreed,
+  onJoin,
+}: {
+  exam: Exam;
+  questionCount: number;
+  name: string;
+  setName: (v: string) => void;
+  agreed: boolean;
+  setAgreed: (v: boolean) => void;
+  onJoin: () => void;
+}) {
+  const canJoin = name.trim().length > 0 && agreed;
+  return (
+    <div className="v2-center">
+      <div className="v2-lobby-card">
+        <div className="v2-cta-num">§ 00 · Before you begin</div>
+        <h1 className="v2-lobby-title">{exam.title}</h1>
+        <p className="v2-lobby-desc">
+          Read the instructions carefully. Once you join, the clock starts and
+          the questions will appear in a randomized order.
+        </p>
+
+        <ul className="v2-instr">
+          <li>
+            You have <strong>{exam.duration}</strong> to complete this test.
+          </li>
+          <li>
+            The test contains <strong>{questionCount}</strong> questions from{" "}
+            <strong>{exam.subject}</strong>.
+          </li>
+          <li>
+            Each correct answer carries its stated marks; wrong answers may
+            deduct negative marks.
+          </li>
+          <li>Questions and answer choices are shuffled for every candidate.</li>
+          <li>Do not refresh or close the tab — your progress will be lost.</li>
+          <li>
+            You may navigate freely, jump between questions, and mark any for
+            review.
+          </li>
+        </ul>
+
+        <label className="v2-check">
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+          />
+          <span>I have read and agree to the instructions above.</span>
+        </label>
+
+        <div className="v2-field">
+          <label className="v2-flabel">Candidate name</label>
+          <input
+            type="text"
+            className="v2-name"
+            placeholder="e.g. Riya Sharma"
+            value={name}
+            autoComplete="off"
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+
+        <button className="v2-join" disabled={!canJoin} onClick={onJoin}>
+          Join Test →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ResultScreen({
+  exam,
+  name,
+  result,
+  runtime,
+  answers,
+}: {
+  exam: Exam;
+  name: string;
+  result: {
+    score: number;
+    correct: number;
+    wrong: number;
+    unattempted: number;
+    total: number;
+  };
+  runtime: RuntimeQuestion[];
+  answers: (number | null)[];
+}) {
+  const [showReview, setShowReview] = useState(false);
+  const pct = result.total > 0 ? Math.round((result.score / result.total) * 100) : 0;
+
+  return (
+    <div className="v2-center">
+      <div className="v2-lobby-card v2-result-card">
+        <div className="v2-cta-num">§ 03 · Result</div>
+        <h1 className="v2-lobby-title">
+          Test <em>submitted</em>
+        </h1>
+        <p className="v2-lobby-desc">
+          Well done, {name.trim() || "candidate"}. Here&apos;s how you did on{" "}
+          {exam.title}.
+        </p>
+
+        <div className="v2-score">
+          <div className="v2-score-num">{result.score}</div>
+          <div className="v2-score-of">
+            / {result.total} · {pct}%
+          </div>
+        </div>
+
+        <div className="v2-res-grid">
+          <div className="v2-res-cell ok">
+            <strong>{result.correct}</strong>
+            <span>Correct</span>
+          </div>
+          <div className="v2-res-cell bad">
+            <strong>{result.wrong}</strong>
+            <span>Wrong</span>
+          </div>
+          <div className="v2-res-cell skip">
+            <strong>{result.unattempted}</strong>
+            <span>Unattempted</span>
+          </div>
+        </div>
+
+        <button
+          className="v2-insight-btn"
+          onClick={() => setShowReview((v) => !v)}
+        >
+          {showReview ? "Hide detailed insights" : "View detailed insights →"}
+        </button>
+
+        {showReview && (
+          <div className="v2-review">
+            {runtime.map((q, i) => {
+              const chosen = answers[i];
+              const isCorrect = chosen === q.correctIndex;
+              const isUnattempted = chosen == null;
+              const status = isUnattempted ? "unattempted" : isCorrect ? "correct" : "wrong";
+              const marks = isUnattempted ? 0 : isCorrect ? q.marks : -q.negative;
+              return (
+                <div key={q.id} className={`v2-rev-item ${status}`}>
+                  <div className="v2-rev-head">
+                    <span className="v2-rev-num">Q. {i + 1}</span>
+                    <span className={`v2-rev-tag ${status}`}>
+                      {isUnattempted ? "Unattempted" : isCorrect ? "Correct" : "Wrong"}
+                    </span>
+                    <span className="v2-rev-marks">
+                      {marks > 0 ? `+${marks}` : marks < 0 ? `${marks}` : "0"}
+                    </span>
+                  </div>
+                  <p
+                    className="v2-rev-q"
+                    dangerouslySetInnerHTML={{ __html: renderMathHtml(q.prompt) }}
+                  />
+                  {[q.imageUrl, ...extractImageUrls(q.prompt)]
+                    .filter((u, i, arr) => Boolean(u) && arr.indexOf(u) === i)
+                    .map((src, imgIdx) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={`${src}-${imgIdx}`}
+                        src={src}
+                        alt="Question diagram"
+                        className="v2-rev-img"
+                      />
+                    ))}
+                  <div className="v2-rev-opts">
+                    {q.options.map((opt, oi) => {
+                      const isAnswer = oi === q.correctIndex;
+                      const isChosen = chosen === oi;
+                      let cls = "";
+                      if (isAnswer) cls = "answer";
+                      else if (isChosen && !isCorrect) cls = "chosen";
+                      return (
+                        <div key={opt.id} className={`v2-rev-opt ${cls}`}>
+                          <span className="v2-rev-k">{OPTION_KEYS[oi]}</span>
+                          <span
+                            className="v2-rev-t"
+                            dangerouslySetInnerHTML={{ __html: renderMathHtml(opt.text) }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <Link href="/" className="v2-join v2-done">
+          Done →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+const CSS = `
+  .v2-root {
+    min-height: 100vh;
+    background: #0f0d0a;
+    color: #eee6d5;
+    font-family: 'Inter', sans-serif;
+    position: relative;
+  }
+  .v2-root .serif { font-family: 'Instrument Serif', 'Times New Roman', serif; font-weight: 400; }
+  .v2-root .mono { font-family: 'JetBrains Mono', monospace; }
+
+  .v2-center {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 40px 24px;
+    position: relative;
+  }
+
+  .v2-loading {
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+
+  .v2-lobby-card {
+    width: 100%;
+    max-width: 560px;
+    background: #14110d;
+    border: 1px solid #2a251d;
+    position: relative;
+    padding: 44px 36px 32px;
+    text-align: left;
+    box-shadow: 12px 12px 0 #000;
+  }
+  .v2-lobby-card::before, .v2-lobby-card::after {
+    content: "";
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+  }
+  .v2-lobby-card::before { top: -1px; left: -1px; }
+  .v2-lobby-card::after { bottom: -1px; right: -1px; }
+
+  .v2-lobby-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: 38px;
+    line-height: 1.05;
+    margin: 0 0 10px;
+    color: #f4ecd8;
+  }
+  .v2-lobby-title em { font-style: italic; color: var(--accent); }
+
+  .v2-lobby-desc {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #b8ad96;
+    margin: 0 0 22px;
+  }
+
+  .v2-instr {
+    list-style: none;
+    margin: 0 0 22px;
+    padding: 18px 18px 18px 40px;
+    border: 1px solid #2a251d;
+    background: #0b0908;
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: #b8ad96;
+  }
+  .v2-instr li { position: relative; margin-bottom: 8px; }
+  .v2-instr li:last-child { margin-bottom: 0; }
+  .v2-instr li::before {
+    content: "§";
+    position: absolute;
+    left: -22px;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .v2-instr strong { color: #f4ecd8; }
+
+  .v2-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 13.5px;
+    color: #b8ad96;
+    margin-bottom: 20px;
+    cursor: pointer;
+  }
+  .v2-check input {
+    margin-top: 2px;
+    width: 18px;
+    height: 18px;
+    accent-color: oklch(0.52 0.20 25);
+    flex-shrink: 0;
+  }
+
+  .v2-field { margin-bottom: 22px; }
+  .v2-flabel {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: #d9a300;
+    margin-bottom: 8px;
+  }
+  .v2-name {
+    width: 100%;
+    background: #0b0908;
+    border: 1px solid #2a251d;
+    border-radius: 0;
+    padding: 14px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    color: #f4ecd8;
+    outline: none;
+  }
+  .v2-name::placeholder { color: #6f685c; }
+  .v2-name:focus { background: #14110d; border-color: var(--accent); }
+
+  .v2-join {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: 1px solid var(--accent);
+    padding: 14px 26px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    text-transform: uppercase;
+    text-decoration: none;
+  }
+  .v2-join:hover { background: var(--accent-2); border-color: var(--accent-2); }
+  .v2-join:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ---------- TEST WINDOW ---------- */
+  .v2-test-wrap { padding: 24px; }
+
+  .v2-preview {
+    border: 1px solid var(--ink);
+    background: #0f0d0a;
+    color: #eee6d5;
+    position: relative;
+    box-shadow: 12px 12px 0 var(--ink);
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 48px);
+  }
+  .v2-preview-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    background: #14110d;
+    border-bottom: 1px solid #2a251d;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #b8ad96;
+    letter-spacing: 0.06em;
+    flex-wrap: wrap;
+  }
+  .v2-preview-body { display: grid; grid-template-columns: 1fr 240px; flex: 1; min-height: 0; }
+
+  .v2-q2 { padding: 32px 32px 28px; border-right: 1px solid #2a251d; min-height: 480px; }
+  .v2-q2-meta {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #b8ad96;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 18px;
+  }
+  .v2-q2-meta strong { color: var(--accent); }
+
+  .v2-q2-text {
+    font-family: 'Instrument Serif', serif;
+    font-size: 20px;
+    line-height: 1.45;
+    color: #f4ecd8;
+    margin: 0 0 24px;
+  }
+  .v2-q-img { max-width: 100%; border: 1px solid #2a251d; margin-bottom: 20px; display: block; }
+  .v2-q-imgs { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+  .v2-q-imgs .v2-q-img { margin-bottom: 0; }
+
+  .v2-opts2 { display: flex; flex-direction: column; gap: 8px; }
+  .v2-opt2 {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 1px solid #2a251d;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background 0.12s ease;
+  }
+  .v2-opt2:hover { border-color: #4a4135; }
+  .v2-opt2.sel { border-color: var(--accent); background: rgba(200,50,30,0.08); }
+  .v2-opt2-k {
+    width: 26px;
+    height: 26px;
+    border: 1px solid #2a251d;
+    display: grid;
+    place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #b8ad96;
+    flex-shrink: 0;
+  }
+  .v2-opt2.sel .v2-opt2-k { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .v2-opt2-t { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+
+  .v2-nav {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr 1fr;
+    gap: 8px;
+    margin-top: 28px;
+  }
+  .v2-nav-btn {
+    background: transparent;
+    border: 1px solid #2a251d;
+    color: #eee6d5;
+    padding: 12px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 0.12s ease, color 0.12s ease;
+  }
+  .v2-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  .v2-nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .v2-mark.on { border-color: #d9a300; color: #d9a300; }
+
+  .v2-side2 { padding: 22px 20px; background: #0b0908; }
+  .v2-tlabel {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #8a8275;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .v2-tval {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 32px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+    margin-bottom: 22px;
+  }
+  .v2-prog {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #b8ad96;
+    margin-bottom: 18px;
+  }
+  .v2-prog strong { color: #f4ecd8; }
+
+  .v2-pal { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-bottom: 8px; }
+  .v2-pdot2 {
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    cursor: pointer;
+    border: 0;
+    color: inherit;
+    padding: 0;
+  }
+  .v2-pdot2.ans { background: var(--accent); color: #fff; }
+  .v2-pdot2.mk  { background: #d9a300; color: #14110d; }
+  .v2-pdot2.vis { background: #4a2a14; color: #f4ecd8; }
+  .v2-pdot2.un  { background: transparent; color: #8a8275; border: 1px solid #2a251d; }
+  .v2-pdot2.cur { outline: 2px solid #f4ecd8; outline-offset: 1px; }
+
+  .v2-legend {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    color: #8a8275;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .v2-legend span { display: flex; align-items: center; }
+  .v2-lg { width: 8px; height: 8px; display: inline-block; margin-right: 6px; }
+  .v2-lg.ans { background: oklch(0.52 0.20 25); }
+  .v2-lg.mk { background: #d9a300; }
+  .v2-lg.vis { background: #4a2a14; }
+  .v2-lg.un { border: 1px solid #2a251d; }
+
+  .v2-submit-btn {
+    width: 100%;
+    margin-top: 20px;
+    background: var(--accent);
+    color: #fff;
+    border: 1px solid var(--accent);
+    padding: 13px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .v2-submit-btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
+
+  /* ---------- DIALOG ---------- */
+  .v2-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 17, 13, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 1000;
+  }
+  .v2-dialog {
+    width: 100%;
+    max-width: 460px;
+    background: linear-gradient(180deg, #fbf7ee, var(--paper));
+    border: 1px solid var(--ink);
+    color: var(--ink);
+    position: relative;
+    padding: 38px 32px 28px;
+    text-align: left;
+    box-shadow: 12px 12px 0 var(--ink);
+  }
+  .v2-dialog::before, .v2-dialog::after {
+    content: "";
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: var(--ink);
+  }
+  .v2-dialog::before { top: -1px; left: -1px; }
+  .v2-dialog::after { bottom: -1px; right: -1px; }
+  .v2-dialog-close {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    background: transparent;
+    border: 1px solid var(--ink);
+    width: 30px;
+    height: 30px;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--ink);
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .v2-dialog-close:hover { background: var(--ink); color: var(--paper); }
+  .v2-cta-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: 27px;
+    line-height: 1.15;
+    margin: 0 0 12px;
+    color: var(--ink);
+  }
+  .v2-cta-title em { font-style: italic; color: var(--accent); }
+  .v2-cta-desc {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    margin: 0;
+  }
+  .v2-modal-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+  }
+  .v2-set-btn {
+    background: transparent;
+    border: 1px solid var(--ink);
+    color: var(--ink);
+    padding: 12px 20px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .v2-set-btn.ghost:hover { background: var(--ink); color: var(--paper); }
+  .v2-submit {
+    background: var(--accent);
+    color: #fff;
+    border: 1px solid var(--accent);
+    padding: 12px 22px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .v2-submit:hover { background: var(--accent-2); border-color: var(--accent-2); }
+
+  /* ---------- RESULT ---------- */
+  .v2-score {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 22px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .v2-score-num {
+    font-family: 'Instrument Serif', serif;
+    font-size: 72px;
+    line-height: 1;
+    color: var(--accent);
+  }
+  .v2-score-of {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--dim);
+    letter-spacing: 0.06em;
+  }
+  .v2-res-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 26px;
+  }
+  .v2-res-cell {
+    border: 1px solid var(--rule);
+    background: var(--paper-2);
+    padding: 14px 10px;
+    text-align: center;
+  }
+  .v2-res-cell strong {
+    display: block;
+    font-family: 'Instrument Serif', serif;
+    font-size: 32px;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .v2-res-cell span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--dim);
+  }
+  .v2-res-cell.ok strong { color: oklch(0.45 0.13 150); }
+  .v2-res-cell.bad strong { color: var(--accent); }
+  .v2-res-cell.skip strong { color: #9a8f78; }
+
+  .v2-insight-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px solid var(--ink);
+    color: var(--ink);
+    padding: 11px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    margin-bottom: 22px;
+  }
+  .v2-insight-btn:hover { background: var(--ink); color: var(--paper); }
+
+  .v2-review {
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .v2-rev-item {
+    border: 1px solid var(--rule);
+    background: var(--paper-2);
+    padding: 16px 16px 14px;
+  }
+  .v2-rev-item.correct { border-left: 3px solid oklch(0.45 0.13 150); }
+  .v2-rev-item.wrong { border-left: 3px solid var(--accent); }
+  .v2-rev-item.unattempted { border-left: 3px solid #b8ad96; }
+
+  .v2-rev-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .v2-rev-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .v2-rev-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 3px 7px;
+    color: #fff;
+  }
+  .v2-rev-tag.correct { background: oklch(0.45 0.13 150); }
+  .v2-rev-tag.wrong { background: var(--accent); }
+  .v2-rev-tag.unattempted { background: #b8ad96; color: #14110d; }
+  .v2-rev-marks {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .v2-rev-q {
+    font-family: 'Instrument Serif', serif;
+    font-size: 17px;
+    line-height: 1.4;
+    color: var(--ink);
+    margin: 0 0 12px;
+  }
+  .v2-rev-img { max-width: 100%; border: 1px solid var(--rule); margin: 0 0 12px; display: block; }
+  .v2-rev-opts { display: flex; flex-direction: column; gap: 6px; }
+  .v2-rev-opt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+  }
+  .v2-rev-opt.answer {
+    border-color: oklch(0.45 0.13 150);
+    background: oklch(0.96 0.04 150);
+  }
+  .v2-rev-opt.chosen {
+    border-color: var(--accent);
+    background: rgba(200,50,30,0.07);
+  }
+  .v2-rev-k {
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--rule);
+    display: grid;
+    place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-2);
+    flex-shrink: 0;
+  }
+  .v2-rev-opt.answer .v2-rev-k { background: oklch(0.45 0.13 150); border-color: oklch(0.45 0.13 150); color: #fff; }
+  .v2-rev-opt.chosen .v2-rev-k { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .v2-rev-t { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink-2); }
+
+  .v2-done { margin-top: 4px; }
+
+  /* ---------- MATH PREVIEW ---------- */
+  .frac {
+    display: inline-flex;
+    flex-direction: column;
+    text-align: center;
+    vertical-align: middle;
+    margin: 0 3px;
+    line-height: 1.1;
+  }
+  .frac > .num { border-bottom: 1px solid currentColor; padding: 0 5px 1px; }
+  .frac > .den { padding: 1px 5px 0; }
+  .sqrt { display: inline-flex; align-items: stretch; margin: 0 1px; vertical-align: middle; }
+  .sqrt > .sym { font-size: 1.1em; line-height: 1; transform: scaleX(0.82); transform-origin: bottom; }
+  .sqrt > .body { border-top: 1px solid currentColor; padding: 2px 3px 0; }
+  .oline { border-top: 1px solid currentColor; padding-top: 1px; }
+  .fn { font-style: italic; }
+  sup, sub { font-size: 0.72em; line-height: 0; }
+
+  @media (max-width: 960px) {
+    .v2-preview-body { grid-template-columns: 1fr; }
+    .v2-q2 { border-right: 0; border-bottom: 1px solid #2a251d; }
+  }
+`;
+
+export default function ExamPage() {
+  return (
+    <Suspense
+      fallback={<div style={{ minHeight: "100vh", background: "#f4f0e8" }} />}
+    >
+      <ExamContent />
+    </Suspense>
+  );
+}

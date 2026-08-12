@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, Fragment } from "react";
+import { useEffect, useMemo, useRef, useState, Fragment } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthState } from "@/lib/firebase/client";
@@ -16,8 +16,26 @@ import {
 import {
   fetchExams,
   addExam as saveExam,
+  deleteExam,
+  deleteExamQuestions,
+  deleteExamQuestionsByQuestion,
+  updateExam,
+  setExamQuestions,
+  fetchAllExamQuestionLinks,
   type Exam as AdminExam,
 } from "@/lib/exams";
+import {
+  fetchAllAttemptSummaries,
+  deleteAttemptsByExam,
+  type Attempt,
+  type ExamAttemptSummary,
+} from "@/lib/attempts";
+import {
+  loadSiteInfo,
+  saveSiteInfo,
+  DEFAULT_SITE_INFO,
+  type SiteInfo,
+} from "@/lib/settings";
 
 const NAV = [
   { key: "questions", label: "Questions" },
@@ -25,6 +43,15 @@ const NAV = [
   { key: "information", label: "Information" },
   { key: "settings", label: "Settings" },
 ];
+
+async function copyText(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function NavIcon({ name }: { name: string }) {
   const common = {
@@ -86,6 +113,7 @@ const TOOLBAR: ToolItem[] = [
   { label: "√", title: "Square root", snippet: "\\sqrt{}", wrap: true },
   { label: "a/b", title: "Fraction", snippet: "\\frac{}{}", wrap: true },
   { label: "v⃗", title: "Vector", snippet: "\\vec{}", wrap: true },
+  { label: "î", title: "Unit vector (cap)", snippet: "\\hat{}", wrap: true },
   { label: "∫", title: "Integral", snippet: "\\int_{}^{} " },
   { label: "∑", title: "Summation", snippet: "\\sum_{}^{} " },
   { label: "lim", title: "Limit", snippet: "\\lim_{x \\to } " },
@@ -105,7 +133,14 @@ export default function AdminDashboard() {
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [examModalOpen, setExamModalOpen] = useState(false);
+  const [editingExam, setEditingExam] = useState<AdminExam | null>(null);
   const [exams, setExams] = useState<AdminExam[]>([]);
+  const [examQuestionMap, setExamQuestionMap] = useState<Record<string, string[]>>({});
+  const [attemptsMap, setAttemptsMap] = useState<Record<string, ExamAttemptSummary>>({});
+  const [siteInfo, setSiteInfo] = useState<SiteInfo>(DEFAULT_SITE_INFO);
+  const [addQuestionsExam, setAddQuestionsExam] = useState<AdminExam | null>(null);
+  const [addQuestionsInitial, setAddQuestionsInitial] = useState<string[]>([]);
+  const [examCodeExam, setExamCodeExam] = useState<AdminExam | null>(null);
   const [loadingExams, setLoadingExams] = useState(true);
   const [checking, setChecking] = useState(true);
   const [authed, setAuthed] = useState(false);
@@ -128,9 +163,25 @@ export default function AdminDashboard() {
           .catch(() => setQuestions([]))
           .finally(() => setLoadingQuestions(false));
         fetchExams()
-          .then((list) => setExams(list.length ? list : SAMPLE_EXAMS))
-          .catch(() => setExams(SAMPLE_EXAMS))
+          .then(setExams)
+          .catch(() => setExams([]))
           .finally(() => setLoadingExams(false));
+        fetchAllExamQuestionLinks()
+          .then((links) => {
+            const map: Record<string, string[]> = {};
+            for (const l of links) {
+              if (!l.examId) continue;
+              (map[l.examId] ||= []).push(l.questionId);
+            }
+            setExamQuestionMap(map);
+          })
+          .catch(() => setExamQuestionMap({}));
+        fetchAllAttemptSummaries()
+          .then(setAttemptsMap)
+          .catch(() => setAttemptsMap({}));
+        loadSiteInfo()
+          .then(setSiteInfo)
+          .catch(() => setSiteInfo(DEFAULT_SITE_INFO));
       } else {
         router.replace("/admin/login");
       }
@@ -145,14 +196,68 @@ export default function AdminDashboard() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this question? This cannot be undone.")) return;
+    if (!window.confirm("Delete this question? It will be removed from every exam that uses it. This cannot be undone.")) return;
     setQuestions((prev) => prev.filter((q) => q.id !== id));
+    setExamQuestionMap((prev) => {
+      const next: Record<string, string[]> = {};
+      for (const [examId, ids] of Object.entries(prev)) {
+        next[examId] = ids.filter((qid) => qid !== id);
+      }
+      return next;
+    });
     try {
+      await deleteExamQuestionsByQuestion(id);
       await deleteQuestion(id);
     } catch {
       // reload to restore state if delete failed
       fetchQuestions().then(setQuestions).catch(() => {});
     }
+  };
+
+  const handleDeleteExam = async (id: string) => {
+    if (!window.confirm("Delete this exam? All attempts recorded against it will also be deleted. This cannot be undone.")) return;
+    setExams((prev) => prev.filter((e) => e.id !== id));
+    setExamQuestionMap((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setAttemptsMap((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    try {
+      await deleteExamQuestions(id);
+      await deleteAttemptsByExam(id);
+      await deleteExam(id);
+    } catch {
+      fetchExams().then(setExams).catch(() => {});
+    }
+  };
+
+  const openNewExam = () => {
+    setEditingExam(null);
+    setExamModalOpen(true);
+  };
+
+  const openEditExam = (exam: AdminExam) => {
+    setEditingExam(exam);
+    setExamModalOpen(true);
+  };
+
+  const openManageQuestions = (exam: AdminExam) => {
+    setAddQuestionsExam(exam);
+    setAddQuestionsInitial(examQuestionMap[exam.id] ?? []);
+  };
+
+  const copyExamLink = async (exam: AdminExam) => {
+    const link = `${window.location.origin}/exam?id=${encodeURIComponent(exam.code)}`;
+    await copyText(link);
+  };
+
+  const copyExamCode = async (exam: AdminExam) => {
+    await copyText(exam.code);
   };
 
   const handleSignOut = async () => {
@@ -376,7 +481,7 @@ export default function AdminDashboard() {
           justify-content: space-between;
           margin-bottom: 28px;
         }
-        .ad-title { font-family: 'Instrument Serif', serif; font-size: 40px; line-height: 1; letter-spacing: -0.02em; }
+        .ad-title { font-family: 'Instrument Serif', serif; font-size: 40px; line-height: 1; letter-spacing: -0.02em; color: var(--ink); }
         .ad-title em { font-style: italic; color: var(--accent); }
         .ad-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim); }
         .ad-empty { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--dim); padding: 28px 0; border: 1px dashed var(--rule); text-align: center; letter-spacing: 0.04em; }
@@ -517,7 +622,7 @@ export default function AdminDashboard() {
           cursor: pointer; color: var(--ink); line-height: 1;
         }
         .ad-close:hover { background: var(--ink); color: var(--paper); }
-        .ad-form-title { font-family: 'Instrument Serif', serif; font-size: 26px; margin: 0 0 18px; }
+        .ad-form-title { font-family: 'Instrument Serif', serif; font-size: 26px; margin: 0 0 18px; color: var(--ink); }
         .ad-form-title em { font-style: italic; color: var(--accent); }
 
         .ad-row { display: flex; gap: 14px; margin-bottom: 16px; }
@@ -617,6 +722,9 @@ export default function AdminDashboard() {
         .ad-frac-den { padding: 0 5px; }
         .ad-vec { position: relative; }
         .ad-vec-arrow { display: inline-block; margin-left: 1px; }
+        .ad-hat { position: relative; display: inline-block; }
+        .ad-hat-cap { position: absolute; top: -0.12em; left: 50%; transform: translateX(-50%); font-size: 0.82em; line-height: 1; }
+        .ad-hat-body { padding: 0 1px; }
         .ad-sqrt { border-top: 1px solid var(--ink); padding: 0 2px; }
         .ad-sqrt-body { border-top: 1px solid var(--ink); padding: 0 2px; }
         .ad-preview-inline {
@@ -659,6 +767,84 @@ export default function AdminDashboard() {
         .ad-submit:hover { background: var(--accent-2); border-color: var(--accent-2); }
         .ad-img-preview { max-height: 90px; margin-top: 10px; border: 1px solid var(--rule); }
 
+        .ad-modal-sub {
+          font-size: 13px; line-height: 1.5; color: var(--ink-2);
+          margin: -8px 0 22px; max-width: 46ch;
+        }
+
+        .ad-seg {
+          display: flex; border: 1px solid var(--ink); border-radius: 0; overflow: hidden;
+        }
+        .ad-seg-btn {
+          flex: 1; background: transparent; border: 0; border-right: 1px solid var(--rule);
+          padding: 11px 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+          text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .ad-seg-btn:last-child { border-right: 0; }
+        .ad-seg-btn:hover { background: var(--paper-2); color: var(--ink); }
+        .ad-seg-btn.active { background: var(--accent); color: #fff; }
+
+        .ad-exam-preview {
+          border: 1px solid var(--rule); background: var(--paper-2); padding: 16px 18px;
+          margin-bottom: 22px; display: flex; flex-direction: column; gap: 6px;
+        }
+        .ad-chapter-list { display: flex; flex-direction: column; gap: 8px; }
+        .ad-chapter-item {
+          display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+          background: var(--paper); border: 1px solid var(--rule); padding: 13px 16px;
+          cursor: pointer; transition: all 0.15s ease; font-family: 'Inter', sans-serif;
+          color: var(--ink-2); font-size: 14px;
+        }
+        .ad-chapter-item:hover { border-color: var(--accent); color: var(--ink); }
+        .ad-chapter-item.on { border-color: var(--accent); background: rgba(220,60,40,0.06); color: var(--ink); }
+        .ad-chapter-check {
+          flex: 0 0 auto; width: 22px; height: 22px; border: 1px solid var(--rule);
+          display: grid; place-items: center; font-size: 13px; color: #fff;
+        }
+        .ad-chapter-item.on .ad-chapter-check { background: var(--accent); border-color: var(--accent); }
+        .ad-chapter-name { flex: 1; }
+        .ad-chapter-count {
+          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
+          border: 1px solid var(--rule); padding: 2px 8px;
+        }
+        .ad-choose-scroll { max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+        .ad-choose-prompt { font-family: 'Instrument Serif', serif; font-size: 16px; color: var(--ink); }
+        .ad-code-block { border: 1px solid var(--rule); background: var(--paper-2); padding: 16px 18px; margin-bottom: 14px; }
+        .ad-code-label {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
+          letter-spacing: 0.16em; color: var(--dim); margin-bottom: 10px;
+        }
+        .ad-code-row { display: flex; align-items: center; gap: 12px; }
+        .ad-code-value {
+          flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink);
+          background: var(--paper); border: 1px solid var(--rule); padding: 10px 12px;
+          overflow-x: auto; white-space: nowrap;
+        }
+        .ad-code-link { font-size: 12px; color: var(--accent); }
+        .ad-exam-preview-title {
+          font-family: 'Instrument Serif', serif; font-size: 19px; color: var(--ink); line-height: 1.2;
+        }
+        .ad-exam-preview-meta {
+          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); letter-spacing: 0.04em;
+        }
+
+        .ad-modal-foot { display: flex; gap: 12px; }
+        .ad-modal-foot .ad-set-btn.ghost { flex: 0 0 auto; padding: 0 22px; }
+        .ad-submit-inline { flex: 1; margin-top: 0; }
+        .ad-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .badge {
+          align-self: flex-start; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+          text-transform: uppercase; letter-spacing: 0.14em; padding: 3px 9px; border-radius: 0;
+        }
+        .bg-green-100 { background: #d9ead3; color: #274e13; }
+        .text-green-800 { color: #274e13; }
+        .bg-blue-100 { background: #cfe2f3; color: #0b3d66; }
+        .text-blue-800 { color: #0b3d66; }
+        .bg-gray-100 { background: var(--paper); color: var(--dim); }
+        .text-gray-700 { color: var(--ink-2); }
+
         .ad-set-card {
           border: 1px solid var(--rule);
           background: var(--paper);
@@ -667,7 +853,7 @@ export default function AdminDashboard() {
           margin-bottom: 20px;
         }
         .ad-set-card-title {
-          font-family: 'Instrument Serif', serif; font-size: 22px; margin: 0 0 6px;
+          font-family: 'Instrument Serif', serif; font-size: 22px; margin: 0 0 6px; color: var(--ink);
         }
         .ad-set-card-title em { font-style: italic; color: var(--accent); }
         .ad-set-desc { font-size: 13px; line-height: 1.6; color: var(--ink-2); margin: 0 0 20px; }
@@ -744,11 +930,20 @@ export default function AdminDashboard() {
           font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
           letter-spacing: 0.04em; display: flex; gap: 8px; flex-wrap: wrap;
         }
-        .ad-exam-side { display: flex; align-items: center; gap: 22px; }
-        .ad-exam-stat { display: flex; flex-direction: column; align-items: center; min-width: 56px; }
-        .ad-exam-stat-val { font-family: 'Instrument Serif', serif; font-size: 26px; color: var(--accent); line-height: 1; }
-        .ad-exam-stat-lbl { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim); margin-top: 4px; }
-        .ad-exam-actions { display: flex; gap: 8px; }
+        .ad-exam-side { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .ad-exam-caret {
+          background: transparent; border: 0; cursor: pointer; font-size: 14px; color: var(--accent);
+          padding: 0 4px 0 0; line-height: 1;
+        }
+        .ad-exam-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .ad-chip {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.04em;
+          background: var(--paper-2); border: 1px solid var(--rule); color: var(--ink-2);
+          padding: 4px 9px; text-transform: uppercase;
+        }
+        .ad-chip strong { color: var(--ink); }
+        .ad-chip.mono { text-transform: none; letter-spacing: 0.08em; color: var(--accent); }
+        .ad-exam-actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .ad-exam-btn {
           font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase;
           letter-spacing: 0.08em; background: var(--accent); color: #fff; border: 1px solid var(--accent);
@@ -757,6 +952,84 @@ export default function AdminDashboard() {
         .ad-exam-btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
         .ad-exam-btn.ghost { background: transparent; color: var(--ink-2); border-color: var(--rule); }
         .ad-exam-btn.ghost:hover { color: var(--accent); border-color: var(--accent); }
+        .ad-exam-btn.danger { background: transparent; color: #b42318; border-color: #f0c2bb; }
+        .ad-exam-btn.danger:hover { background: #b42318; color: #fff; border-color: #b42318; }
+        .ad-exam-row.open { border-color: var(--accent); }
+        .ad-exam-detail { flex-basis: 100%; border-top: 1px dashed var(--rule); margin-top: 16px; padding-top: 16px; }
+        .ad-empty.small { font-size: 13px; padding: 8px 0; }
+        .ad-q-detail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+        .ad-q-detail { border: 1px solid var(--rule); background: var(--paper-2); padding: 12px 14px; }
+        .ad-q-detail-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+        .ad-q-detail-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--accent); }
+        .ad-q-detail-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); }
+        .ad-q-detail-prompt { font-size: 14px; color: var(--ink); margin-bottom: 8px; }
+        .ad-q-detail-opts { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+        .ad-q-detail-opt {
+          font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-2);
+          display: inline-flex; align-items: center; gap: 6px;
+        }
+        .ad-q-detail-opt i {
+          font-style: normal; width: 18px; height: 18px; display: grid; place-items: center;
+          border: 1px solid var(--rule); color: var(--dim); font-size: 10px; flex-shrink: 0;
+        }
+        .ad-q-detail-opt.correct { color: #0f7a3d; }
+        .ad-q-detail-opt.correct i { background: #0f7a3d; border-color: #0f7a3d; color: #fff; }
+
+        .ad-attempts { margin-top: 22px; border-top: 1px solid var(--rule); padding-top: 16px; }
+        .ad-attempts-head {
+          font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase;
+          letter-spacing: 0.14em; color: var(--accent); margin-bottom: 12px;
+        }
+        .ad-attempt-list { display: flex; flex-direction: column; gap: 8px; }
+        .ad-attempt { border: 1px solid var(--rule); background: var(--paper-2); }
+        .ad-attempt-row {
+          width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+          background: transparent; border: 0; cursor: pointer; text-align: left;
+        }
+        .ad-attempt-row:hover { background: rgba(0,0,0,0.03); }
+        .ad-attempt-caret { color: var(--accent); font-size: 12px; }
+        .ad-attempt-name { font-family: 'Instrument Serif', serif; font-size: 17px; color: var(--ink); flex: 1; }
+        .ad-attempt-score { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-2); }
+        .ad-attempt-tags { display: flex; gap: 6px; }
+        .ad-atag { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 6px; color: #fff; }
+        .ad-atag.ok { background: #0f7a3d; }
+        .ad-atag.bad { background: var(--accent); }
+        .ad-atag.skip { background: #b8ad96; color: #14110d; }
+        .ad-attempt-detail { border-top: 1px dashed var(--rule); padding: 12px 14px; background: var(--paper); }
+        .ad-attempt-qlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+        .ad-attempt-q { border-left: 3px solid var(--rule); padding: 4px 0 4px 12px; }
+        .ad-attempt-q.ok { border-left-color: #0f7a3d; }
+        .ad-attempt-q.bad { border-left-color: var(--accent); }
+        .ad-attempt-q.skip { border-left-color: #b8ad96; }
+        .ad-aq-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+        .ad-aq-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--ink); }
+        .ad-aq-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; padding: 2px 6px; color: #fff; }
+        .ad-aq-tag.ok { background: #0f7a3d; }
+        .ad-aq-tag.bad { background: var(--accent); }
+        .ad-aq-tag.skip { background: #b8ad96; color: #14110d; }
+        .ad-aq-marks { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-2); }
+        .ad-aq-prompt { font-size: 13px; color: var(--ink); margin-bottom: 6px; }
+        .ad-aq-ans { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-2); display: flex; gap: 8px; margin-top: 3px; }
+        .ad-aq-label { color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; }
+        .ad-aq-chosen.bad { color: var(--accent); }
+        .ad-aq-chosen.skip { color: var(--dim); font-style: italic; }
+        .ad-aq-correct { color: #0f7a3d; }
+
+        .ad-info-card { max-width: 720px; border: 1px solid var(--rule); background: var(--paper); padding: 24px 26px; }
+        .ad-info-sub { font-size: 13.5px; line-height: 1.6; color: var(--ink-2); margin: 0 0 20px; }
+        .ad-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+        .ad-info-grid .ad-field label { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); }
+        .ad-info-grid .ad-field input {
+          width: 100%; background: var(--paper-2); border: 1px solid var(--rule); border-radius: 0;
+          padding: 11px 13px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink); outline: none;
+        }
+        .ad-info-grid .ad-field input:focus { background: #fff; border-color: var(--accent); }
+        .ad-modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 22px; }
+        .ad-saved { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #0f7a3d; }
+        .ad-submit { background: var(--accent); color: #fff; border: 1px solid var(--accent); padding: 12px 22px; font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; }
+        .ad-submit:hover { background: var(--accent-2); border-color: var(--accent-2); }
+        .ad-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+        .ad-submit-inline { display: inline-flex; }
 
         @media (max-width: 720px) {
           .ad-root { grid-template-columns: 1fr; }
@@ -856,9 +1129,23 @@ export default function AdminDashboard() {
           </>
         )}
 
-        {active === "exams" && <ExamsPanel exams={exams} />}
+        {active === "exams" && (
+          <ExamsPanel
+            exams={exams}
+            questionMap={examQuestionMap}
+            attemptsMap={attemptsMap}
+            bank={questions}
+            onDelete={handleDeleteExam}
+            onEdit={openEditExam}
+            onManageQuestions={openManageQuestions}
+            onCopyLink={copyExamLink}
+            onCopyCode={copyExamCode}
+          />
+        )}
 
-        {active !== "questions" && active !== "settings" && active !== "exams" && (
+        {active === "information" && <InformationPanel siteInfo={siteInfo} onSaved={setSiteInfo} />}
+
+        {active !== "questions" && active !== "settings" && active !== "exams" && active !== "information" && (
           <div className="ad-head">
             <h1 className="ad-title">{NAV.find((n) => n.key === active)?.label}</h1>
             <span className="ad-count">coming soon</span>
@@ -873,22 +1160,67 @@ export default function AdminDashboard() {
       )}
 
       {active === "exams" && (
-        <button className="ad-fab" onClick={() => setExamModalOpen(true)} aria-label="New exam">
+        <button className="ad-fab" onClick={openNewExam} aria-label="New exam">
           <span className="plus">+</span> New Exam
         </button>
       )}
 
       {modalOpen && (
-        <AddQuestionModal onClose={() => setModalOpen(false)} onSave={addQuestion} />
+        <AddQuestionModal
+          onClose={() => setModalOpen(false)}
+          onSave={addQuestion}
+          existingChapters={Array.from(
+            new Set(questions.map((q) => q.chapter?.trim()).filter((c): c is string => Boolean(c)))
+          ).sort((a, b) => a.localeCompare(b))}
+        />
       )}
 
       {examModalOpen && (
         <NewExamModal
+          exam={editingExam}
           onClose={() => setExamModalOpen(false)}
           onSave={async (exam) => {
-            const saved = await saveExam(exam);
-            setExams((prev) => [saved, ...prev]);
-            setExamModalOpen(false);
+            if (editingExam) {
+              await updateExam(editingExam.id, exam);
+              setExams((prev) =>
+                prev.map((e) => (e.id === editingExam.id ? { ...e, ...exam } : e))
+              );
+              setExamModalOpen(false);
+            } else {
+              const saved = await saveExam(exam);
+              setExams((prev) => [saved, ...prev]);
+              setExamModalOpen(false);
+              setExamCodeExam(saved);
+            }
+          }}
+        />
+      )}
+
+      {examCodeExam && (
+        <ExamCodeDialog
+          exam={examCodeExam}
+          onClose={() => setExamCodeExam(null)}
+          onContinue={() => {
+            setExamCodeExam(null);
+            setAddQuestionsInitial([]);
+            setAddQuestionsExam(examCodeExam);
+          }}
+        />
+      )}
+
+      {addQuestionsExam && (
+        <AddQuestionsDialog
+          exam={addQuestionsExam}
+          questions={questions}
+          initialIds={addQuestionsInitial}
+          onClose={() => setAddQuestionsExam(null)}
+          onSave={async (questionIds) => {
+            await setExamQuestions(addQuestionsExam.id, questionIds);
+            setExamQuestionMap((prev) => ({
+              ...prev,
+              [addQuestionsExam.id]: questionIds,
+            }));
+            setAddQuestionsExam(null);
           }}
         />
       )}
@@ -909,9 +1241,11 @@ export default function AdminDashboard() {
 function AddQuestionModal({
   onClose,
   onSave,
+  existingChapters = [],
 }: {
   onClose: () => void;
   onSave: (q: Omit<Question, "id" | "createdAt">) => void;
+  existingChapters?: string[];
 }) {
   const [type, setType] = useState<QuestionType>("single");
   const [prompt, setPrompt] = useState("");
@@ -925,6 +1259,7 @@ function AddQuestionModal({
   ]);
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
   const [uploading, setUploading] = useState(false);
+  const [chapter, setChapter] = useState("");
   const [typeOpen, setTypeOpen] = useState(false);
   const typeRef = useRef<HTMLDivElement>(null);
 
@@ -951,13 +1286,6 @@ function AddQuestionModal({
           : o
       )
     );
-  const addOption = () => {
-    if (options.length >= 4) return;
-    const id = String.fromCharCode(97 + options.length);
-    setOptions((prev) => [...prev, { id, text: "", correct: false }]);
-  };
-  const removeOption = (id: string) =>
-    setOptions((prev) => prev.filter((o) => o.id !== id).slice(0, 4));
   const onImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -986,14 +1314,21 @@ function AddQuestionModal({
   };
 
   const save = () => {
-    const filled = options.filter((o) => o.text.trim().length > 0).slice(0, 4);
-    if (!prompt.trim() || filled.length === 0 || !filled.some((o) => o.correct)) return;
+    const filled = options.filter((o) => o.text.trim().length > 0);
+    if (
+      !prompt.trim() ||
+      filled.length !== 4 ||
+      !filled.some((o) => o.correct)
+    ) {
+      return;
+    }
     onSave({
       type,
       prompt: prompt.trim(),
       options: filled,
       marks: Number(marks) || 0,
       negative: Number(negative) || 0,
+      chapter: chapter.trim() || undefined,
       imageUrl,
     });
   };
@@ -1050,6 +1385,24 @@ function AddQuestionModal({
           <Stepper label="Negative" value={negative} onChange={setNegative} />
         </div>
 
+          <div className="ad-field" style={{ marginBottom: 16 }}>
+            <label>Chapter (optional)</label>
+            <input
+              type="text"
+              value={chapter}
+              placeholder="e.g. Kinematics, Thermodynamics"
+              list="ad-chapter-suggestions"
+              autoComplete="off"
+              onChange={(e) => setChapter(e.target.value)}
+            />
+            <datalist id="ad-chapter-suggestions">
+              {existingChapters.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+            <div className="ad-hint">Used to group questions when adding them to an exam by chapter.</div>
+          </div>
+
         <div style={{ marginBottom: 16 }}>
           <label className="ad-q-label">Question {type === "mcq" ? "(select all correct)" : "(select one correct)"}</label>
           <MathField
@@ -1062,7 +1415,7 @@ function AddQuestionModal({
         </div>
 
         <div className="ad-field" style={{ marginBottom: 16 }}>
-          <label>Options (max 4)</label>
+          <label>Options (4 required)</label>
           {options.map((o, i) => (
             <div className={`ad-opt-edit${o.correct ? " correct-row" : ""}`} key={o.id}>
               <button
@@ -1079,14 +1432,8 @@ function AddQuestionModal({
                 onChange={(v) => setOptText(o.id, v)}
                 placeholder="Option text — e.g. $\\vec{F} = m\\vec{a}$"
               />
-              {options.length > 2 && (
-                <button className="ad-opt-del" onClick={() => removeOption(o.id)} aria-label="Remove">×</button>
-              )}
             </div>
           ))}
-          {options.length < 4 && (
-            <button className="ad-add-opt" onClick={addOption}>+ Add option</button>
-          )}
         </div>
 
         <div className="ad-field" style={{ marginBottom: 20 }}>
@@ -1130,7 +1477,7 @@ function Stepper({
   const set = (v: number) => onChange(String(Math.max(min, v)));
   return (
     <div className="ad-field">
-      <label>{label}</label>
+      {label && <label>{label}</label>}
       <div className="ad-stepper">
         <input
           type="text"
@@ -1212,6 +1559,17 @@ function parseMath(str: string, keyBase = "m"): React.ReactNode[] {
           <span key={`${keyBase}-${k++}`} className="ad-vec">
             {parseMath(body, keyBase + "v")}
             <span className="ad-vec-arrow">⃗</span>
+          </span>
+        );
+        continue;
+      }
+      if (cmd === "hat") {
+        const [body, n1] = readGroup(str, j);
+        i = n1;
+        push(
+          <span key={`${keyBase}-${k++}`} className="ad-hat">
+            <span className="ad-hat-cap">ˆ</span>
+            <span className="ad-hat-body">{parseMath(body, keyBase + "h")}</span>
           </span>
         );
         continue;
@@ -1763,66 +2121,61 @@ function ExplanationDialog({
   );
 }
 
-const SAMPLE_EXAMS: AdminExam[] = [
-  {
-    id: "jee-2026-mock-iv",
-    title: "JEE Main 2026 · Mock IV",
-    subject: "Physics",
-    takenOn: "Aug 09, 2026",
-    status: "completed",
-    attempts: 42,
-    avgScore: 71,
-    duration: "3h 00m",
-  },
-  {
-    id: "neet-bio-12",
-    title: "NEET Biology · Practice Set 12",
-    subject: "Biology",
-    takenOn: "Aug 07, 2026",
-    status: "completed",
-    attempts: 38,
-    avgScore: 89,
-    duration: "3h 20m",
-  },
-  {
-    id: "jee-math-sprint-03",
-    title: "JEE Math · Sprint 03",
-    subject: "Mathematics",
-    takenOn: "Aug 05, 2026",
-    status: "completed",
-    attempts: 51,
-    avgScore: 64,
-    duration: "1h 30m",
-  },
-  {
-    id: "neet-chem-full",
-    title: "NEET Chemistry · Full Syllabus",
-    subject: "Chemistry",
-    takenOn: "Aug 12, 2026",
-    status: "scheduled",
-    attempts: 0,
-    avgScore: 0,
-    duration: "2h 00m",
-  },
-  {
-    id: "jee-2025-paper",
-    title: "JEE Advanced 2025 · Paper 1",
-    subject: "Mixed",
-    takenOn: "—",
-    status: "draft",
-    attempts: 0,
-    avgScore: 0,
-    duration: "3h 00m",
-  },
-];
-
 const EXAM_STATUS_META: Record<AdminExam["status"], { label: string; cls: string }> = {
   completed: { label: "Completed", cls: "bg-green-100 text-green-800" },
   scheduled: { label: "Scheduled", cls: "bg-blue-100 text-blue-800" },
   draft: { label: "Draft", cls: "bg-gray-100 text-gray-700" },
 };
 
-function ExamsPanel({ exams }: { exams: AdminExam[] }) {
+function ExamsPanel({
+  exams,
+  questionMap,
+  attemptsMap,
+  bank,
+  onDelete,
+  onEdit,
+  onManageQuestions,
+  onCopyLink,
+  onCopyCode,
+}: {
+  exams: AdminExam[];
+  questionMap: Record<string, string[]>;
+  attemptsMap: Record<string, ExamAttemptSummary>;
+  bank: Question[];
+  onDelete: (id: string) => void;
+  onEdit: (exam: AdminExam) => void;
+  onManageQuestions: (exam: AdminExam) => void;
+  onCopyLink: (exam: AdminExam) => void;
+  onCopyCode: (exam: AdminExam) => void;
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [openAttempts, setOpenAttempts] = useState<Set<string>>(new Set());
+
+  const bankById = useMemo(() => {
+    const m = new Map<string, Question>();
+    for (const q of bank) m.set(q.id, q);
+    return m;
+  }, [bank]);
+
+  const optionText = (q: Question | undefined, optId: string | null): string | null => {
+    if (!q || !optId) return null;
+    return q.options.find((o) => o.id === optId)?.text ?? null;
+  };
+
+  const questionsFor = (examId: string): Question[] => {
+    const ids = questionMap[examId] ?? [];
+    return ids
+      .map((id) => bankById.get(id))
+      .filter((q): q is Question => Boolean(q));
+  };
+
+  const handleCopy = async (exam: AdminExam) => {
+    await onCopyLink(exam);
+    setCopiedId(exam.id);
+    setTimeout(() => setCopiedId((c) => (c === exam.id ? null : c)), 1600);
+  };
+
   return (
     <>
       <div className="ad-head">
@@ -1830,13 +2183,32 @@ function ExamsPanel({ exams }: { exams: AdminExam[] }) {
         <span className="ad-count">{exams.length} total</span>
       </div>
 
+      {exams.length === 0 && (
+        <div className="ad-empty">
+          No exams yet. Tap <strong>+</strong> to create your first one.
+        </div>
+      )}
+
       <div className="ad-exam-list">
         {exams.map((exam) => {
           const meta = EXAM_STATUS_META[exam.status];
+          const qIds = questionMap[exam.id] ?? [];
+          const count = qIds.length;
+          const summary = attemptsMap[exam.id];
+          const attempts = summary?.attempts ?? [];
+          const isOpen = expanded === exam.id;
+          const questions = isOpen ? questionsFor(exam.id) : [];
           return (
-            <div className="ad-exam-row" key={exam.id}>
+            <div className={`ad-exam-row${isOpen ? " open" : ""}`} key={exam.id}>
               <div className="ad-exam-main">
                 <div className="ad-exam-top">
+                  <button
+                    className="ad-exam-caret"
+                    onClick={() => setExpanded(isOpen ? null : exam.id)}
+                    aria-label={isOpen ? "Collapse" : "Expand"}
+                  >
+                    {isOpen ? "▾" : "▸"}
+                  </button>
                   <span className="ad-exam-title">{exam.title}</span>
                   <span className={`badge ${meta.cls}`}>{meta.label}</span>
                 </div>
@@ -1847,21 +2219,83 @@ function ExamsPanel({ exams }: { exams: AdminExam[] }) {
                   <span>·</span>
                   <span>{exam.status === "draft" ? "Not published" : `Taken ${exam.takenOn}`}</span>
                 </div>
+                <div className="ad-exam-chips">
+                  <span className="ad-chip"><strong>{count}</strong> questions</span>
+                  <span className="ad-chip"><strong>{attempts.length}</strong> attempted</span>
+                  <span className="ad-chip"><strong>{summary?.avgScore ?? 0}%</strong> avg</span>
+                  <span className="ad-chip mono">{exam.code}</span>
+                </div>
               </div>
               <div className="ad-exam-side">
-                <div className="ad-exam-stat">
-                  <span className="ad-exam-stat-val">{exam.attempts}</span>
-                  <span className="ad-exam-stat-lbl">attempts</span>
-                </div>
-                <div className="ad-exam-stat">
-                  <span className="ad-exam-stat-val">{exam.avgScore}%</span>
-                  <span className="ad-exam-stat-lbl">avg score</span>
-                </div>
                 <div className="ad-exam-actions">
-                  <button className="ad-exam-btn">Open</button>
-                  <button className="ad-exam-btn ghost">Edit</button>
+                  <button className="ad-exam-btn" onClick={() => onEdit(exam)}>Edit</button>
+                  <button className="ad-exam-btn" onClick={() => onManageQuestions(exam)}>
+                    {count ? "Questions" : "Add Questions"}
+                  </button>
+                  <button className="ad-exam-btn ghost" onClick={() => handleCopy(exam)}>
+                    {copiedId === exam.id ? "Copied ✓" : "Copy link"}
+                  </button>
+                  <button className="ad-exam-btn ghost" onClick={() => onCopyCode(exam)}>
+                    Copy code
+                  </button>
+                  <button
+                    className="ad-exam-btn danger"
+                    onClick={() => onDelete(exam.id)}
+                    aria-label={`Delete ${exam.title}`}
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
+
+              {isOpen && (
+                <div className="ad-exam-detail">
+                  {questions.length === 0 ? (
+                    <div className="ad-empty small">
+                      No questions added yet. Use <strong>Add Questions</strong> to build this exam.
+                    </div>
+                  ) : (
+                    <ol className="ad-q-detail-list">
+                      {questions.map((q, i) => {
+                        const correctIdx = q.options.findIndex((o) => o.correct);
+                        const keys = ["A", "B", "C", "D", "E", "F", "G", "H"];
+                        return (
+                          <li className="ad-q-detail" key={q.id}>
+                            <div className="ad-q-detail-head">
+                              <span className="ad-q-detail-num">Q. {i + 1}</span>
+                              <span className="ad-q-detail-sub">
+                                {q.chapter ? `${q.chapter} · ` : ""}
+                                {q.marks} marks{q.negative ? ` · −${q.negative} neg` : ""}
+                              </span>
+                            </div>
+                            <div className="ad-q-detail-prompt">
+                              <MathPreview text={q.prompt} compact />
+                            </div>
+                            <div className="ad-q-detail-opts">
+                              {q.options.map((o, oi) => (
+                                <span
+                                  key={o.id}
+                                  className={`ad-q-detail-opt${oi === correctIdx ? " correct" : ""}`}
+                                >
+                                  <i>{keys[oi]}</i>
+                                  <MathPreview text={o.text} compact />
+                                </span>
+                              ))}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+
+                  <ExamAttempts
+                    attempts={attempts}
+                    bankById={bankById}
+                    openAttempts={openAttempts}
+                    setOpenAttempts={setOpenAttempts}
+                  />
+                </div>
+              )}
             </div>
           );
         })}
@@ -1870,36 +2304,242 @@ function ExamsPanel({ exams }: { exams: AdminExam[] }) {
   );
 }
 
+function InformationPanel({
+  siteInfo,
+  onSaved,
+}: {
+  siteInfo: SiteInfo;
+  onSaved: (info: SiteInfo) => void;
+}) {
+  const [form, setForm] = useState<SiteInfo>(siteInfo);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const set = (key: keyof SiteInfo, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setSaved(false);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await saveSiteInfo(form);
+      onSaved(form);
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const fields: { key: keyof SiteInfo; label: string; placeholder: string; type?: string }[] = [
+    { key: "siteName", label: "Site name", placeholder: "ExamSite" },
+    { key: "contactName", label: "Contact person", placeholder: "Mr. Biman Dhawa · Physics" },
+    { key: "phone", label: "Phone number", placeholder: "+91 00000 00000", type: "tel" },
+    { key: "email", label: "Email", placeholder: "hello@examsite.in", type: "email" },
+    { key: "address", label: "Address", placeholder: "Belda, IN" },
+    { key: "tagline", label: "Tagline", placeholder: "The exam before the exam." },
+  ];
+
+  return (
+    <>
+      <div className="ad-head">
+        <h1 className="ad-title">Site <em>Information</em></h1>
+        <span className="ad-count">public details</span>
+      </div>
+
+      <div className="ad-info-card">
+        <p className="ad-info-sub">
+          These details appear on the public site — footer, contact info, and the page title. Changes save to Firestore immediately.
+        </p>
+        <div className="ad-info-grid">
+          {fields.map((f) => (
+            <div className="ad-field" key={f.key} style={{ marginBottom: 16 }}>
+              <label>{f.label}</label>
+              <input
+                type={f.type ?? "text"}
+                value={form[f.key]}
+                placeholder={f.placeholder}
+                onChange={(e) => set(f.key, e.target.value)}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="ad-modal-foot">
+          <span className="ad-saved">{saved ? "Saved ✓" : ""}</span>
+          <button
+            className="ad-submit ad-submit-inline"
+            onClick={save}
+            disabled={saving}
+          >
+            {saving ? "Saving…" : "Save details"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ExamAttempts({
+  attempts,
+  bankById,
+  openAttempts,
+  setOpenAttempts,
+}: {
+  attempts: Attempt[];
+  bankById: Map<string, Question>;
+  openAttempts: Set<string>;
+  setOpenAttempts: (updater: (prev: Set<string>) => Set<string>) => void;
+}) {
+  if (attempts.length === 0) {
+    return (
+      <div className="ad-attempts">
+        <div className="ad-attempts-head">Attempts</div>
+        <div className="ad-empty small">No students have attempted this exam yet.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="ad-attempts">
+      <div className="ad-attempts-head">Attempts · {attempts.length} students</div>
+      <div className="ad-attempt-list">
+        {attempts.map((a) => {
+          const open = openAttempts.has(a.id);
+          const pct = a.total > 0 ? Math.round((a.score / a.total) * 100) : 0;
+          return (
+            <div className="ad-attempt" key={a.id}>
+              <button
+                className="ad-attempt-row"
+                onClick={() =>
+                  setOpenAttempts((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(a.id)) next.delete(a.id);
+                    else next.add(a.id);
+                    return next;
+                  })
+                }
+              >
+                <span className="ad-attempt-caret">{open ? "▾" : "▸"}</span>
+                <span className="ad-attempt-name">{a.studentName}</span>
+                <span className="ad-attempt-score">{a.score}/{a.total} · {pct}%</span>
+                <span className="ad-attempt-tags">
+                  <span className="ad-atag ok">{a.correct}✓</span>
+                  <span className="ad-atag bad">{a.wrong}✗</span>
+                  <span className="ad-atag skip">{a.unattempted}–</span>
+                </span>
+              </button>
+              {open && (
+                <div className="ad-attempt-detail">
+                  <ol className="ad-attempt-qlist">
+                    {a.answers.map((ans, qi) => {
+                      const q = bankById.get(ans.questionId);
+                      const chosen = ans.chosenOptionId
+                        ? q?.options.find((o) => o.id === ans.chosenOptionId)?.text ?? "—"
+                        : null;
+                      const correct = ans.correctOptionId
+                        ? q?.options.find((o) => o.id === ans.correctOptionId)?.text ?? "—"
+                        : "—";
+                      const status = ans.chosen == null ? "skip" : ans.correct ? "ok" : "bad";
+                      return (
+                        <li className={`ad-attempt-q ${status}`} key={ans.questionId + "-" + qi}>
+                          <div className="ad-aq-head">
+                            <span className="ad-aq-num">Q. {qi + 1}</span>
+                            <span className={`ad-aq-tag ${status}`}>
+                              {status === "ok" ? "Correct" : status === "bad" ? "Wrong" : "Unattempted"}
+                            </span>
+                            <span className="ad-aq-marks">
+                              {ans.marks > 0 ? `+${ans.marks}` : ans.marks < 0 ? `${ans.marks}` : "0"}
+                            </span>
+                          </div>
+                          <div className="ad-aq-prompt"><MathPreview text={q?.prompt ?? "—"} compact /></div>
+                          <div className="ad-aq-ans">
+                            <span className="ad-aq-label">Their answer:</span>
+                            <span className={status === "bad" ? "ad-aq-chosen bad" : status === "skip" ? "ad-aq-chosen skip" : "ad-aq-chosen"}>
+                              {chosen ?? "Not attempted"}
+                            </span>
+                          </div>
+                          {status !== "ok" && (
+                            <div className="ad-aq-ans">
+                              <span className="ad-aq-label">Correct answer:</span>
+                              <span className="ad-aq-correct">{correct}</span>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function NewExamModal({
+  exam,
   onClose,
   onSave,
 }: {
+  exam?: AdminExam | null;
   onClose: () => void;
   onSave: (exam: AdminExam) => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState("Physics");
-  const [duration, setDuration] = useState("60");
+  const [title, setTitle] = useState(exam?.title ?? "");
+  const [duration, setDuration] = useState(
+    exam ? exam.duration.replace(/[^0-9]/g, "") || "60" : "60"
+  );
+  const [status, setStatus] = useState<AdminExam["status"]>(exam?.status ?? "draft");
+  const [takenOn, setTakenOn] = useState(
+    exam && exam.takenOn !== "—" ? exam.takenOn : ""
+  );
+
+  const today = new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+  const resolvedDate = status === "draft" ? "—" : takenOn.trim() || today;
+
+  const generateCode = (): string => {
+    if (exam?.code) return exam.code;
+    const word = (title.trim().split(/\s+/)[0] || "EXAM")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 12);
+    const subj = ((exam?.subject ?? "Mixed").slice(0, 3) || "EXM").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const seq = String((Date.now() % 100)).padStart(2, "0");
+    return `${word}_${subj}_${seq}`;
+  };
 
   const save = () => {
     if (!title.trim()) return;
     onSave({
-      id: `exam-${Date.now()}`,
+      id: exam?.id ?? `exam-${Date.now()}`,
       title: title.trim(),
-      subject,
-      takenOn: "—",
-      status: "draft",
-      attempts: 0,
-      avgScore: 0,
-      duration: `${duration} min`,
+      subject: exam?.subject ?? "Mixed",
+      code: generateCode(),
+      takenOn: resolvedDate,
+      status,
+      attempts: exam?.attempts ?? 0,
+      avgScore: exam?.avgScore ?? 0,
+      duration: `${duration || "0"} min`,
     });
   };
+
+  const statusMeta = EXAM_STATUS_META[status];
 
   return (
     <div className="ad-overlay" onClick={onClose}>
       <div className="ad-modal" onClick={(e) => e.stopPropagation()}>
         <button className="ad-close" onClick={onClose} aria-label="Close">×</button>
-        <h3 className="ad-form-title">New <em>Exam</em></h3>
+        <h3 className="ad-form-title">{exam ? "Edit" : "New"} <em>Exam</em></h3>
+        <p className="ad-modal-sub">
+          {exam
+            ? "Update this exam. Changes are saved to Firestore immediately."
+            : "Set up a new exam. Drafts stay hidden from students until published."}
+        </p>
 
         <div className="ad-field" style={{ marginBottom: 16 }}>
           <label>Title</label>
@@ -1910,33 +2550,298 @@ function NewExamModal({
             placeholder="e.g. JEE Main 2026 · Mock V"
             onChange={(e) => setTitle(e.target.value)}
           />
+          {!title.trim() && (
+            <div className="ad-hint">A title is required to create the exam.</div>
+          )}
         </div>
 
-        <div className="ad-row" style={{ marginBottom: 16 }}>
-          <div className="ad-field">
-            <label>Subject</label>
-            <div className="ad-select">
-              <select value={subject} onChange={(e) => setSubject(e.target.value)}>
-                <option>Physics</option>
-                <option>Chemistry</option>
-                <option>Mathematics</option>
-                <option>Biology</option>
-                <option>Mixed</option>
-              </select>
-            </div>
+        <div className="ad-field" style={{ marginBottom: 16 }}>
+          <label>Duration</label>
+          <Stepper label="" value={duration} onChange={setDuration} step={5} min={5} />
+        </div>
+
+        <div className="ad-field" style={{ marginBottom: 16 }}>
+          <label>Status</label>
+          <div className="ad-seg">
+            {(["draft", "scheduled", "completed"] as AdminExam["status"][]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`ad-seg-btn${status === s ? " active" : ""}`}
+                onClick={() => setStatus(s)}
+              >
+                {EXAM_STATUS_META[s].label}
+              </button>
+            ))}
           </div>
-          <div className="ad-field">
-            <label>Duration (min)</label>
+        </div>
+
+        {status !== "draft" && (
+          <div className="ad-field" style={{ marginBottom: 16 }}>
+            <label>Taken on</label>
             <input
               type="text"
-              inputMode="numeric"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value.replace(/[^0-9]/g, ""))}
+              value={takenOn}
+              placeholder={`e.g. ${today}`}
+              onChange={(e) => setTakenOn(e.target.value)}
             />
+            <div className="ad-hint">Leave blank to use today&apos;s date ({today}).</div>
+          </div>
+        )}
+
+        <div className="ad-exam-preview">
+          <span className={`badge ${statusMeta.cls}`}>{statusMeta.label}</span>
+          <span className="ad-exam-preview-title">{title.trim() || "Untitled exam"}</span>
+          <span className="ad-exam-preview-meta">
+            {duration || "0"} min
+            {status !== "draft" && ` · ${resolvedDate}`}
+          </span>
+        </div>
+
+        <div className="ad-modal-foot">
+          <button className="ad-set-btn ghost" onClick={onClose}>Cancel</button>
+          <button
+            className="ad-submit ad-submit-inline"
+            onClick={save}
+            disabled={!title.trim()}
+          >
+            Create Exam
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExamCodeDialog({
+  exam,
+  onClose,
+  onContinue,
+}: {
+  exam: AdminExam;
+  onClose: () => void;
+  onContinue: () => void;
+}) {
+  const [copied, setCopied] = useState<"code" | "link" | null>(null);
+  const link =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/exam?id=${encodeURIComponent(exam.code)}`
+      : `/exam?id=${encodeURIComponent(exam.code)}`;
+
+  const copy = async (value: string, which: "code" | "link") => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(which);
+      setTimeout(() => setCopied(null), 1800);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
+  return (
+    <div className="ad-overlay" onClick={onClose}>
+      <div className="ad-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+        <button className="ad-close" onClick={onClose} aria-label="Close">×</button>
+        <h3 className="ad-form-title">Exam <em>Created</em></h3>
+        <p className="ad-modal-sub">
+          Your exam “{exam.title}” is saved. Share it with students using the code or link below.
+        </p>
+
+        <div className="ad-code-block">
+          <div className="ad-code-label">Exam code</div>
+          <div className="ad-code-row">
+            <code className="ad-code-value">{exam.code}</code>
+            <button
+              className={`ad-share-btn${copied === "code" ? " done" : ""}`}
+              onClick={() => copy(exam.code, "code")}
+            >
+              <span className="ad-share-ico">{copied === "code" ? "✓" : "⧉"}</span>
+              {copied === "code" ? "Copied" : "Copy"}
+            </button>
           </div>
         </div>
 
-        <button className="ad-submit" onClick={save}>Create Exam</button>
+        <div className="ad-code-block">
+          <div className="ad-code-label">Exam link</div>
+          <div className="ad-code-row">
+            <code className="ad-code-value ad-code-link">{link}</code>
+            <button
+              className={`ad-share-btn${copied === "link" ? " done" : ""}`}
+              onClick={() => copy(link, "link")}
+            >
+              <span className="ad-share-ico">{copied === "link" ? "✓" : "⧉"}</span>
+              {copied === "link" ? "Copied" : "Copy"}
+            </button>
+          </div>
+        </div>
+
+        <div className="ad-modal-foot">
+          <button className="ad-set-btn ghost" onClick={onClose}>Done</button>
+          <button className="ad-submit ad-submit-inline" onClick={onContinue}>
+            Add Questions
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddQuestionsDialog({
+  exam,
+  questions,
+  initialIds = [],
+  onClose,
+  onSave,
+}: {
+  exam: AdminExam;
+  questions: Question[];
+  initialIds?: string[];
+  onClose: () => void;
+  onSave: (questionIds: string[]) => void;
+}) {
+  const [mode, setMode] = useState<"chapter" | "choose">("chapter");
+  const [selectedChapters, setSelectedChapters] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(initialIds));
+  const [search, setSearch] = useState("");
+
+  const chapters = Array.from(
+    new Set(questions.map((q) => q.chapter?.trim() || "Uncategorized").filter(Boolean))
+  ).sort();
+
+  const chapterQuestionIds = (chapter: string) =>
+    questions
+      .filter((q) => (q.chapter?.trim() || "Uncategorized") === chapter)
+      .map((q) => q.id);
+
+  const toggleChapter = (chapter: string) => {
+    setSelectedChapters((prev) => {
+      const next = new Set(prev);
+      if (next.has(chapter)) next.delete(chapter);
+      else next.add(chapter);
+      return next;
+    });
+  };
+
+  const toggleQuestion = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const chapterIds = chapters
+    .filter((c) => selectedChapters.has(c))
+    .flatMap(chapterQuestionIds);
+  const finalIds = Array.from(new Set([...chapterIds, ...selectedIds]));
+
+  const filtered = questions.filter((q) =>
+    q.prompt.toLowerCase().includes(search.trim().toLowerCase())
+  );
+
+  return (
+    <div className="ad-overlay" onClick={onClose}>
+      <div className="ad-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
+        <button className="ad-close" onClick={onClose} aria-label="Close">×</button>
+        <h3 className="ad-form-title">Add Questions to <em>{exam.title}</em></h3>
+        <p className="ad-modal-sub">
+          Choose how to fill this exam. You can combine both methods — the final set is
+          the union of your selections.
+        </p>
+
+        <div className="ad-seg" style={{ marginBottom: 20 }}>
+          <button
+            type="button"
+            className={`ad-seg-btn${mode === "chapter" ? " active" : ""}`}
+            onClick={() => setMode("chapter")}
+          >
+            Question by Chapter
+          </button>
+          <button
+            type="button"
+            className={`ad-seg-btn${mode === "choose" ? " active" : ""}`}
+            onClick={() => setMode("choose")}
+          >
+            Questions You Choose
+          </button>
+        </div>
+
+        {mode === "chapter" && (
+          <div className="ad-chapter-list">
+            {chapters.length === 0 && (
+              <div className="ad-empty">No chapters assigned to your questions yet.</div>
+            )}
+            {chapters.map((c) => {
+              const count = chapterQuestionIds(c).length;
+              const on = selectedChapters.has(c);
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  className={`ad-chapter-item${on ? " on" : ""}`}
+                  onClick={() => toggleChapter(c)}
+                >
+                  <span className="ad-chapter-check">{on ? "✓" : ""}</span>
+                  <span className="ad-chapter-name">{c}</span>
+                  <span className="ad-chapter-count">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {mode === "choose" && (
+          <div className="ad-choose-list">
+            <div className="ad-field" style={{ marginBottom: 14 }}>
+              <input
+                type="text"
+                value={search}
+                placeholder="Search questions…"
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {filtered.length === 0 && (
+              <div className="ad-empty">No questions match your search.</div>
+            )}
+            <div className="ad-choose-scroll">
+              {filtered.map((q) => {
+                const on = selectedIds.has(q.id);
+                return (
+                  <button
+                    key={q.id}
+                    type="button"
+                    className={`ad-chapter-item${on ? " on" : ""}`}
+                    onClick={() => toggleQuestion(q.id)}
+                  >
+                    <span className="ad-chapter-check">{on ? "✓" : ""}</span>
+                    <span className="ad-chapter-name ad-choose-prompt">
+                      <MathPreview text={q.prompt} compact />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="ad-exam-preview" style={{ marginTop: 22 }}>
+          <span className="ad-exam-preview-title">{finalIds.length} question{finalIds.length === 1 ? "" : "s"} selected</span>
+          <span className="ad-exam-preview-meta">
+            {selectedChapters.size} chapter{selectedChapters.size === 1 ? "" : "s"}
+            {selectedIds.size > 0 ? ` · ${selectedIds.size} chosen individually` : ""}
+          </span>
+        </div>
+
+        <div className="ad-modal-foot">
+          <button className="ad-set-btn ghost" onClick={onClose}>Skip for now</button>
+          <button
+            className="ad-submit ad-submit-inline"
+            onClick={() => onSave(finalIds)}
+          >
+            {finalIds.length ? `Save ${finalIds.length} Question${finalIds.length === 1 ? "" : "s"}` : "Save Exam"}
+          </button>
+        </div>
       </div>
     </div>
   );

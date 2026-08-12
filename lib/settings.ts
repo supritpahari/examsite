@@ -82,3 +82,57 @@ export async function fetchZenModels(apiKey: string): Promise<ZenModel[]> {
   const json = (await res.json()) as { data?: ZenModel[] };
   return (json.data ?? []).sort((a, b) => a.id.localeCompare(b.id));
 }
+
+export interface SiteInfo {
+  siteName: string;
+  contactName: string;
+  phone: string;
+  email: string;
+  address: string;
+  tagline: string;
+}
+
+const SITE_DOC = "site";
+const SITE_LS = "examsite-site-info";
+
+export const DEFAULT_SITE_INFO: SiteInfo = {
+  siteName: "ExamSite",
+  contactName: "Mr. Biman Dhawa",
+  phone: "+91 00000 00000",
+  email: "hello@examsite.in",
+  address: "Belda, IN",
+  tagline: "The exam before the exam.",
+};
+
+export async function loadSiteInfo(): Promise<SiteInfo> {
+  try {
+    const db: Firestore = getFirestoreDb();
+    const snap = await getDoc(doc(db, COLLECTION, SITE_DOC));
+    if (snap.exists()) {
+      return { ...DEFAULT_SITE_INFO, ...(snap.data() as Partial<SiteInfo>) };
+    }
+  } catch {
+    /* fall through to local */
+  }
+  try {
+    const raw = localStorage.getItem(SITE_LS);
+    if (raw) return { ...DEFAULT_SITE_INFO, ...JSON.parse(raw) };
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_SITE_INFO;
+}
+
+export async function saveSiteInfo(info: SiteInfo): Promise<void> {
+  try {
+    localStorage.setItem(SITE_LS, JSON.stringify(info));
+  } catch {
+    /* ignore */
+  }
+  try {
+    const db: Firestore = getFirestoreDb();
+    await setDoc(doc(db, COLLECTION, SITE_DOC), info);
+  } catch {
+    /* local only */
+  }
+}

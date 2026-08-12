@@ -5,7 +5,10 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  query,
   serverTimestamp,
+  updateDoc,
+  where,
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 
@@ -15,6 +18,7 @@ export interface Exam {
   id: string;
   title: string;
   subject: string;
+  code: string;
   takenOn: string;
   status: ExamStatus;
   attempts: number;
@@ -31,6 +35,7 @@ function fromDoc(d: QueryDocumentSnapshot): Exam {
     id: d.id,
     title: data.title ?? "Untitled Exam",
     subject: data.subject ?? "Mixed",
+    code: data.code ?? "",
     takenOn: data.takenOn ?? "—",
     status: (data.status as ExamStatus) ?? "draft",
     attempts: data.attempts ?? 0,
@@ -38,6 +43,13 @@ function fromDoc(d: QueryDocumentSnapshot): Exam {
     duration: data.duration ?? "—",
     createdAt: data.createdAt,
   };
+}
+
+export async function fetchExamByCode(code: string): Promise<Exam | null> {
+  if (!code) return null;
+  const normalized = code.trim().toLowerCase();
+  const exams = await fetchExams();
+  return exams.find((e) => e.code.toLowerCase() === normalized) ?? null;
 }
 
 export async function fetchExams(): Promise<Exam[]> {
@@ -59,6 +71,7 @@ export async function addExam(
   const data: Record<string, unknown> = {
     title: exam.title,
     subject: exam.subject,
+    code: exam.code,
     takenOn: exam.takenOn,
     status: exam.status,
     attempts: exam.attempts,
@@ -73,4 +86,95 @@ export async function addExam(
 export async function deleteExam(id: string): Promise<void> {
   const db = getFirestoreDb();
   await deleteDoc(doc(db, COLLECTION, id));
+}
+
+export async function updateExam(
+  id: string,
+  patch: Partial<Omit<Exam, "id" | "createdAt">>
+): Promise<Exam> {
+  const db = getFirestoreDb();
+  const ref = doc(db, COLLECTION, id);
+  await updateDoc(ref, patch);
+  return { ...(patch as Exam), id };
+}
+
+export interface ExamQuestion {
+  id: string;
+  examId: string;
+  questionId: string;
+  order: number;
+  createdAt?: unknown;
+}
+
+export async function fetchExamQuestionIds(examId: string): Promise<string[]> {
+  const db = getFirestoreDb();
+  const snap = await getDocs(
+    query(collection(db, "examQuestions"), where("examId", "==", examId))
+  );
+  return snap.docs
+    .map((d) => ({ qid: d.data().questionId as string, order: d.data().order ?? 0 }))
+    .sort((a, b) => a.order - b.order)
+    .map((x) => x.qid);
+}
+
+export interface ExamQuestionLink {
+  examId: string;
+  questionId: string;
+}
+
+export async function fetchAllExamQuestionLinks(): Promise<ExamQuestionLink[]> {
+  const db = getFirestoreDb();
+  const snap = await getDocs(collection(db, "examQuestions"));
+  return snap.docs.map((d) => ({
+    examId: d.data().examId as string,
+    questionId: d.data().questionId as string,
+  }));
+}
+
+export async function deleteExamQuestions(examId: string): Promise<void> {
+  const db = getFirestoreDb();
+  const snap = await getDocs(
+    query(collection(db, "examQuestions"), where("examId", "==", examId))
+  );
+  for (const d of snap.docs) {
+    await deleteDoc(doc(db, "examQuestions", d.id));
+  }
+}
+
+export async function deleteExamQuestionsByQuestion(
+  questionId: string
+): Promise<void> {
+  const db = getFirestoreDb();
+  const snap = await getDocs(
+    query(collection(db, "examQuestions"), where("questionId", "==", questionId))
+  );
+  for (const d of snap.docs) {
+    await deleteDoc(doc(db, "examQuestions", d.id));
+  }
+}
+
+export async function setExamQuestions(
+  examId: string,
+  questionIds: string[]
+): Promise<void> {
+  const db = getFirestoreDb();
+  const existing = await getDocs(
+    query(collection(db, "examQuestions"), where("examId", "==", examId))
+  );
+  const existingIds = new Set(existing.docs.map((d) => d.data().questionId as string));
+  for (const d of existing.docs) {
+    if (!questionIds.includes(d.data().questionId as string)) {
+      await deleteDoc(doc(db, "examQuestions", d.id));
+    }
+  }
+  for (let i = 0; i < questionIds.length; i++) {
+    const qid = questionIds[i];
+    if (existingIds.has(qid)) continue;
+    await addDoc(collection(db, "examQuestions"), {
+      examId,
+      questionId: qid,
+      order: i,
+      createdAt: serverTimestamp(),
+    });
+  }
 }
