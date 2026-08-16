@@ -324,7 +324,7 @@ export default function AdminLogin() {
       `}</style>
 
       <div className="v2-admin-left">
-        <div className="v2-admin-brand">Exam<em>Site</em></div>
+        <div className="v2-admin-brand">World of <em>Physics</em></div>
         <h1 className="v2-admin-headline">
           Your Students, <em>Our Management</em>
         </h1>

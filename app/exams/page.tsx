@@ -85,24 +85,24 @@ export default function ExamsPage() {
       <header className="bg-[#faf8ff] border-b border-[#d2d9f4]">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <Link href="/" className="text-xl font-bold text-[#131b2e]">
-            EduTest Pro
+            World of Physics
           </Link>
           <div className="flex gap-6">
             <Link href="/" className="text-[#131b2e] hover:text-[#2563eb] transition-colors">
               Home
             </Link>
-            <a href="/dashboard" className="text-[#131b2e] hover:text-[#2563eb] transition-colors">
+            <Link href="/dashboard" className="text-[#131b2e] hover:text-[#2563eb] transition-colors">
               Dashboard
-            </a>
-            <a href="/exams" className="text-[#131b2e] hover:text-[#2563eb] transition-colors font-medium">
+            </Link>
+            <Link href="/exams" className="text-[#131b2e] hover:text-[#2563eb] transition-colors font-medium">
               Exams
-            </a>
-            <a href="/results" className="text-[#131b2e] hover:text-[#2563eb] transition-colors">
+            </Link>
+            <Link href="/results" className="text-[#131b2e] hover:text-[#2563eb] transition-colors">
               Results
-            </a>
-            <a href="/create" className="text-[#131b2e] hover:text-[#2563eb] transition-colors">
+            </Link>
+            <Link href="/create" className="text-[#131b2e] hover:text-[#2563eb] transition-colors">
               Create Exam
-            </a>
+            </Link>
           </div>
         </nav>
       </header>
@@ -176,7 +176,7 @@ export default function ExamsPage() {
 
       <footer className="bg-[#faf8ff] border-t border-[#d2d9f4] py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center text-sm text-[#64748b]">
-          <p>© 2026 EduTest Pro. All rights reserved.</p>
+          <p>© 2026 World of Physics. All rights reserved.</p>
         </div>
       </footer>
 

@@ -31,17 +31,38 @@ export interface Question {
 
 const COLLECTION = "questions";
 
+function toOption(raw: unknown, index: number): QuestionOption {
+  const fallbackId = String.fromCharCode(97 + index); // a, b, c, d…
+  if (raw && typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    return {
+      id: typeof o.id === "string" && o.id ? o.id : fallbackId,
+      text: typeof o.text === "string" ? o.text : String(o.text ?? ""),
+      correct: Boolean(o.correct),
+    };
+  }
+  // Legacy docs may store options as plain strings.
+  return { id: fallbackId, text: raw == null ? "" : String(raw), correct: false };
+}
+
 function fromDoc(doc: QueryDocumentSnapshot): Question {
   const data = doc.data();
   return {
     id: doc.id,
-    type: data.type ?? "single",
-    prompt: data.prompt ?? "",
-    options: Array.isArray(data.options) ? data.options : [],
-    marks: data.marks ?? 0,
-    negative: data.negative ?? 0,
-    chapter: data.chapter,
-    imageUrl: data.imageUrl,
+    type: data.type === "mcq" ? "mcq" : "single",
+    prompt: typeof data.prompt === "string" ? data.prompt : String(data.prompt ?? ""),
+    options: Array.isArray(data.options)
+      ? data.options.map((o: unknown, i: number) => toOption(o, i))
+      : [],
+    marks: Number(data.marks) || 0,
+    negative: Number(data.negative) || 0,
+    chapter:
+      typeof data.chapter === "string"
+        ? data.chapter
+        : data.chapter == null
+        ? undefined
+        : String(data.chapter),
+    imageUrl: typeof data.imageUrl === "string" ? data.imageUrl : undefined,
     createdAt: data.createdAt,
   };
 }

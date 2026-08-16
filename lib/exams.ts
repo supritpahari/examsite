@@ -29,18 +29,26 @@ export interface Exam {
 
 const COLLECTION = "exams";
 
+const EXAM_STATUSES: ExamStatus[] = ["completed", "scheduled", "draft"];
+
+function asString(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : value == null ? fallback : String(value);
+}
+
 function fromDoc(d: QueryDocumentSnapshot): Exam {
   const data = d.data();
   return {
     id: d.id,
-    title: data.title ?? "Untitled Exam",
-    subject: data.subject ?? "Mixed",
-    code: data.code ?? "",
-    takenOn: data.takenOn ?? "—",
-    status: (data.status as ExamStatus) ?? "draft",
-    attempts: data.attempts ?? 0,
-    avgScore: data.avgScore ?? 0,
-    duration: data.duration ?? "—",
+    title: asString(data.title, "Untitled Exam"),
+    subject: asString(data.subject, "Mixed"),
+    code: asString(data.code, ""),
+    takenOn: asString(data.takenOn, "—"),
+    status: EXAM_STATUSES.includes(data.status as ExamStatus)
+      ? (data.status as ExamStatus)
+      : "draft",
+    attempts: Number(data.attempts) || 0,
+    avgScore: Number(data.avgScore) || 0,
+    duration: asString(data.duration, "—"),
     createdAt: data.createdAt,
   };
 }

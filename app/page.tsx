@@ -433,7 +433,7 @@ export default function Home() {
         <div className="v2-eyebrow">The Real Portal — Rehearsed</div>
         <h1 className="v2-h1">The exam <em>before</em> the exam.</h1>
         <p className="v2-sub">
-          ExamSite is a faithful reproduction of the JEE and NEET computer-based
+          World of Physics is a faithful reproduction of the JEE and NEET computer-based
           test portals — every button, every timer, every keystroke.
           You will not be surprised on the day that matters.
         </p>

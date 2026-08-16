@@ -10,7 +10,7 @@ import {
 } from "@/lib/exams";
 import { fetchQuestions, type Question, type QuestionType } from "@/lib/questions";
 import { saveAttempt, hasAttemptBySession, hasAttemptByName } from "@/lib/attempts";
-import { getDeviceId, claimExamSession, releaseExamSession } from "@/lib/session";
+import { getDeviceId } from "@/lib/session";
 import { renderMathHtml, extractImageUrls } from "@/lib/render-math";
 
 interface RuntimeOption {
@@ -109,13 +109,6 @@ function ExamContent() {
   const [marked, setMarked] = useState<boolean[]>([]);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [result, setResult] = useState<{
-    score: number;
-    correct: number;
-    wrong: number;
-    unattempted: number;
-    total: number;
-  } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -193,20 +186,9 @@ function ExamContent() {
     } catch {
       /* offline guards fail open */
     }
-    const claim = await claimExamSession(
-      exam.id,
-      sessionId,
-      name.trim(),
-      durationMinutes
-    );
-    if (!claim.ok) {
-      setError(
-        claim.reason === "occupied"
-          ? "This test is already in progress by someone else. Wait for the current session to finish."
-          : "Could not lock this test session. Please try again."
-      );
-      return;
-    }
+    // Any number of students may take the same exam at the same time —
+    // there is intentionally no global session lock here. (Per-device and
+    // per-name duplicate-attempt guards above still apply.)
     const rt = buildRuntime(ordered);
     runtimeRef.current = rt;
     setRuntime(rt);
@@ -249,7 +231,6 @@ function ExamContent() {
       };
     });
     score = Math.max(0, score);
-    setResult({ score, correct, wrong, unattempted, total });
     if (exam) {
       saveAttempt({
         examId: exam.id,
@@ -264,11 +245,8 @@ function ExamContent() {
         answers: answerRecords,
         submittedAt: Date.now(),
       }).catch(() => {
-        /* best-effort persistence; result still shown */
+        /* best-effort persistence */
       });
-      if (sessionId) {
-        releaseExamSession(exam.id, sessionId);
-      }
     }
     setStage("result");
     setConfirmOpen(false);
@@ -572,14 +550,8 @@ function ExamContent() {
         })()
       )}
 
-      {!loading && !error && exam && stage === "result" && result && (
-        <ResultScreen
-          exam={exam}
-          name={name}
-          result={result}
-          runtime={runtime}
-          answers={answers}
-        />
+      {!loading && !error && exam && stage === "result" && (
+        <SubmittedScreen exam={exam} name={name} runtime={runtime} />
       )}
 
       {confirmOpen && (
@@ -694,126 +666,70 @@ function Lobby({
   );
 }
 
-function ResultScreen({
+function SubmittedScreen({
   exam,
   name,
-  result,
   runtime,
-  answers,
 }: {
   exam: Exam;
   name: string;
-  result: {
-    score: number;
-    correct: number;
-    wrong: number;
-    unattempted: number;
-    total: number;
-  };
   runtime: RuntimeQuestion[];
-  answers: (number | null)[];
 }) {
-  const [showReview, setShowReview] = useState(false);
-  const pct = result.total > 0 ? Math.round((result.score / result.total) * 100) : 0;
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    setPdfError(null);
+    try {
+      const { downloadExamQuestionsPdf } = await import("@/lib/exam-pdf");
+      await downloadExamQuestionsPdf({
+        examTitle: exam.title,
+        subject: exam.subject,
+        duration: exam.duration,
+        code: exam.code,
+        studentName: name.trim() || "Anonymous",
+        questions: runtime.map((q) => ({
+          prompt: q.prompt,
+          marks: q.marks,
+          negative: q.negative,
+          imageUrl: q.imageUrl,
+          options: q.options.map((o) => ({ text: o.text })),
+        })),
+      });
+    } catch {
+      setPdfError("Could not generate the PDF right now. Please try again.");
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   return (
     <div className="v2-center">
       <div className="v2-lobby-card v2-result-card">
-        <div className="v2-cta-num">§ 03 · Result</div>
+        <div className="v2-cta-num">§ 03 · Submitted</div>
         <h1 className="v2-lobby-title">
           Test <em>submitted</em>
         </h1>
         <p className="v2-lobby-desc">
-          Well done, {name.trim() || "candidate"}. Here&apos;s how you did on{" "}
-          {exam.title}.
+          Well done, {name.trim() || "candidate"}. Your responses for{" "}
+          {exam.title} have been recorded. Your result will be announced by
+          your teacher — it is not shown here.
         </p>
 
-        <div className="v2-score">
-          <div className="v2-score-num">{result.score}</div>
-          <div className="v2-score-of">
-            / {result.total} · {pct}%
-          </div>
-        </div>
-
-        <div className="v2-res-grid">
-          <div className="v2-res-cell ok">
-            <strong>{result.correct}</strong>
-            <span>Correct</span>
-          </div>
-          <div className="v2-res-cell bad">
-            <strong>{result.wrong}</strong>
-            <span>Wrong</span>
-          </div>
-          <div className="v2-res-cell skip">
-            <strong>{result.unattempted}</strong>
-            <span>Unattempted</span>
-          </div>
+        <div className="v2-submitted-note">
+          You can download a PDF copy of the question paper you just attempted
+          for practice and revision.
         </div>
 
         <button
           className="v2-insight-btn"
-          onClick={() => setShowReview((v) => !v)}
+          onClick={downloadPdf}
+          disabled={pdfBusy}
         >
-          {showReview ? "Hide detailed insights" : "View detailed insights →"}
+          {pdfBusy ? "Preparing PDF…" : "⬇ Download question paper (PDF)"}
         </button>
-
-        {showReview && (
-          <div className="v2-review">
-            {runtime.map((q, i) => {
-              const chosen = answers[i];
-              const isCorrect = chosen === q.correctIndex;
-              const isUnattempted = chosen == null;
-              const status = isUnattempted ? "unattempted" : isCorrect ? "correct" : "wrong";
-              const marks = isUnattempted ? 0 : isCorrect ? q.marks : -q.negative;
-              return (
-                <div key={q.id} className={`v2-rev-item ${status}`}>
-                  <div className="v2-rev-head">
-                    <span className="v2-rev-num">Q. {i + 1}</span>
-                    <span className={`v2-rev-tag ${status}`}>
-                      {isUnattempted ? "Unattempted" : isCorrect ? "Correct" : "Wrong"}
-                    </span>
-                    <span className="v2-rev-marks">
-                      {marks > 0 ? `+${marks}` : marks < 0 ? `${marks}` : "0"}
-                    </span>
-                  </div>
-                  <p
-                    className="v2-rev-q"
-                    dangerouslySetInnerHTML={{ __html: renderMathHtml(q.prompt) }}
-                  />
-                  {[q.imageUrl, ...extractImageUrls(q.prompt)]
-                    .filter((u, i, arr) => Boolean(u) && arr.indexOf(u) === i)
-                    .map((src, imgIdx) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        key={`${src}-${imgIdx}`}
-                        src={src}
-                        alt="Question diagram"
-                        className="v2-rev-img"
-                      />
-                    ))}
-                  <div className="v2-rev-opts">
-                    {q.options.map((opt, oi) => {
-                      const isAnswer = oi === q.correctIndex;
-                      const isChosen = chosen === oi;
-                      let cls = "";
-                      if (isAnswer) cls = "answer";
-                      else if (isChosen && !isCorrect) cls = "chosen";
-                      return (
-                        <div key={opt.id} className={`v2-rev-opt ${cls}`}>
-                          <span className="v2-rev-k">{OPTION_KEYS[oi]}</span>
-                          <span
-                            className="v2-rev-t"
-                            dangerouslySetInnerHTML={{ __html: renderMathHtml(opt.text) }}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {pdfError && <div className="v2-pdf-err">{pdfError}</div>}
 
         <Link href="/" className="v2-join v2-done">
           Done →
@@ -1397,6 +1313,23 @@ const CSS = `
   .v2-rev-t { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink-2); }
 
   .v2-done { margin-top: 4px; }
+
+  .v2-submitted-note {
+    border: 1px solid #2a251d;
+    background: #0b0908;
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #b8ad96;
+    margin-bottom: 18px;
+  }
+  .v2-pdf-err {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: #ff8a80;
+    margin: -10px 0 16px;
+  }
 
   /* ---------- MATH PREVIEW ---------- */
   .frac {
