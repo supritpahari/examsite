@@ -92,6 +92,63 @@ export interface SiteInfo {
   tagline: string;
 }
 
+export interface SiteControlFlags {
+  adminPanelEnabled: boolean;
+  websiteEnabled: boolean;
+  customErrorMessage: string;
+  customErrorTitle: string;
+}
+
+const DEFAULT_SITE_CONTROL_FLAGS: SiteControlFlags = {
+  adminPanelEnabled: true,
+  websiteEnabled: true,
+  customErrorMessage: "",
+  customErrorTitle: "",
+};
+
+const CONTROL_DOC = "control";
+const CONTROL_LS = "examsite-control-flags";
+
+export async function loadControlFlags(): Promise<SiteControlFlags> {
+  try {
+    const db: Firestore = getFirestoreDb();
+    const snap = await getDoc(doc(db, COLLECTION, CONTROL_DOC));
+    if (snap.exists()) {
+      const data = snap.data() as Partial<SiteControlFlags>;
+      const merged: SiteControlFlags = { ...DEFAULT_SITE_CONTROL_FLAGS, ...data };
+      persistControlLocal(merged);
+      return merged;
+    }
+  } catch {
+    /* fall through to local */
+  }
+  try {
+    const raw = localStorage.getItem(CONTROL_LS);
+    if (raw) return { ...DEFAULT_SITE_CONTROL_FLAGS, ...JSON.parse(raw) };
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_SITE_CONTROL_FLAGS;
+}
+
+export async function saveControlFlags(flags: SiteControlFlags): Promise<void> {
+  persistControlLocal(flags);
+  try {
+    const db: Firestore = getFirestoreDb();
+    await setDoc(doc(db, COLLECTION, CONTROL_DOC), flags);
+  } catch {
+    /* local only */
+  }
+}
+
+function persistControlLocal(flags: SiteControlFlags): void {
+  try {
+    localStorage.setItem(CONTROL_LS, JSON.stringify(flags));
+  } catch {
+    /* ignore */
+  }
+}
+
 const SITE_DOC = "site";
 const SITE_LS = "examsite-site-info";
 

@@ -15,6 +15,7 @@ export interface QuestionOption {
   id: string;
   text: string;
   correct: boolean;
+  imageUrl?: string;
 }
 
 export interface Question {
@@ -39,6 +40,7 @@ function toOption(raw: unknown, index: number): QuestionOption {
       id: typeof o.id === "string" && o.id ? o.id : fallbackId,
       text: typeof o.text === "string" ? o.text : String(o.text ?? ""),
       correct: Boolean(o.correct),
+      imageUrl: typeof o.imageUrl === "string" ? o.imageUrl : undefined,
     };
   }
   // Legacy docs may store options as plain strings.

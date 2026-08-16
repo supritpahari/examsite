@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, Fragment } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthState } from "@/lib/firebase/client";
 import { signOut } from "firebase/auth";
@@ -93,6 +92,10 @@ function NavIcon({ name }: { name: string }) {
     case "settings":
       return (
         <svg {...common}><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1" /></svg>
+      );
+    case "control":
+      return (
+        <svg {...common}><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
       );
     case "signout":
       return (
@@ -517,6 +520,8 @@ export default function AdminDashboard() {
         .ad-opt .k { width: 24px; height: 24px; border: 1px solid var(--rule); display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; flex: 0 0 auto; }
         .ad-opt.correct { color: var(--accent); }
         .ad-opt.correct .k { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .ad-opt-text { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .ad-opt-view { max-height: 48px; max-width: 120px; object-fit: contain; border: 1px solid var(--rule); }
 
         .ad-q-gen {
           font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
@@ -771,6 +776,17 @@ export default function AdminDashboard() {
         }
         .ad-submit:hover { background: var(--accent-2); border-color: var(--accent-2); }
         .ad-img-preview { max-height: 90px; margin-top: 10px; border: 1px solid var(--rule); }
+
+        .ad-opt-body { flex: 1; min-width: 0; }
+        .ad-opt-img-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+        .ad-opt-img-preview { max-height: 48px; max-width: 120px; border: 1px solid var(--rule); object-fit: contain; }
+        .ad-file.ad-file-sm { display: inline-block; padding: 6px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+        .ad-file-sm-remove {
+          background: transparent; border: 1px solid var(--rule); color: var(--ink-2);
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
+          letter-spacing: 0.08em; padding: 6px 10px; cursor: pointer;
+        }
+        .ad-file-sm-remove:hover { color: var(--accent); border-color: var(--accent); }
 
         .ad-modal-sub {
           font-size: 13px; line-height: 1.5; color: var(--ink-2);
@@ -1123,7 +1139,12 @@ export default function AdminDashboard() {
                   {q.options.map((o, i) => (
                     <div className={`ad-opt${o.correct ? " correct" : ""}`} key={o.id}>
                       <span className="k">{String.fromCharCode(65 + i)}</span>
-                      <span className="ad-opt-text"><MathPreview text={o.text} compact /></span>
+                      <span className="ad-opt-text">
+                        <MathPreview text={o.text} compact />
+                        {o.imageUrl && (
+                          <img className="ad-opt-view" src={o.imageUrl} alt={`option ${String.fromCharCode(65 + i)}`} />
+                        )}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1296,6 +1317,8 @@ function AddQuestionModal({
 
   const setOptText = (id: string, text: string) =>
     setOptions((prev) => prev.map((o) => (o.id === id ? { ...o, text } : o)));
+  const setOptImage = (id: string, imageUrl: string | undefined) =>
+    setOptions((prev) => prev.map((o) => (o.id === id ? { ...o, imageUrl } : o)));
   const toggleCorrect = (id: string) =>
     setOptions((prev) =>
       prev.map((o) =>
@@ -1333,8 +1356,34 @@ function AddQuestionModal({
     }
   };
 
+  const onOptionImage = async (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    try {
+      const form = new FormData();
+      form.append("image", f);
+      const res = await fetch(
+        "https://api.imgbb.com/1/upload?key=4125525efeb9a21fe49db324919cdeaf",
+        { method: "POST", body: form }
+      );
+      const data = (await res.json()) as {
+        success?: boolean;
+        data?: { url?: string; display_url?: string };
+      };
+      if (data.success && data.data?.url) {
+        setOptImage(id, data.data.url);
+      } else {
+        throw new Error("Upload failed");
+      }
+    } catch {
+      setOptImage(id, URL.createObjectURL(f));
+    } finally {
+      e.target.value = "";
+    }
+  };
+
   const save = () => {
-    const filled = options.filter((o) => o.text.trim().length > 0);
+    const filled = options.filter((o) => o.text.trim().length > 0 || Boolean(o.imageUrl));
     if (
       !prompt.trim() ||
       filled.length !== 4 ||
@@ -1435,28 +1484,6 @@ function AddQuestionModal({
         </div>
 
         <div className="ad-field" style={{ marginBottom: 16 }}>
-          <label>Options (4 required)</label>
-          {options.map((o, i) => (
-            <div className={`ad-opt-edit${o.correct ? " correct-row" : ""}`} key={o.id}>
-              <button
-                type="button"
-                className={`ad-opt-key${o.correct ? " correct" : ""}`}
-                onClick={() => toggleCorrect(o.id)}
-                aria-pressed={o.correct}
-                title={type === "single" ? "Select correct answer" : "Toggle correct answer"}
-              >
-                {String.fromCharCode(65 + i)}
-              </button>
-              <MathField
-                value={o.text}
-                onChange={(v) => setOptText(o.id, v)}
-                placeholder="Option text — e.g. $\\vec{F} = m\\vec{a}$"
-              />
-            </div>
-          ))}
-        </div>
-
-        <div className="ad-field" style={{ marginBottom: 20 }}>
           <label>Image (optional, max 1)</label>
           <label className="ad-file">
             {uploading
@@ -1472,6 +1499,52 @@ function AddQuestionModal({
               Stored: {imageUrl}
             </div>
           )}
+        </div>
+
+        <div className="ad-field" style={{ marginBottom: 16 }}>
+          <label>Options (4 required) — optional image per option</label>
+          {options.map((o, i) => (
+            <div className={`ad-opt-edit${o.correct ? " correct-row" : ""}`} key={o.id}>
+              <button
+                type="button"
+                className={`ad-opt-key${o.correct ? " correct" : ""}`}
+                onClick={() => toggleCorrect(o.id)}
+                aria-pressed={o.correct}
+                title={type === "single" ? "Select correct answer" : "Toggle correct answer"}
+              >
+                {String.fromCharCode(65 + i)}
+              </button>
+              <div className="ad-opt-body">
+                <MathField
+                  value={o.text}
+                  onChange={(v) => setOptText(o.id, v)}
+                  placeholder="Option text — e.g. $\\vec{F} = m\\vec{a}$"
+                />
+                <div className="ad-opt-img-row">
+                  {o.imageUrl && (
+                    <img className="ad-opt-img-preview" src={o.imageUrl} alt="option preview" />
+                  )}
+                  <label className="ad-file ad-file-sm">
+                    {o.imageUrl ? "Change image" : "+ Image"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => onOptionImage(e, o.id)}
+                    />
+                  </label>
+                  {o.imageUrl && (
+                    <button
+                      type="button"
+                      className="ad-file-sm-remove"
+                      onClick={() => setOptImage(o.id, undefined)}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
 
         <button className="ad-submit" onClick={save}>Save Question</button>

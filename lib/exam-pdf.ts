@@ -199,7 +199,7 @@ export interface PdfQuestion {
   marks: number;
   negative: number;
   imageUrl?: string;
-  options: { text: string }[];
+  options: { text: string; imageUrl?: string }[];
 }
 
 export interface PdfExamInfo {
@@ -369,6 +369,25 @@ export async function downloadExamQuestionsPdf(info: PdfExamInfo): Promise<void>
         size: 10,
         gap: 0.6,
       });
+      const optUrl = q.options[oi].imageUrl;
+      if (optUrl) {
+        const img = await fetchImageData(optUrl);
+        if (img) {
+          let w = Math.min(55, CONTENT_W);
+          let h = w / img.ratio;
+          if (h > 38) {
+            h = 38;
+            w = h * img.ratio;
+          }
+          ensureSpace(h + 1);
+          try {
+            doc.addImage(img.dataUrl, MARGIN + 14, y, w, h);
+          } catch {
+            /* unsupported format — skip */
+          }
+          y += h + 1.5;
+        }
+      }
     }
     y += 3.5;
   }

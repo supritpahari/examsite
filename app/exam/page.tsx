@@ -16,6 +16,7 @@ import { renderMathHtml, extractImageUrls } from "@/lib/render-math";
 interface RuntimeOption {
   id: string;
   text: string;
+  imageUrl?: string;
 }
 
 interface RuntimeQuestion {
@@ -43,7 +44,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 function buildRuntime(questions: Question[]): RuntimeQuestion[] {
   return shuffle(questions).map((q) => {
-    const options = q.options.map((o) => ({ id: o.id, text: o.text }));
+    const options = q.options.map((o) => ({ id: o.id, text: o.text, imageUrl: o.imageUrl }));
     const shuffled = shuffle(options);
     const correctIndex = shuffled.findIndex((o) => {
       const original = q.options.find((opt) => opt.id === o.id);
@@ -109,6 +110,8 @@ function ExamContent() {
   const [marked, setMarked] = useState<boolean[]>([]);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [focusWarnOpen, setFocusWarnOpen] = useState(false);
+  const blurCountRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -269,7 +272,12 @@ function ExamContent() {
       }
     };
     const onBlur = () => {
-      submit();
+      blurCountRef.current += 1;
+      if (blurCountRef.current >= 2) {
+        submit();
+      } else {
+        setFocusWarnOpen(true);
+      }
     };
     window.addEventListener("contextmenu", block);
     window.addEventListener("keydown", onKeyDown);
@@ -448,6 +456,9 @@ function ExamContent() {
                           className="v2-opt2-t"
                           dangerouslySetInnerHTML={{ __html: renderMathHtml(opt.text) }}
                         />
+                        {opt.imageUrl && (
+                          <img className="v2-opt2-img" src={opt.imageUrl} alt={`Option ${OPTION_KEYS[i]}`} />
+                        )}
                       </div>
                     );
                   })}
@@ -585,6 +596,32 @@ function ExamContent() {
           </div>
         </div>
       )}
+
+      {focusWarnOpen && (
+        <div className="v2-overlay" onClick={() => setFocusWarnOpen(false)}>
+          <div className="v2-dialog" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="v2-dialog-close"
+              onClick={() => setFocusWarnOpen(false)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h3 className="v2-cta-title">
+              Stay in the <em>test</em>
+            </h3>
+            <p className="v2-cta-desc">
+              You left the test window. If you leave again, your test will be
+              automatically submitted.
+            </p>
+            <div className="v2-modal-foot">
+              <button className="v2-submit" onClick={() => setFocusWarnOpen(false)}>
+                Return to test
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -694,7 +731,7 @@ function SubmittedScreen({
           marks: q.marks,
           negative: q.negative,
           imageUrl: q.imageUrl,
-          options: q.options.map((o) => ({ text: o.text })),
+          options: q.options.map((o) => ({ text: o.text, imageUrl: o.imageUrl })),
         })),
       });
     } catch {
@@ -961,6 +998,7 @@ const CSS = `
   }
   .v2-opt2.sel .v2-opt2-k { background: var(--accent); border-color: var(--accent); color: #fff; }
   .v2-opt2-t { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+  .v2-opt2-img { display: block; max-width: 180px; max-height: 120px; margin-top: 8px; object-fit: contain; border: 1px solid var(--rule); }
 
   .v2-nav {
     display: grid;
@@ -1211,10 +1249,10 @@ const CSS = `
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: transparent;
-    border: 1px solid var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--paper);
     color: var(--ink);
-    padding: 11px 18px;
+    padding: 13px 20px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     letter-spacing: 0.08em;
@@ -1222,7 +1260,7 @@ const CSS = `
     cursor: pointer;
     margin-bottom: 22px;
   }
-  .v2-insight-btn:hover { background: var(--ink); color: var(--paper); }
+  .v2-insight-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 
   .v2-review {
     border-top: 1px solid var(--rule);

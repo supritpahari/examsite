@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { MaintenanceWrapper } from "./providers/MaintenanceWrapper";
 
 export const metadata: Metadata = {
   title: "World of Physics - The exam before the exam.",
@@ -26,7 +27,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <MaintenanceWrapper>{children}</MaintenanceWrapper>
+      </body>
     </html>
   );
 }

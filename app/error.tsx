@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { loadControlFlags } from "@/lib/settings";
 
 export default function Error({
   error,
@@ -10,9 +11,21 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const [customTitle, setCustomTitle] = useState<string>("");
+  const [customMessage, setCustomMessage] = useState<string>("");
+
   useEffect(() => {
     console.error(error);
+    loadControlFlags().then((flags) => {
+      setCustomTitle(flags.customErrorTitle || "");
+      setCustomMessage(flags.customErrorMessage || "");
+    });
   }, [error]);
+
+  const title = customTitle || "Something <em style={{ color: 'oklch(0.52 0.20 25)' }}>went wrong</em>";
+  const message =
+    customMessage ||
+    "The page hit an unexpected error. Your data is safe — try reloading this view.";
 
   return (
     <div
@@ -38,9 +51,8 @@ export default function Error({
           fontSize: 34,
           lineHeight: 1.1,
         }}
-      >
-        Something <em style={{ color: "oklch(0.52 0.20 25)" }}>went wrong</em>
-      </div>
+        dangerouslySetInnerHTML={{ __html: title }}
+      />
       <p
         style={{
           fontFamily: "'JetBrains Mono', monospace",
@@ -53,8 +65,7 @@ export default function Error({
           margin: 0,
         }}
       >
-        The page hit an unexpected error. Your data is safe — try reloading this
-        view.
+        {message}
       </p>
       {error?.digest && (
         <p
@@ -68,8 +79,7 @@ export default function Error({
           Error ref: {error.digest}
         </p>
       )}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
-        <button
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>        <button
           onClick={reset}
           style={{
             background: "oklch(0.52 0.20 25)",

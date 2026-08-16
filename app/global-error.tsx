@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { loadControlFlags } from "@/lib/settings";
 
 export default function GlobalError({
   error,
@@ -9,9 +10,21 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const [customTitle, setCustomTitle] = useState<string>("");
+  const [customMessage, setCustomMessage] = useState<string>("");
+
   useEffect(() => {
     console.error(error);
+    loadControlFlags().then((flags) => {
+      setCustomTitle(flags.customErrorTitle || "");
+      setCustomMessage(flags.customErrorMessage || "");
+    });
   }, [error]);
+
+  const title = customTitle || "Something <em style={{ color: 'oklch(0.52 0.20 25)' }}>went wrong</em>";
+  const message =
+    customMessage ||
+    "The application hit an unexpected error. Please try again.";
 
   return (
     <html lang="en">
@@ -37,9 +50,8 @@ export default function GlobalError({
             fontSize: 34,
             lineHeight: 1.1,
           }}
-        >
-          Something <em style={{ color: "oklch(0.52 0.20 25)" }}>went wrong</em>
-        </div>
+          dangerouslySetInnerHTML={{ __html: title }}
+        />
         <p
           style={{
             fontFamily: "'JetBrains Mono', monospace",
@@ -52,7 +64,7 @@ export default function GlobalError({
             margin: 0,
           }}
         >
-          The application hit an unexpected error. Please try again.
+          {message}
         </p>
         <button
           onClick={reset}

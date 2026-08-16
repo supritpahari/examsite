@@ -294,15 +294,22 @@ function AdminStudentAnalysis() {
                                         ? "chosen"
                                         : "";
                                     return (
-                                      <div key={o.id} className={`ads-q-opt ${cls}`}>
-                                        <span className="ads-q-k">{KEYS[oi]}</span>
-                                        <span
-                                          className="ads-q-t"
-                                          dangerouslySetInnerHTML={{
-                                            __html: renderMathHtml(o.text),
-                                          }}
-                                        />
-                                      </div>
+<div key={o.id} className={`ads-q-opt ${cls}`}>
+                                          <span className="ads-q-k">{KEYS[oi]}</span>
+                                          <span
+                                            className="ads-q-t"
+                                            dangerouslySetInnerHTML={{
+                                              __html: renderMathHtml(o.text),
+                                            }}
+                                          />
+                                          {o.imageUrl && (
+                                            <img
+                                              className="ads-q-opt-img"
+                                              src={o.imageUrl}
+                                              alt={`Option ${KEYS[oi]}`}
+                                            />
+                                          )}
+                                        </div>
                                     );
                                   })}
                                 </div>
@@ -481,6 +488,7 @@ const CSS = `
   .ads-q-opt.answer .ads-q-k { background: #0f7a3d; border-color: #0f7a3d; color: #fff; }
   .ads-q-opt.chosen .ads-q-k { background: var(--accent); border-color: var(--accent); color: #fff; }
   .ads-q-t { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink-2); }
+  .ads-q-opt-img { display: block; max-width: 150px; max-height: 100px; margin-top: 6px; object-fit: contain; border: 1px solid var(--rule); }
 
   /* math rendering (lib/render-math output) */
   .frac { display: inline-flex; flex-direction: column; text-align: center; vertical-align: middle; margin: 0 3px; line-height: 1.1; }
