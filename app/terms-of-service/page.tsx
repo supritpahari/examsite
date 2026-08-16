@@ -130,7 +130,7 @@ export default function TermsOfServicePage() {
       `}</style>
 
       <article className="v2-doc">
-        <Link href="/" className="v2-back">← Back to ExamSite</Link>
+        <Link href="/" className="v2-back">← Back to World of Physics</Link>
 
         <div className="v2-page-eyebrow">§ Legal · Terms</div>
         <h1 className="v2-page-h1">Terms of <em>Service</em></h1>
@@ -138,14 +138,14 @@ export default function TermsOfServicePage() {
         <div className="v2-rule" />
 
         <p>
-          These Terms of Service (&quot;Terms&quot;) govern your use of ExamSite, a practice
+          These Terms of Service (&quot;Terms&quot;) govern your use of World of Physics, a practice
           rehearsal platform for the JEE and NEET computer-based test portals operated by
-          Mr. Biman Dhawa. By accessing or using ExamSite you agree to these Terms.
+          Mr. Biman Dhawa. By accessing or using World of Physics you agree to these Terms.
         </p>
 
         <h2>§ 1 · Use of the Service</h2>
         <ul>
-          <li>ExamSite is provided for <strong>practice and preparation only</strong>.</li>
+          <li>World of Physics is provided for <strong>practice and preparation only</strong>.</li>
           <li>
             You must be at least 13 years old, or have parental permission, to use the
             service.
@@ -158,7 +158,7 @@ export default function TermsOfServicePage() {
 
         <h2>§ 2 · Not an Official Portal</h2>
         <p>
-          ExamSite is <strong>not affiliated with, endorsed by, or connected to</strong> the
+          World of Physics is <strong>not affiliated with, endorsed by, or connected to</strong> the
           National Testing Agency (NTA) or any examination authority. It is an independent
           rehearsal tool designed to familiarize students with the CBT interface.
         </p>
@@ -180,7 +180,7 @@ export default function TermsOfServicePage() {
 
         <h2>§ 5 · Intellectual Property</h2>
         <p>
-          The ExamSite design, software, and original content are owned by Mr. Biman Dhawa
+          The World of Physics design, software, and original content are owned by Mr. Biman Dhawa
           and its developers. Practice questions are provided for study; respect any
           third-party rights in source material.
         </p>
@@ -194,14 +194,14 @@ export default function TermsOfServicePage() {
 
         <h2>§ 7 · Limitation of Liability</h2>
         <p>
-          To the maximum extent permitted by law, ExamSite and its operator shall not be
+          To the maximum extent permitted by law, World of Physics and its operator shall not be
           liable for any indirect, incidental, or consequential damages arising from your use
           of the service.
         </p>
 
         <h2>§ 8 · Termination</h2>
         <p>
-          You may stop using ExamSite at any time. We may discontinue or modify the service,
+          You may stop using World of Physics at any time. We may discontinue or modify the service,
           or end your access, with or without notice, for any reason.
         </p>
 

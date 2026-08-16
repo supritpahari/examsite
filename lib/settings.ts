@@ -96,7 +96,7 @@ const SITE_DOC = "site";
 const SITE_LS = "examsite-site-info";
 
 export const DEFAULT_SITE_INFO: SiteInfo = {
-  siteName: "ExamSite",
+  siteName: "World of Physics",
   contactName: "Mr. Biman Dhawa",
   phone: "+91 00000 00000",
   email: "hello@examsite.in",

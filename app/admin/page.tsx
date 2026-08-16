@@ -40,6 +40,7 @@ import {
 const NAV = [
   { key: "questions", label: "Questions" },
   { key: "exams", label: "Exams" },
+  { key: "students", label: "Students" },
   { key: "information", label: "Information" },
   { key: "settings", label: "Settings" },
 ];
@@ -80,6 +81,10 @@ function NavIcon({ name }: { name: string }) {
     case "faculty":
       return (
         <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5 20a7 7 0 0 1 14 0" /></svg>
+      );
+    case "students":
+      return (
+        <svg {...common}><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><path d="M16 5.4a3.2 3.2 0 1 1 0 5.6" /><path d="M17.5 14.2a5.5 5.5 0 0 1 3 4.8" /></svg>
       );
     case "information":
       return (
@@ -1031,6 +1036,14 @@ export default function AdminDashboard() {
         .ad-submit:disabled { opacity: 0.5; cursor: not-allowed; }
         .ad-submit-inline { display: inline-flex; }
 
+        .ad-stu-quick { margin-top: 26px; max-width: 860px; }
+        .ad-stu-quick-list { display: flex; flex-wrap: wrap; gap: 8px; }
+        .ad-stu-quick-btn {
+          cursor: pointer; background: var(--paper); padding: 9px 14px;
+          text-transform: none; font-size: 12px; letter-spacing: 0.04em;
+        }
+        .ad-stu-quick-btn:hover { color: var(--accent); border-color: var(--accent); }
+
         @media (max-width: 720px) {
           .ad-root { grid-template-columns: 1fr; }
           .ad-side { display: none; }
@@ -1043,7 +1056,7 @@ export default function AdminDashboard() {
           {collapsed ? "»" : "«"}
         </button>
         <div className="ad-brand">
-          <span className="ad-brand-text">Exam<em>Site</em></span>
+          <span className="ad-brand-text">World of <em>Physics</em></span>
         </div>
         {NAV.map((n) => (
           <button
@@ -1140,12 +1153,19 @@ export default function AdminDashboard() {
             onManageQuestions={openManageQuestions}
             onCopyLink={copyExamLink}
             onCopyCode={copyExamCode}
+            onShowResults={(exam) =>
+              router.push(`/admin/results?exam=${encodeURIComponent(exam.code)}`)
+            }
           />
+        )}
+
+        {active === "students" && (
+          <StudentsPanel attemptsMap={attemptsMap} />
         )}
 
         {active === "information" && <InformationPanel siteInfo={siteInfo} onSaved={setSiteInfo} />}
 
-        {active !== "questions" && active !== "settings" && active !== "exams" && active !== "information" && (
+        {active !== "questions" && active !== "settings" && active !== "exams" && active !== "students" && active !== "information" && (
           <div className="ad-head">
             <h1 className="ad-title">{NAV.find((n) => n.key === active)?.label}</h1>
             <span className="ad-count">coming soon</span>
@@ -1621,7 +1641,7 @@ function parseMath(str: string, keyBase = "m"): React.ReactNode[] {
 }
 
 function MathPreview({ text, compact }: { text: string; compact?: boolean }) {
-  if (!text.trim()) return null;
+  if (typeof text !== "string" || !text.trim()) return null;
   // Render the whole string as math-capable text, treating $...$ as explicit
   // math regions but ALSO parsing LaTeX commands outside of $ delimiters.
   const segments = text.split(/(\$[^$]*\$)/g).filter((s) => s !== "");
@@ -2072,7 +2092,7 @@ function ExplanationDialog({
       );
     } else {
       window.location.href = `mailto:?subject=${encodeURIComponent(
-        "AI Explanation · ExamSite"
+        "AI Explanation · World of Physics"
       )}&body=${encoded}`;
     }
   };
@@ -2137,6 +2157,7 @@ function ExamsPanel({
   onManageQuestions,
   onCopyLink,
   onCopyCode,
+  onShowResults,
 }: {
   exams: AdminExam[];
   questionMap: Record<string, string[]>;
@@ -2147,6 +2168,7 @@ function ExamsPanel({
   onManageQuestions: (exam: AdminExam) => void;
   onCopyLink: (exam: AdminExam) => void;
   onCopyCode: (exam: AdminExam) => void;
+  onShowResults: (exam: AdminExam) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -2191,7 +2213,7 @@ function ExamsPanel({
 
       <div className="ad-exam-list">
         {exams.map((exam) => {
-          const meta = EXAM_STATUS_META[exam.status];
+          const meta = EXAM_STATUS_META[exam.status] ?? EXAM_STATUS_META.draft;
           const qIds = questionMap[exam.id] ?? [];
           const count = qIds.length;
           const summary = attemptsMap[exam.id];
@@ -2228,6 +2250,7 @@ function ExamsPanel({
               </div>
               <div className="ad-exam-side">
                 <div className="ad-exam-actions">
+                  <button className="ad-exam-btn" onClick={() => onShowResults(exam)}>Results</button>
                   <button className="ad-exam-btn" onClick={() => onEdit(exam)}>Edit</button>
                   <button className="ad-exam-btn" onClick={() => onManageQuestions(exam)}>
                     {count ? "Questions" : "Add Questions"}
@@ -2304,6 +2327,101 @@ function ExamsPanel({
   );
 }
 
+function StudentsPanel({
+  attemptsMap,
+}: {
+  attemptsMap: Record<string, ExamAttemptSummary>;
+}) {
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+
+  const knownNames = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const s of Object.values(attemptsMap)) {
+      for (const a of s.attempts) {
+        const display = a.studentName.trim();
+        if (!display) continue;
+        const key = display.toLowerCase();
+        if (!byKey.has(key)) byKey.set(key, display);
+      }
+    }
+    return Array.from(byKey.values()).sort((a, b) => a.localeCompare(b));
+  }, [attemptsMap]);
+
+  const open = (name: string) => {
+    const target = name.trim();
+    if (!target) return;
+    router.push(`/admin/students?name=${encodeURIComponent(target)}`);
+  };
+
+  return (
+    <>
+      <div className="ad-head">
+        <h1 className="ad-title">Student <em>Analysis</em></h1>
+        <span className="ad-count">combined across all exams</span>
+      </div>
+
+      <div className="ad-info-card" style={{ maxWidth: 620 }}>
+        <p className="ad-info-sub">
+          Type a student&apos;s full name to open their combined performance page across
+          every exam they have attempted. Matching is <strong>case-insensitive</strong>
+          (e.g. “riya sharma”, “RIYA SHARMA” and “Riya Sharma” all open the same student).
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            open(query);
+          }}
+        >
+          <div className="ad-field" style={{ marginBottom: 14 }}>
+            <label>Student name</label>
+            <input
+              type="text"
+              list="ad-students-list"
+              placeholder="e.g. Riya Sharma"
+              value={query}
+              autoComplete="off"
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <datalist id="ad-students-list">
+              {knownNames.map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+          </div>
+          <button
+            type="submit"
+            className="ad-submit ad-submit-inline"
+            disabled={!query.trim()}
+          >
+            View analysis →
+          </button>
+        </form>
+      </div>
+
+      {knownNames.length > 0 && (
+        <div className="ad-stu-quick">
+          <div className="ad-attempts-head">
+            On record · {knownNames.length} student{knownNames.length === 1 ? "" : "s"}
+          </div>
+          <div className="ad-stu-quick-list">
+            {knownNames.map((n) => (
+              <button
+                key={n}
+                type="button"
+                className="ad-chip ad-stu-quick-btn"
+                onClick={() => open(n)}
+              >
+                {n} →
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function InformationPanel({
   siteInfo,
   onSaved,
@@ -2332,7 +2450,7 @@ function InformationPanel({
   };
 
   const fields: { key: keyof SiteInfo; label: string; placeholder: string; type?: string }[] = [
-    { key: "siteName", label: "Site name", placeholder: "ExamSite" },
+    { key: "siteName", label: "Site name", placeholder: "World of Physics" },
     { key: "contactName", label: "Contact person", placeholder: "Mr. Biman Dhawa · Physics" },
     { key: "phone", label: "Phone number", placeholder: "+91 00000 00000", type: "tel" },
     { key: "email", label: "Email", placeholder: "hello@examsite.in", type: "email" },

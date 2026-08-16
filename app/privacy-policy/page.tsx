@@ -130,7 +130,7 @@ export default function PrivacyPolicyPage() {
       `}</style>
 
       <article className="v2-doc">
-        <Link href="/" className="v2-back">← Back to ExamSite</Link>
+        <Link href="/" className="v2-back">← Back to World of Physics</Link>
 
         <div className="v2-page-eyebrow">§ Legal · Privacy</div>
         <h1 className="v2-page-h1">Privacy <em>Policy</em></h1>
@@ -138,10 +138,10 @@ export default function PrivacyPolicyPage() {
         <div className="v2-rule" />
 
         <p>
-          ExamSite (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) is a practice
+          World of Physics (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) is a practice
           rehearsal platform for the JEE and NEET computer-based test portals, operated by
           Mr. Biman Dhawa. This Privacy Policy explains what information we collect, how we
-          use it, and the choices you have. By using ExamSite you agree to the practices
+          use it, and the choices you have. By using World of Physics you agree to the practices
           described here.
         </p>
 
@@ -202,7 +202,7 @@ export default function PrivacyPolicyPage() {
 
         <h2>§ 7 · Children&apos;s Privacy</h2>
         <p>
-          ExamSite is intended for students preparing for entrance exams. We do not
+          World of Physics is intended for students preparing for entrance exams. We do not
           knowingly collect personal data from children without parental consent where
           required by law.
         </p>
