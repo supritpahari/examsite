@@ -3,10 +3,13 @@ import {
   collection,
   addDoc,
   deleteDoc,
+  deleteField,
   doc,
+  getDoc,
   getDocs,
   serverTimestamp,
-  type QueryDocumentSnapshot,
+  setDoc,
+  type DocumentSnapshot,
 } from "firebase/firestore";
 
 export type QuestionType = "mcq" | "single";
@@ -32,6 +35,15 @@ export interface Question {
 
 const COLLECTION = "questions";
 
+function toStoreOptions(options: QuestionOption[]): Record<string, unknown>[] {
+  return options.map((o) => ({
+    id: o.id,
+    text: o.text,
+    correct: o.correct,
+    ...(o.imageUrl ? { imageUrl: o.imageUrl } : {}),
+  }));
+}
+
 function toOption(raw: unknown, index: number): QuestionOption {
   const fallbackId = String.fromCharCode(97 + index); // a, b, c, d…
   if (raw && typeof raw === "object") {
@@ -47,8 +59,8 @@ function toOption(raw: unknown, index: number): QuestionOption {
   return { id: fallbackId, text: raw == null ? "" : String(raw), correct: false };
 }
 
-function fromDoc(doc: QueryDocumentSnapshot): Question {
-  const data = doc.data();
+function fromDoc(doc: DocumentSnapshot): Question {
+  const data = doc.data() ?? {};
   return {
     id: doc.id,
     type: data.type === "mcq" ? "mcq" : "single",
@@ -88,7 +100,7 @@ export async function addQuestion(
   const data: Record<string, unknown> = {
     type: q.type,
     prompt: q.prompt,
-    options: q.options,
+    options: toStoreOptions(q.options),
     marks: q.marks,
     negative: q.negative,
     createdAt: serverTimestamp(),
@@ -97,6 +109,31 @@ export async function addQuestion(
   if (q.imageUrl) data.imageUrl = q.imageUrl;
   const ref = await addDoc(collection(db, COLLECTION), data);
   return { ...q, id: ref.id };
+}
+
+export async function fetchQuestion(id: string): Promise<Question | null> {
+  const db = getFirestoreDb();
+  const snap = await getDoc(doc(db, COLLECTION, id));
+  if (!snap.exists()) return null;
+  return fromDoc(snap);
+}
+
+export async function updateQuestion(
+  id: string,
+  q: Omit<Question, "id" | "createdAt">
+): Promise<Question> {
+  const db = getFirestoreDb();
+  const data: Record<string, unknown> = {
+    type: q.type,
+    prompt: q.prompt,
+    options: toStoreOptions(q.options),
+    marks: q.marks,
+    negative: q.negative,
+    chapter: q.chapter || deleteField(),
+    imageUrl: q.imageUrl || deleteField(),
+  };
+  await setDoc(doc(db, COLLECTION, id), data, { merge: true });
+  return { ...q, id };
 }
 
 export async function deleteQuestion(id: string): Promise<void> {

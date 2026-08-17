@@ -2,6 +2,8 @@ import { jsPDF } from "jspdf";
 import { extractImageUrls } from "./render-math";
 import { DEJAVU_SANS_REGULAR_B64 } from "./fonts/dejavu-sans";
 import { DEJAVU_SANS_BOLD_B64 } from "./fonts/dejavu-sans-bold";
+import { HIND_SILIGURI_REGULAR_B64 } from "./fonts/hind-siliguri-reg";
+import { HIND_SILIGURI_BOLD_B64 } from "./fonts/hind-siliguri-bold";
 
 /* ------------------------------------------------------------------ *
  * LaTeX-ish source → readable Unicode plain text for the PDF writer. *
@@ -216,6 +218,16 @@ const MARGIN = 16;
 const CONTENT_W = PAGE.w - MARGIN * 2;
 const BOTTOM = PAGE.h - 14;
 
+/** Bengali script (U+0980–U+09FF). DejaVu Sans has no Bengali glyphs, so we
+ *  switch to Hind Siliguri whenever a block contains Bengali characters. */
+const BENGALI_RE = /[\u0980-\u09FF]/;
+function hasBengali(s: string): boolean {
+  return BENGALI_RE.test(s);
+}
+function pickFamily(s: string): string {
+  return hasBengali(s) ? "HindSiliguri" : "DejaVuSans";
+}
+
 async function fetchImageData(
   url: string
 ): Promise<{ dataUrl: string; ratio: number } | null> {
@@ -248,6 +260,10 @@ export async function downloadExamQuestionsPdf(info: PdfExamInfo): Promise<void>
   doc.addFont("DejaVuSans.ttf", "DejaVuSans", "normal");
   doc.addFileToVFS("DejaVuSans-Bold.ttf", DEJAVU_SANS_BOLD_B64);
   doc.addFont("DejaVuSans-Bold.ttf", "DejaVuSans", "bold");
+  doc.addFileToVFS("HindSiliguri.ttf", HIND_SILIGURI_REGULAR_B64);
+  doc.addFont("HindSiliguri.ttf", "HindSiliguri", "normal");
+  doc.addFileToVFS("HindSiliguri-Bold.ttf", HIND_SILIGURI_BOLD_B64);
+  doc.addFont("HindSiliguri-Bold.ttf", "HindSiliguri", "bold");
   doc.setFont("DejaVuSans", "normal");
 
   let y = MARGIN;
@@ -259,11 +275,9 @@ export async function downloadExamQuestionsPdf(info: PdfExamInfo): Promise<void>
       doc.setFont("DejaVuSans", "normal");
       doc.setFontSize(8.5);
       doc.setTextColor(140, 132, 115);
-      doc.text(
-        `World of Physics · ${info.examTitle}`,
-        MARGIN,
-        PAGE.h - 8
-      );
+      const brand = `World of Physics · ${info.examTitle}`;
+      doc.setFont(pickFamily(brand), "normal");
+      doc.text(brand, MARGIN, PAGE.h - 8);
       const label = `Page ${p} of ${total}`;
       doc.text(label, PAGE.w - MARGIN - doc.getTextWidth(label), PAGE.h - 8);
       doc.setTextColor(20, 17, 13);
@@ -284,11 +298,12 @@ export async function downloadExamQuestionsPdf(info: PdfExamInfo): Promise<void>
     const size = opts.size ?? 10.5;
     const indent = opts.indent ?? 0;
     const gap = opts.gap ?? 1.6;
-    doc.setFont("DejaVuSans", opts.bold ? "bold" : "normal");
+    const bn = hasBengali(text);
+    doc.setFont(pickFamily(text), opts.bold ? "bold" : "normal");
     doc.setFontSize(size);
     if (opts.color) doc.setTextColor(...opts.color);
     const lines = doc.splitTextToSize(text, CONTENT_W - indent) as string[];
-    const lineH = size * 0.42;
+    const lineH = size * (bn ? 0.48 : 0.42);
     for (const line of lines) {
       ensureSpace(lineH);
       doc.text(line, MARGIN + indent, y);

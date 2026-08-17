@@ -969,7 +969,7 @@ const CSS = `
     color: #f4ecd8;
     margin: 0 0 24px;
   }
-  .v2-q-img { max-width: 100%; border: 1px solid #2a251d; margin-bottom: 20px; display: block; }
+  .v2-q-img { max-width: 100%; max-height: 240px; object-fit: contain; border: 1px solid #2a251d; margin: 0 auto 20px; display: block; }
   .v2-q-imgs { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
   .v2-q-imgs .v2-q-img { margin-bottom: 0; }
 
@@ -1317,7 +1317,7 @@ const CSS = `
     color: var(--ink);
     margin: 0 0 12px;
   }
-  .v2-rev-img { max-width: 100%; border: 1px solid var(--rule); margin: 0 0 12px; display: block; }
+  .v2-rev-img { max-width: 100%; max-height: 220px; object-fit: contain; border: 1px solid var(--rule); margin: 0 auto 12px; display: block; }
   .v2-rev-opts { display: flex; flex-direction: column; gap: 6px; }
   .v2-rev-opt {
     display: flex;

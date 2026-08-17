@@ -6,11 +6,8 @@ import { onAuthState } from "@/lib/firebase/client";
 import { signOut } from "firebase/auth";
 import {
   fetchQuestions,
-  addQuestion as saveQuestion,
   deleteQuestion,
   type Question,
-  type QuestionOption as Option,
-  type QuestionType,
 } from "@/lib/questions";
 import {
   fetchExams,
@@ -106,40 +103,11 @@ function NavIcon({ name }: { name: string }) {
   }
 }
 
-const PLACEHOLDER = "Type using LaTeX-style syntax: $x^2$, $\\frac{a}{b}$, $\\vec{v}$, $\\sqrt{x}$";
-
-interface ToolItem {
-  label: string;
-  title: string;
-  snippet: string;
-  wrap?: boolean;
-}
-
-const TOOLBAR: ToolItem[] = [
-  { label: "x²", title: "Exponent", snippet: "^{}", wrap: true },
-  { label: "x₂", title: "Subscript", snippet: "_{}", wrap: true },
-  { label: "√", title: "Square root", snippet: "\\sqrt{}", wrap: true },
-  { label: "a/b", title: "Fraction", snippet: "\\frac{}{}", wrap: true },
-  { label: "v⃗", title: "Vector", snippet: "\\vec{}", wrap: true },
-  { label: "î", title: "Unit vector (cap)", snippet: "\\hat{}", wrap: true },
-  { label: "∫", title: "Integral", snippet: "\\int_{}^{} " },
-  { label: "∑", title: "Summation", snippet: "\\sum_{}^{} " },
-  { label: "lim", title: "Limit", snippet: "\\lim_{x \\to } " },
-  { label: "α", title: "Alpha", snippet: "\\alpha " },
-  { label: "β", title: "Beta", snippet: "\\beta " },
-  { label: "θ", title: "Theta", snippet: "\\theta " },
-  { label: "π", title: "Pi", snippet: "\\pi " },
-  { label: "Δ", title: "Delta", snippet: "\\Delta " },
-  { label: "∞", title: "Infinity", snippet: "\\infty " },
-  { label: "$…$", title: "Math mode", snippet: "$ $", wrap: true },
-];
-
 export default function AdminDashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [active, setActive] = useState("questions");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
   const [examModalOpen, setExamModalOpen] = useState(false);
   const [editingExam, setEditingExam] = useState<AdminExam | null>(null);
   const [exams, setExams] = useState<AdminExam[]>([]);
@@ -158,6 +126,9 @@ export default function AdminDashboard() {
     loading: boolean;
     error: string;
   } | null>(null);
+  const [qSearch, setQSearch] = useState("");
+  const [qChapter, setQChapter] = useState("all");
+  const [qSort, setQSort] = useState("newest");
 
   const router = useRouter();
 
@@ -196,12 +167,6 @@ export default function AdminDashboard() {
     });
     return unsub;
   }, [router]);
-
-  const addQuestion = async (q: Omit<Question, "id" | "createdAt">) => {
-    const saved = await saveQuestion(q);
-    setQuestions((prev) => [saved, ...prev]);
-    setModalOpen(false);
-  };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("Delete this question? It will be removed from every exam that uses it. This cannot be undone.")) return;
@@ -242,11 +207,6 @@ export default function AdminDashboard() {
     } catch {
       fetchExams().then(setExams).catch(() => {});
     }
-  };
-
-  const openNewExam = () => {
-    setEditingExam(null);
-    setExamModalOpen(true);
   };
 
   const openEditExam = (exam: AdminExam) => {
@@ -335,6 +295,52 @@ export default function AdminDashboard() {
   };
 
   const closeExplain = () => setExplain(null);
+
+  const questionChapters = useMemo(() => {
+    const chapters = new Set<string>();
+    for (const q of questions) {
+      const c = q.chapter?.trim();
+      if (c) chapters.add(c);
+    }
+    return Array.from(chapters).sort((a, b) => a.localeCompare(b));
+  }, [questions]);
+
+  const visibleQuestions = useMemo(() => {
+    const term = qSearch.trim().toLowerCase();
+    let list = questions;
+    if (term) {
+      list = list.filter(
+        (q) =>
+          q.prompt.toLowerCase().includes(term) ||
+          q.options.some((o) => o.text.toLowerCase().includes(term)) ||
+          (q.chapter ?? "").toLowerCase().includes(term)
+      );
+    }
+    if (qChapter !== "all") {
+      list = list.filter((q) => (q.chapter?.trim() || "Uncategorized") === qChapter);
+    }
+    const sorted = [...list];
+    switch (qSort) {
+      case "chapter":
+        sorted.sort((a, b) => (a.chapter ?? "").localeCompare(b.chapter ?? ""));
+        break;
+      case "type":
+        sorted.sort((a, b) => a.type.localeCompare(b.type));
+        break;
+      case "marks":
+        sorted.sort((a, b) => b.marks - a.marks);
+        break;
+      case "newest":
+      default:
+        sorted.sort((a, b) => {
+          const ta = (a.createdAt as { seconds?: number } | undefined)?.seconds ?? 0;
+          const tb = (b.createdAt as { seconds?: number } | undefined)?.seconds ?? 0;
+          return tb - ta;
+        });
+        break;
+    }
+    return sorted;
+  }, [questions, qSearch, qChapter, qSort]);
 
   if (checking || !authed) {
     return (
@@ -507,12 +513,44 @@ export default function AdminDashboard() {
           letter-spacing: 0.14em; color: var(--accent); border: 1px solid var(--rule); padding: 3px 8px;
         }
         .ad-q-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); }
+        .ad-q-chapter {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
+          letter-spacing: 0.1em; color: var(--ink-2); border: 1px solid var(--rule);
+          background: var(--paper-2); padding: 3px 8px;
+        }
+        .ad-q-toolbar {
+          display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap;
+        }
+        .ad-q-search { flex: 1 1 260px; min-width: 0; }
+        .ad-q-search input {
+          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
+          padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink); outline: none;
+        }
+        .ad-q-search input:focus { background: #fff; }
+        .ad-q-select select {
+          background: transparent; border: 1px solid var(--ink); border-radius: 0;
+          padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink);
+          outline: none; cursor: pointer; max-width: 190px;
+        }
+        .ad-q-select select:focus { background: #fff; }
+        .ad-q-clear {
+          background: transparent; border: 1px solid var(--rule); color: var(--dim);
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
+          letter-spacing: 0.08em; padding: 10px 12px; cursor: pointer;
+        }
+        .ad-q-clear:hover { color: var(--accent); border-color: var(--accent); }
         .ad-q-del {
           font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
           letter-spacing: 0.1em; color: var(--dim); background: transparent;
           border: 1px solid var(--rule); padding: 4px 10px; cursor: pointer; transition: all 0.15s ease;
         }
         .ad-q-del:hover { color: #fff; background: #b3261e; border-color: #b3261e; }
+        .ad-q-edit {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
+          letter-spacing: 0.1em; color: var(--dim); background: transparent;
+          border: 1px solid var(--rule); padding: 4px 10px; cursor: pointer; transition: all 0.15s ease;
+        }
+        .ad-q-edit:hover { color: var(--accent); border-color: var(--accent); }
         .ad-q-prompt { font-family: 'Instrument Serif', serif; font-size: 19px; line-height: 1.4; color: var(--ink); margin-bottom: 14px; }
         .ad-q-img { max-height: 160px; border: 1px solid var(--rule); margin-bottom: 14px; }
         .ad-opts { display: grid; gap: 8px; }
@@ -1096,7 +1134,52 @@ export default function AdminDashboard() {
           <>
             <div className="ad-head">
               <h1 className="ad-title">All <em>Questions</em></h1>
-              <span className="ad-count">{questions.length} in bank</span>
+              <span className="ad-count">
+                {qSearch || qChapter !== "all"
+                  ? `${visibleQuestions.length} of ${questions.length}`
+                  : `${questions.length} in bank`}
+              </span>
+            </div>
+
+            <div className="ad-q-toolbar">
+              <div className="ad-q-search">
+                <input
+                  type="text"
+                  value={qSearch}
+                  placeholder="Search questions, options or chapters…"
+                  onChange={(e) => setQSearch(e.target.value)}
+                  aria-label="Search questions"
+                />
+              </div>
+              <div className="ad-q-select">
+                <select value={qChapter} onChange={(e) => setQChapter(e.target.value)} aria-label="Filter by chapter">
+                  <option value="all">All chapters</option>
+                  {questionChapters.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                  <option value="Uncategorized">Uncategorized</option>
+                </select>
+              </div>
+              <div className="ad-q-select">
+                <select value={qSort} onChange={(e) => setQSort(e.target.value)} aria-label="Sort questions">
+                  <option value="newest">Newest first</option>
+                  <option value="chapter">Sort by chapter</option>
+                  <option value="type">Sort by type</option>
+                  <option value="marks">Highest marks</option>
+                </select>
+              </div>
+              {(qSearch || qChapter !== "all") && (
+                <button
+                  type="button"
+                  className="ad-q-clear"
+                  onClick={() => {
+                    setQSearch("");
+                    setQChapter("all");
+                  }}
+                >
+                  Clear
+                </button>
+              )}
             </div>
 
             {loadingQuestions && <div className="ad-empty">Loading questions…</div>}
@@ -1107,12 +1190,25 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {questions.map((q) => (
+            {!loadingQuestions && questions.length > 0 && visibleQuestions.length === 0 && (
+              <div className="ad-empty">No questions match your filters.</div>
+            )}
+
+            {visibleQuestions.map((q) => (
               <div className="ad-q" key={q.id}>
                 <div className="ad-q-top">
                   <span className="ad-q-type">{q.type === "mcq" ? "MCQ · Multi" : "Single Correct"}</span>
                   <span className="ad-q-top-right">
+                    {q.chapter && <span className="ad-q-chapter">{q.chapter}</span>}
                     <span className="ad-q-meta">+{q.marks} / -{q.negative}</span>
+                    <button
+                      type="button"
+                      className="ad-q-edit"
+                      onClick={() => router.push(`/admin/questions/${q.id}/edit`)}
+                      aria-label="Edit question"
+                    >
+                      Edit
+                    </button>
                     <button
                       type="button"
                       className="ad-q-gen"
@@ -1195,25 +1291,15 @@ export default function AdminDashboard() {
       </main>
 
       {active === "questions" && (
-        <button className="ad-fab" onClick={() => setModalOpen(true)} aria-label="Add question">
+        <button className="ad-fab" onClick={() => router.push("/admin/questions/new")} aria-label="Add question">
           <span className="plus">+</span> New Question
         </button>
       )}
 
       {active === "exams" && (
-        <button className="ad-fab" onClick={openNewExam} aria-label="New exam">
+        <button className="ad-fab" onClick={() => router.push("/admin/exams/new")} aria-label="New exam">
           <span className="plus">+</span> New Exam
         </button>
-      )}
-
-      {modalOpen && (
-        <AddQuestionModal
-          onClose={() => setModalOpen(false)}
-          onSave={addQuestion}
-          existingChapters={Array.from(
-            new Set(questions.map((q) => q.chapter?.trim()).filter((c): c is string => Boolean(c)))
-          ).sort((a, b) => a.localeCompare(b))}
-        />
       )}
 
       {examModalOpen && (
@@ -1279,279 +1365,6 @@ export default function AdminDashboard() {
   );
 }
 
-function AddQuestionModal({
-  onClose,
-  onSave,
-  existingChapters = [],
-}: {
-  onClose: () => void;
-  onSave: (q: Omit<Question, "id" | "createdAt">) => void;
-  existingChapters?: string[];
-}) {
-  const [type, setType] = useState<QuestionType>("single");
-  const [prompt, setPrompt] = useState("");
-  const [marks, setMarks] = useState("4");
-  const [negative, setNegative] = useState("1");
-  const [options, setOptions] = useState<Option[]>([
-    { id: "a", text: "", correct: false },
-    { id: "b", text: "", correct: false },
-    { id: "c", text: "", correct: false },
-    { id: "d", text: "", correct: false },
-  ]);
-  const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
-  const [uploading, setUploading] = useState(false);
-  const [chapter, setChapter] = useState("");
-  const [typeOpen, setTypeOpen] = useState(false);
-  const typeRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!typeOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      if (typeRef.current && !typeRef.current.contains(e.target as Node)) {
-        setTypeOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [typeOpen]);
-
-  const setOptText = (id: string, text: string) =>
-    setOptions((prev) => prev.map((o) => (o.id === id ? { ...o, text } : o)));
-  const setOptImage = (id: string, imageUrl: string | undefined) =>
-    setOptions((prev) => prev.map((o) => (o.id === id ? { ...o, imageUrl } : o)));
-  const toggleCorrect = (id: string) =>
-    setOptions((prev) =>
-      prev.map((o) =>
-        o.id === id
-          ? { ...o, correct: type === "single" ? true : !o.correct }
-          : type === "single"
-          ? { ...o, correct: false }
-          : o
-      )
-    );
-  const onImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("image", f);
-      const res = await fetch(
-        "https://api.imgbb.com/1/upload?key=4125525efeb9a21fe49db324919cdeaf",
-        { method: "POST", body: form }
-      );
-      const data = (await res.json()) as {
-        success?: boolean;
-        data?: { url?: string; display_url?: string };
-      };
-      if (data.success && data.data?.url) {
-        setImageUrl(data.data.url);
-      } else {
-        throw new Error("Upload failed");
-      }
-    } catch {
-      setImageUrl(URL.createObjectURL(f));
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const onOptionImage = async (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    try {
-      const form = new FormData();
-      form.append("image", f);
-      const res = await fetch(
-        "https://api.imgbb.com/1/upload?key=4125525efeb9a21fe49db324919cdeaf",
-        { method: "POST", body: form }
-      );
-      const data = (await res.json()) as {
-        success?: boolean;
-        data?: { url?: string; display_url?: string };
-      };
-      if (data.success && data.data?.url) {
-        setOptImage(id, data.data.url);
-      } else {
-        throw new Error("Upload failed");
-      }
-    } catch {
-      setOptImage(id, URL.createObjectURL(f));
-    } finally {
-      e.target.value = "";
-    }
-  };
-
-  const save = () => {
-    const filled = options.filter((o) => o.text.trim().length > 0 || Boolean(o.imageUrl));
-    if (
-      !prompt.trim() ||
-      filled.length !== 4 ||
-      !filled.some((o) => o.correct)
-    ) {
-      return;
-    }
-    onSave({
-      type,
-      prompt: prompt.trim(),
-      options: filled,
-      marks: Number(marks) || 0,
-      negative: Number(negative) || 0,
-      chapter: chapter.trim() || undefined,
-      imageUrl,
-    });
-  };
-
-  return (
-    <div className="ad-overlay" onClick={onClose}>
-      <div className="ad-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="ad-close" onClick={onClose} aria-label="Close">×</button>
-        <h3 className="ad-form-title">New <em>Question</em></h3>
-
-        <div className="ad-row">
-          <div className="ad-field">
-            <label>Type</label>
-            <div className="ad-select" ref={typeRef}>
-              <button
-                type="button"
-                className="ad-select-trigger"
-                onClick={() => setTypeOpen((o) => !o)}
-                aria-haspopup="listbox"
-                aria-expanded={typeOpen}
-              >
-                <span>{type === "single" ? "Single Correct" : "MCQ (Multiple)"}</span>
-                <span className={`ad-caret${typeOpen ? " open" : ""}`}>▾</span>
-              </button>
-              {typeOpen && (
-                <ul className="ad-select-menu" role="listbox">
-                  <li
-                    role="option"
-                    aria-selected={type === "single"}
-                    className={`ad-select-opt${type === "single" ? " sel" : ""}`}
-                    onClick={() => {
-                      setType("single");
-                      setTypeOpen(false);
-                    }}
-                  >
-                    Single Correct
-                  </li>
-                  <li
-                    role="option"
-                    aria-selected={type === "mcq"}
-                    className={`ad-select-opt${type === "mcq" ? " sel" : ""}`}
-                    onClick={() => {
-                      setType("mcq");
-                      setTypeOpen(false);
-                    }}
-                  >
-                    MCQ (Multiple)
-                  </li>
-                </ul>
-              )}
-            </div>
-          </div>
-          <Stepper label="Marks" value={marks} onChange={setMarks} />
-          <Stepper label="Negative" value={negative} onChange={setNegative} />
-        </div>
-
-          <div className="ad-field" style={{ marginBottom: 16 }}>
-            <label>Chapter (optional)</label>
-            <input
-              type="text"
-              value={chapter}
-              placeholder="e.g. Kinematics, Thermodynamics"
-              list="ad-chapter-suggestions"
-              autoComplete="off"
-              onChange={(e) => setChapter(e.target.value)}
-            />
-            <datalist id="ad-chapter-suggestions">
-              {existingChapters.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-            <div className="ad-hint">Used to group questions when adding them to an exam by chapter.</div>
-          </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <label className="ad-q-label">Question {type === "mcq" ? "(select all correct)" : "(select one correct)"}</label>
-          <MathField
-            value={prompt}
-            onChange={setPrompt}
-            placeholder={PLACEHOLDER}
-            multiline
-          />
-          <div className="ad-hint">Use the toolbar to insert formulae, exponents, fractions, vectors and Greek symbols.</div>
-        </div>
-
-        <div className="ad-field" style={{ marginBottom: 16 }}>
-          <label>Image (optional, max 1)</label>
-          <label className="ad-file">
-            {uploading
-              ? "Uploading to ImgBB…"
-              : imageUrl
-                ? "Image attached ✓ (change)"
-                : "Choose image…"}
-            <input type="file" accept="image/*" onChange={onImage} disabled={uploading} />
-          </label>
-          {imageUrl && <img className="ad-img-preview" src={imageUrl} alt="preview" />}
-          {imageUrl && (
-            <div className="ad-hint" style={{ wordBreak: "break-all" }}>
-              Stored: {imageUrl}
-            </div>
-          )}
-        </div>
-
-        <div className="ad-field" style={{ marginBottom: 16 }}>
-          <label>Options (4 required) — optional image per option</label>
-          {options.map((o, i) => (
-            <div className={`ad-opt-edit${o.correct ? " correct-row" : ""}`} key={o.id}>
-              <button
-                type="button"
-                className={`ad-opt-key${o.correct ? " correct" : ""}`}
-                onClick={() => toggleCorrect(o.id)}
-                aria-pressed={o.correct}
-                title={type === "single" ? "Select correct answer" : "Toggle correct answer"}
-              >
-                {String.fromCharCode(65 + i)}
-              </button>
-              <div className="ad-opt-body">
-                <MathField
-                  value={o.text}
-                  onChange={(v) => setOptText(o.id, v)}
-                  placeholder="Option text — e.g. $\\vec{F} = m\\vec{a}$"
-                />
-                <div className="ad-opt-img-row">
-                  {o.imageUrl && (
-                    <img className="ad-opt-img-preview" src={o.imageUrl} alt="option preview" />
-                  )}
-                  <label className="ad-file ad-file-sm">
-                    {o.imageUrl ? "Change image" : "+ Image"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => onOptionImage(e, o.id)}
-                    />
-                  </label>
-                  {o.imageUrl && (
-                    <button
-                      type="button"
-                      className="ad-file-sm-remove"
-                      onClick={() => setOptImage(o.id, undefined)}
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <button className="ad-submit" onClick={save}>Save Question</button>
-      </div>
-    </div>
-  );
-}
 
 function Stepper({
   label,
@@ -1735,91 +1548,6 @@ function MathPreview({ text, compact }: { text: string; compact?: boolean }) {
     <div className="ad-preview">
       <span className="ad-preview-label">Live preview</span>
       <div className="ad-preview-body">{nodes}</div>
-    </div>
-  );
-}
-
-function insertAtCursor(
-  el: HTMLInputElement | HTMLTextAreaElement,
-  value: string,
-  setValue: (v: string) => void,
-  snippet: string,
-  wrap: boolean
-) {
-  const start = el.selectionStart ?? value.length;
-  const end = el.selectionEnd ?? value.length;
-  const selected = value.slice(start, end);
-  let insert = snippet;
-  let caret = start + snippet.length;
-  if (wrap) {
-    const innerOpen = snippet.indexOf("{") + 1;
-    insert = snippet.replace("{}", `{${selected}}`);
-    caret = start + innerOpen + selected.length;
-  }
-  const next = value.slice(0, start) + insert + value.slice(end);
-  setValue(next);
-  requestAnimationFrame(() => {
-    el.focus();
-    el.setSelectionRange(caret, caret);
-  });
-}
-
-function MathField({
-  label,
-  value,
-  onChange,
-  placeholder,
-  multiline,
-}: {
-  label?: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  multiline?: boolean;
-}) {
-  const ref = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
-
-  const apply = (item: ToolItem) => {
-    const el = ref.current;
-    if (!el) return;
-    insertAtCursor(el, value, onChange, item.snippet, item.wrap ?? false);
-  };
-
-  return (
-    <div className="ad-field" style={label ? undefined : { marginBottom: 8 }}>
-      {label && <label>{label}</label>}
-      <div className="ad-toolbar">
-        {TOOLBAR.map((item) => (
-          <button
-            key={item.label}
-            type="button"
-            className="ad-tool"
-            title={item.title}
-            onClick={() => apply(item)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      {multiline ? (
-        <textarea
-          ref={ref as React.RefObject<HTMLTextAreaElement>}
-          className="MathField-input"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-        />
-      ) : (
-        <input
-          type="text"
-          ref={ref as React.RefObject<HTMLInputElement>}
-          className="MathField-input"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-        />
-      )}
-      <MathPreview text={value} />
     </div>
   );
 }

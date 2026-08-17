@@ -19,7 +19,11 @@ export default function AdminLogin() {
   const router = useRouter();
 
   useEffect(() => {
-    getAnalyticsInstance();
+    try {
+      getAnalyticsInstance();
+    } catch {
+      /* analytics is optional — never let a failure block auth */
+    }
     const unsub = onAuthState((user) => {
       if (user) router.replace("/admin");
     });
@@ -381,7 +385,6 @@ export default function AdminLogin() {
             </div>
             <div className="v2-admin-row">
               <span>Secure session</span>
-              <a href="#">Forgot password?</a>
             </div>
             <button type="submit" className="v2-admin-btn" disabled={loading}>
               {loading ? "Signing in…" : "Sign in →"}
