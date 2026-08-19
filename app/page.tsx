@@ -53,10 +53,17 @@ export default function Home() {
       <style>{`
         .v2-root {
           min-height: 100vh;
+          width: 100%;
+          overflow-x: hidden;
+          overflow-x: clip;
           background: var(--paper);
           color: var(--ink);
           font-family: 'Inter', sans-serif;
           position: relative;
+        }
+
+        .v2-root *, .v2-root *::before, .v2-root *::after {
+          box-sizing: border-box;
         }
 
         .v2-root::before {
@@ -175,6 +182,8 @@ export default function Home() {
 
         .v2-cta-row input {
           flex: 1;
+          min-width: 0;
+          width: 100%;
           background: transparent;
           border: 1px solid var(--ink);
           border-radius: 0;
@@ -422,10 +431,200 @@ export default function Home() {
         .v2-watermark:hover { border-color: currentColor; }
 
         @media (max-width: 960px) {
-          .v2-hero, .v2-preview-wrap, .v2-sec-rule, .v2-foot { padding-left: 24px; padding-right: 24px; }
-          .v2-preview-body { grid-template-columns: 1fr; }
+          .v2-hero, .v2-preview-wrap, .v2-sec-rule, .v2-foot {
+            padding-left: 24px;
+            padding-right: 24px;
+          }
+
+          .v2-preview-body { grid-template-columns: minmax(0, 1fr); }
           .v2-q2 { border-right: 0; border-bottom: 1px solid #2a251d; }
-          .v2-foot { grid-template-columns: 1fr; gap: 28px; }
+          .v2-pal {
+            grid-template-columns: repeat(8, minmax(28px, 40px));
+            max-width: 355px;
+          }
+
+          .v2-foot { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+          .v2-foot-col { min-width: 0; }
+          .v2-foot-col a, .v2-foot-col p { overflow-wrap: anywhere; }
+        }
+
+        @media (max-width: 640px) {
+          .v2-hero {
+            padding: 52px 16px 32px;
+          }
+
+          .v2-eyebrow {
+            gap: 8px;
+            margin-bottom: 24px;
+            font-size: 9.5px;
+            line-height: 1.5;
+            letter-spacing: 0.16em;
+          }
+
+          .v2-eyebrow::before, .v2-eyebrow::after {
+            width: 12px;
+            flex: 0 0 12px;
+          }
+
+          .v2-h1 {
+            max-width: 9ch;
+            margin-bottom: 24px;
+            font-size: clamp(46px, 15vw, 64px);
+            line-height: 0.94;
+          }
+
+          .v2-sub {
+            max-width: 34ch;
+            margin-bottom: 38px;
+            font-size: 16px;
+            line-height: 1.6;
+          }
+
+          .v2-cta-frame {
+            width: 100%;
+            padding: 28px 20px 22px;
+          }
+
+          .v2-cta-num {
+            left: 16px;
+            padding: 0 8px;
+            font-size: 10px;
+          }
+
+          .v2-cta-title { font-size: 23px; }
+          .v2-cta-desc {
+            margin-bottom: 18px;
+            font-size: 12px;
+            line-height: 1.55;
+          }
+
+          .v2-cta-row {
+            flex-direction: column;
+            gap: 10px;
+          }
+
+          .v2-cta-row input {
+            min-height: 52px;
+            padding: 14px 15px;
+            font-size: 16px;
+            letter-spacing: 0.1em;
+          }
+
+          .v2-cta-row button {
+            width: 100%;
+            min-height: 50px;
+            padding: 0 18px;
+            justify-content: center;
+          }
+
+          .v2-sec-rule {
+            gap: 10px;
+            padding: 44px 16px 18px;
+            font-size: 10px;
+            letter-spacing: 0.12em;
+          }
+
+          .v2-sec-rule span { flex: 0 0 auto; }
+
+          .v2-preview-wrap {
+            padding: 0 20px 52px 16px;
+          }
+
+          .v2-preview { box-shadow: 6px 6px 0 var(--ink); }
+
+          .v2-preview-bar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            align-items: start;
+            gap: 7px;
+            padding: 12px 14px;
+            font-size: 9.5px;
+            line-height: 1.45;
+          }
+
+          .v2-preview-bar span { min-width: 0; }
+          .v2-q2 { padding: 22px 16px 20px; }
+
+          .v2-q2-meta {
+            flex-wrap: wrap;
+            gap: 7px 14px;
+            margin-bottom: 15px;
+            font-size: 9.5px;
+            line-height: 1.4;
+          }
+
+          .v2-q2-text {
+            margin-bottom: 20px;
+            font-size: 18px;
+            line-height: 1.48;
+          }
+
+          .v2-opt2 {
+            min-width: 0;
+            gap: 12px;
+            padding: 11px 12px;
+          }
+
+          .v2-opt2-k { flex: 0 0 26px; }
+          .v2-opt2-t { min-width: 0; font-size: 12px; }
+          .v2-side2 { padding: 20px 16px; }
+          .v2-tval { font-size: 28px; }
+
+          .v2-pal {
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            max-width: 360px;
+          }
+
+          .v2-foot {
+            gap: 30px;
+            padding: 44px 20px 24px;
+          }
+
+          .v2-foot-title { font-size: 36px; }
+          .v2-foot-blurb { max-width: 100%; }
+
+          .v2-foot-bottom {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 12px;
+            margin-top: 8px;
+            padding-top: 18px;
+            line-height: 1.55;
+          }
+
+          .v2-overlay {
+            align-items: flex-start;
+            overflow-y: auto;
+            padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+          }
+
+          .v2-dialog {
+            max-height: calc(100dvh - 32px);
+            margin: auto 0;
+            overflow-y: auto;
+            padding: 48px 20px 22px;
+            box-shadow: 6px 6px 0 var(--ink);
+          }
+
+          .v2-dialog-close {
+            width: 36px;
+            height: 36px;
+            top: 10px;
+            right: 10px;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .v2-hero { padding-top: 44px; }
+          .v2-h1 { font-size: 44px; }
+          .v2-eyebrow::before, .v2-eyebrow::after { display: none; }
+          .v2-cta-frame { padding-left: 16px; padding-right: 16px; }
+          .v2-preview-bar span:nth-child(2) { display: none; }
+        }
+
+        @media (max-height: 540px) and (orientation: landscape) {
+          .v2-hero { padding-top: 36px; }
+          .v2-overlay { align-items: flex-start; }
         }
       `}</style>
 
@@ -449,6 +648,9 @@ export default function Home() {
               maxLength={18}
               spellCheck={false}
               autoComplete="off"
+              autoCapitalize="characters"
+              enterKeyHint="go"
+              aria-label="Test code"
               value={code}
               onChange={(e) => setCode(sanitizeCode(e.target.value))}
             />
@@ -541,9 +743,15 @@ export default function Home() {
 
       {dialogOpen && (
         <div className="v2-overlay" onClick={closeDialog}>
-          <div className="v2-dialog" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="v2-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="test-code-dialog-title"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button className="v2-dialog-close" onClick={closeDialog} aria-label="Close">×</button>
-            <h3 className="v2-cta-title">Enter your <em>test code</em></h3>
+            <h3 className="v2-cta-title" id="test-code-dialog-title">Enter your <em>test code</em></h3>
             <p className="v2-cta-desc">Codes are issued by Mr. Biman Dhawa before each mock. Case-insensitive.</p>
             <form className="v2-cta-row" onSubmit={handleSubmit}>
               <input
@@ -552,6 +760,9 @@ export default function Home() {
                 maxLength={18}
                 spellCheck={false}
                 autoComplete="off"
+                autoCapitalize="characters"
+                enterKeyHint="go"
+                aria-label="Test code"
                 value={code}
                 onChange={(e) => setCode(sanitizeCode(e.target.value))}
               />
