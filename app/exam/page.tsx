@@ -112,6 +112,7 @@ function ExamContent() {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [focusWarnOpen, setFocusWarnOpen] = useState(false);
+  const [showMobilePalette, setShowMobilePalette] = useState(false);
   const blurCountRef = useRef(0);
 
   useEffect(() => {
@@ -316,6 +317,18 @@ function ExamContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft, stage]);
 
+  // Prevent background scroll when mobile palette drawer open
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (showMobilePalette) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    } else {
+      document.body.style.overflow = "";
+    }
+  }, [showMobilePalette]);
+
   const visit = (idx: number) => {
     setVisited((v) => {
       const next = [...v];
@@ -421,9 +434,9 @@ function ExamContent() {
         <div className="v2-preview-wrap v2-test-wrap">
           <div className="v2-preview">
             <div className="v2-preview-bar">
-              <span>NTA CBT · {exam.title}</span>
-              <span>Candidate: {name.trim() || "—"}</span>
-              <span style={{ color: "#d9a300" }}>● Recording</span>
+              <span className="v2-bar-title">NTA CBT · {exam.title}</span>
+              <span className="v2-bar-candidate">Candidate: {name.trim() || "—"}</span>
+              <span className="v2-bar-rec" style={{ color: "#d9a300" }}>● Recording</span>
             </div>
 
             <div className="v2-preview-body">
@@ -433,6 +446,30 @@ function ExamContent() {
                   <span>
                     <strong>Q. {current + 1}</strong> of {totalQuestions}
                   </span>
+                </div>
+
+                {/* Mobile sticky top: time + palette button */}
+                <div className="v2-mobile-strip">
+                  <div className="v2-mobile-time">
+                    <span className="v2-mobile-time-label">Time</span>
+                    <span
+                      className="v2-mobile-time-val"
+                      style={{ color: secondsLeft <= 300 ? "#d9a300" : "var(--accent)" }}
+                    >
+                      {formatTime(secondsLeft)}
+                    </span>
+                  </div>
+                  <div className="v2-mobile-stats">
+                    <span>{answeredCount}/{totalQuestions} done</span>
+                    {markedCount > 0 && <span>· {markedCount} marked</span>}
+                  </div>
+                  <button
+                    className="v2-mobile-pal-btn"
+                    onClick={() => setShowMobilePalette(true)}
+                    aria-label="Open question palette"
+                  >
+                    <span className="v2-mobile-pal-icon">◫</span> Palette
+                  </button>
                 </div>
 
                 <p
@@ -464,15 +501,20 @@ function ExamContent() {
                         key={opt.id}
                         className={`v2-opt2${selected ? " sel" : ""}`}
                         onClick={() => selectOption(i)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') selectOption(i); }}
                       >
                         <div className="v2-opt2-k">{OPTION_KEYS[i]}</div>
-                        <div
-                          className="v2-opt2-t"
-                          dangerouslySetInnerHTML={{ __html: renderMathHtml(opt.text) }}
-                        />
-                        {opt.imageUrl && (
-                          <img className="v2-opt2-img" src={opt.imageUrl} alt={`Option ${OPTION_KEYS[i]}`} />
-                        )}
+                        <div className="v2-opt2-main">
+                          <div
+                            className="v2-opt2-t"
+                            dangerouslySetInnerHTML={{ __html: renderMathHtml(opt.text) }}
+                          />
+                          {opt.imageUrl && (
+                            <img className="v2-opt2-img" src={opt.imageUrl} alt={`Option ${OPTION_KEYS[i]}`} />
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -500,75 +542,112 @@ function ExamContent() {
                     Next →
                   </button>
                 </div>
-              </div>
 
-              <aside className="v2-side2">
-                <div className="v2-tlabel">Time remaining</div>
-                <div
-                  className="v2-tval"
-                  style={{
-                    color: secondsLeft <= 300 ? "#d9a300" : "var(--accent)",
-                  }}
-                >
-                  {formatTime(secondsLeft)}
-                </div>
-
-                <div className="v2-tlabel">Progress</div>
-                <div className="v2-prog">
-                  <span>
-                    <strong>{answeredCount}</strong> answered
-                  </span>
-                  <span>
-                    <strong>{markedCount}</strong> marked
-                  </span>
-                </div>
-
-                <div className="v2-tlabel" style={{ marginTop: 18 }}>
-                  Palette · Section A
-                </div>
-                <div className="v2-pal">
-                  {runtime.map((_, i) => {
-                    const st = paletteState(i);
-                    const isCurrent = i === current;
-                    return (
-                      <button
-                        key={i}
-                        className={`v2-pdot2 ${st}${isCurrent ? " cur" : ""}`}
-                        onClick={() => visit(i)}
-                      >
-                        {i + 1}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="v2-tlabel" style={{ margin: "14px 0 6px" }}>
-                  Legend
-                </div>
-                <div className="v2-legend">
-                  <span>
-                    <i className="v2-lg ans" />
-                    Answered
-                  </span>
-                  <span>
-                    <i className="v2-lg mk" />
-                    Marked
-                  </span>
-                  <span>
-                    <i className="v2-lg vis" />
-                    Visited
-                  </span>
-                  <span>
-                    <i className="v2-lg un" />
-                    Not visited
-                  </span>
-                </div>
-
-                <button className="v2-submit-btn" onClick={() => setConfirmOpen(true)}>
+                <button className="v2-mobile-submit" onClick={() => setConfirmOpen(true)}>
                   Submit Test
                 </button>
+              </div>
+
+              <aside className={`v2-side2 ${showMobilePalette ? "open" : ""}`}>
+                <div className="v2-side-scroll">
+                  <div className="v2-side-header-mobile">
+                    <div>
+                      <div className="v2-tlabel" style={{ marginBottom: 4 }}>Question Palette</div>
+                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#b8ad96' }}>
+                        {answeredCount} answered · {markedCount} marked
+                      </div>
+                    </div>
+                    <button
+                      className="v2-side-close"
+                      onClick={() => setShowMobilePalette(false)}
+                      aria-label="Close palette"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div className="v2-tlabel hide-mobile">Time remaining</div>
+                  <div
+                    className="v2-tval hide-mobile"
+                    style={{
+                      color: secondsLeft <= 300 ? "#d9a300" : "var(--accent)",
+                    }}
+                  >
+                    {formatTime(secondsLeft)}
+                  </div>
+
+                  <div className="v2-tlabel hide-mobile">Progress</div>
+                  <div className="v2-prog hide-mobile">
+                    <span>
+                      <strong>{answeredCount}</strong> answered
+                    </span>
+                    <span>
+                      <strong>{markedCount}</strong> marked
+                    </span>
+                  </div>
+
+                  <div className="v2-tlabel" style={{ marginTop: 0 }}>
+                    Palette · Section A
+                  </div>
+                  <div className="v2-pal">
+                    {runtime.map((_, i) => {
+                      const st = paletteState(i);
+                      const isCurrent = i === current;
+                      return (
+                        <button
+                          key={i}
+                          className={`v2-pdot2 ${st}${isCurrent ? " cur" : ""}`}
+                          onClick={() => { visit(i); setShowMobilePalette(false); }}
+                        >
+                          {i + 1}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="v2-tlabel" style={{ margin: "14px 0 6px" }}>
+                    Legend
+                  </div>
+                  <div className="v2-legend">
+                    <span>
+                      <i className="v2-lg ans" />
+                      Answered
+                    </span>
+                    <span>
+                      <i className="v2-lg mk" />
+                      Marked
+                    </span>
+                    <span>
+                      <i className="v2-lg vis" />
+                      Visited
+                    </span>
+                    <span>
+                      <i className="v2-lg un" />
+                      Not visited
+                    </span>
+                  </div>
+
+                  <button className="v2-submit-btn hide-mobile" onClick={() => setConfirmOpen(true)}>
+                    Submit Test
+                  </button>
+
+                  <button className="v2-submit-btn show-mobile-drawer" onClick={() => { setShowMobilePalette(false); setConfirmOpen(true); }}>
+                    Submit Test
+                  </button>
+                </div>
               </aside>
             </div>
+
+            {showMobilePalette && (
+              <div className="v2-drawer-backdrop" onClick={() => setShowMobilePalette(false)} />
+            )}
+          </div>
+
+          {/* Bottom sticky action bar for mobile */}
+          <div className="v2-mobile-bottom">
+            <button disabled={current===0} onClick={()=>visit(current-1)}>← Prev</button>
+            <button onClick={()=>setShowMobilePalette(true)} className="mid">◫ {current+1}/{totalQuestions}</button>
+            <button disabled={current===totalQuestions-1} onClick={()=>visit(current+1)}>Next →</button>
           </div>
         </div>
           );
@@ -793,16 +872,19 @@ function SubmittedScreen({
 const CSS = `
   .v2-root {
     min-height: 100vh;
+    min-height: 100dvh;
     background: #0f0d0a;
     color: #eee6d5;
     font-family: 'Inter', sans-serif;
     position: relative;
+    overflow-x: clip;
   }
   .v2-root .serif { font-family: 'Instrument Serif', 'Times New Roman', serif; font-weight: 400; }
   .v2-root .mono { font-family: 'JetBrains Mono', monospace; }
 
   .v2-center {
     min-height: 100vh;
+    min-height: 100dvh;
     display: grid;
     place-items: center;
     padding: 40px 24px;
@@ -851,6 +933,14 @@ const CSS = `
     line-height: 1.6;
     color: #b8ad96;
     margin: 0 0 22px;
+  }
+  .v2-cta-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #d9a300;
+    margin-bottom: 14px;
   }
 
   .v2-instr {
@@ -918,6 +1008,7 @@ const CSS = `
   .v2-join {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     background: var(--accent);
     color: #fff;
@@ -930,12 +1021,16 @@ const CSS = `
     cursor: pointer;
     text-transform: uppercase;
     text-decoration: none;
+    min-height: 44px;
   }
   .v2-join:hover { background: var(--accent-2); border-color: var(--accent-2); }
   .v2-join:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* ---------- TEST WINDOW ---------- */
-  .v2-test-wrap { padding: 24px; }
+  .v2-test-wrap {
+    padding: 24px;
+    padding-bottom: 24px;
+  }
 
   .v2-preview {
     border: 1px solid var(--ink);
@@ -946,6 +1041,10 @@ const CSS = `
     display: flex;
     flex-direction: column;
     min-height: calc(100vh - 48px);
+    min-height: calc(100dvh - 48px);
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
   }
   .v2-preview-bar {
     display: flex;
@@ -961,20 +1060,92 @@ const CSS = `
     letter-spacing: 0.06em;
     flex-wrap: wrap;
   }
-  .v2-preview-body { display: grid; grid-template-columns: 1fr 240px; flex: 1; min-height: 0; }
+  .v2-preview-body { display: grid; grid-template-columns: 1fr 260px; flex: 1; min-height: 0; min-width: 0; }
 
-  .v2-q2 { padding: 32px 32px 28px; border-right: 1px solid #2a251d; min-height: 480px; }
+  .v2-q2 {
+    padding: 32px 32px 28px;
+    border-right: 1px solid #2a251d;
+    min-height: 480px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
   .v2-q2-meta {
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    gap: 12px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     color: #b8ad96;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin-bottom: 18px;
+    flex-wrap: wrap;
   }
   .v2-q2-meta strong { color: var(--accent); }
+
+  /* Mobile top strip - hidden on desktop */
+  .v2-mobile-strip {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    background: #0b0908;
+    border: 1px solid #2a251d;
+    margin-bottom: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .v2-mobile-time {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .v2-mobile-time-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #8a8275;
+    line-height: 1;
+  }
+  .v2-mobile-time-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+  .v2-mobile-stats {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #b8ad96;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .v2-mobile-pal-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #14110d;
+    border: 1px solid #2a251d;
+    color: #f4ecd8;
+    padding: 10px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    min-height: 40px;
+    flex-shrink: 0;
+  }
+  .v2-mobile-pal-btn:active { background: #1e1a14; }
+  .v2-mobile-pal-icon { font-size: 14px; }
 
   .v2-q2-text {
     font-family: 'Instrument Serif', serif;
@@ -982,26 +1153,33 @@ const CSS = `
     line-height: 1.45;
     color: #f4ecd8;
     margin: 0 0 24px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
   }
-  .v2-q-img { max-width: 100%; max-height: 240px; object-fit: contain; border: 1px solid #2a251d; margin: 0 auto 20px; display: block; }
-  .v2-q-imgs { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+  .v2-q-img { max-width: 100%; max-height: 320px; object-fit: contain; border: 1px solid #2a251d; margin: 0 auto 20px; display: block; width: auto; height: auto; }
+  .v2-q-imgs { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; width: 100%; }
   .v2-q-imgs .v2-q-img { margin-bottom: 0; }
 
-  .v2-opts2 { display: flex; flex-direction: column; gap: 8px; }
+  .v2-opts2 { display: flex; flex-direction: column; gap: 10px; width: 100%; }
   .v2-opt2 {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 14px;
-    padding: 12px 14px;
+    padding: 14px 14px;
     border: 1px solid #2a251d;
     cursor: pointer;
-    transition: border-color 0.12s ease, background 0.12s ease;
+    transition: border-color 0.12s ease, background 0.12s ease, transform 0.08s ease;
+    min-height: 48px;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    touch-action: manipulation;
   }
   .v2-opt2:hover { border-color: #4a4135; }
-  .v2-opt2.sel { border-color: var(--accent); background: rgba(200,50,30,0.08); }
+  .v2-opt2:active { transform: scale(0.995); }
+  .v2-opt2.sel { border-color: var(--accent); background: rgba(200,50,30,0.10); }
   .v2-opt2-k {
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     border: 1px solid #2a251d;
     display: grid;
     place-items: center;
@@ -1009,10 +1187,12 @@ const CSS = `
     font-size: 12px;
     color: #b8ad96;
     flex-shrink: 0;
+    margin-top: 1px;
   }
   .v2-opt2.sel .v2-opt2-k { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .v2-opt2-t { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
-  .v2-opt2-img { display: block; max-width: 180px; max-height: 120px; margin-top: 8px; object-fit: contain; border: 1px solid var(--rule); }
+  .v2-opt2-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .v2-opt2-t { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; line-height: 1.5; word-break: break-word; overflow-wrap: anywhere; }
+  .v2-opt2-img { display: block; max-width: 100%; max-width: 200px; max-height: 140px; object-fit: contain; border: 1px solid var(--rule); }
 
   .v2-nav {
     display: grid;
@@ -1024,19 +1204,77 @@ const CSS = `
     background: transparent;
     border: 1px solid #2a251d;
     color: #eee6d5;
-    padding: 12px 10px;
+    padding: 14px 10px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: border-color 0.12s ease, color 0.12s ease;
+    transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
   .v2-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
   .v2-nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .v2-mark.on { border-color: #d9a300; color: #d9a300; }
+  .v2-mark.on { border-color: #d9a300; color: #d9a300; background: rgba(217,163,0,0.08); }
 
-  .v2-side2 { padding: 22px 20px; background: #0b0908; }
+  .v2-mobile-submit {
+    display: none;
+    width: 100%;
+    margin-top: 16px;
+    background: var(--accent);
+    color: #fff;
+    border: 1px solid var(--accent);
+    padding: 16px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    min-height: 50px;
+  }
+
+  .v2-side2 {
+    padding: 22px 20px;
+    background: #0b0908;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .v2-side-scroll {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+  }
+  .v2-side-scroll::-webkit-scrollbar { display: none; }
+  .v2-side-header-mobile {
+    display: none;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #2a251d;
+  }
+  .v2-side-close {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    background: #14110d;
+    border: 1px solid #2a251d;
+    color: #f4ecd8;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
   .v2-tlabel {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
@@ -1052,6 +1290,7 @@ const CSS = `
     color: var(--accent);
     letter-spacing: 0.02em;
     margin-bottom: 22px;
+    line-height: 1;
   }
   .v2-prog {
     display: flex;
@@ -1064,38 +1303,43 @@ const CSS = `
   }
   .v2-prog strong { color: #f4ecd8; }
 
-  .v2-pal { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-bottom: 8px; }
+  .v2-pal { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
   .v2-pdot2 {
     aspect-ratio: 1;
+    min-height: 36px;
     display: grid;
     place-items: center;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: 11px;
     cursor: pointer;
     border: 0;
     color: inherit;
     padding: 0;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.08s ease, filter 0.12s ease;
   }
+  .v2-pdot2:active { transform: scale(0.94); }
   .v2-pdot2.ans { background: var(--accent); color: #fff; }
   .v2-pdot2.mk  { background: #d9a300; color: #14110d; }
   .v2-pdot2.vis { background: #4a2a14; color: #f4ecd8; }
   .v2-pdot2.un  { background: transparent; color: #8a8275; border: 1px solid #2a251d; }
-  .v2-pdot2.cur { outline: 2px solid #f4ecd8; outline-offset: 1px; }
+  .v2-pdot2.cur { outline: 2px solid #f4ecd8; outline-offset: 1px; z-index: 1; }
 
   .v2-legend {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-size: 10px;
     color: #8a8275;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 5px;
   }
-  .v2-legend span { display: flex; align-items: center; }
-  .v2-lg { width: 8px; height: 8px; display: inline-block; margin-right: 6px; }
+  .v2-legend span { display: flex; align-items: center; gap: 6px; }
+  .v2-lg { width: 10px; height: 10px; display: inline-block; flex-shrink: 0; }
   .v2-lg.ans { background: oklch(0.52 0.20 25); }
   .v2-lg.mk { background: #d9a300; }
   .v2-lg.vis { background: #4a2a14; }
-  .v2-lg.un { border: 1px solid #2a251d; }
+  .v2-lg.un { border: 1px solid #2a251d; background: transparent; }
 
   .v2-submit-btn {
     width: 100%;
@@ -1103,21 +1347,77 @@ const CSS = `
     background: var(--accent);
     color: #fff;
     border: 1px solid var(--accent);
-    padding: 13px;
+    padding: 14px;
     font-family: 'Inter', sans-serif;
     font-weight: 600;
     font-size: 13px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     cursor: pointer;
+    min-height: 44px;
   }
   .v2-submit-btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
+  .v2-submit-btn.show-mobile-drawer { display: none; }
+
+  /* Mobile bottom sticky bar - hidden on desktop */
+  .v2-mobile-bottom {
+    display: none;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 180;
+    background: #14110d;
+    border-top: 1px solid #2a251d;
+    padding: 8px 10px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    gap: 8px;
+    box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+  }
+  .v2-mobile-bottom button {
+    flex: 1;
+    background: transparent;
+    border: 1px solid #2a251d;
+    color: #f4ecd8;
+    padding: 14px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    min-height: 46px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .v2-mobile-bottom button:disabled { opacity: 0.35; }
+  .v2-mobile-bottom button.mid {
+    background: #0b0908;
+    border-color: #3a3226;
+    font-weight: 600;
+  }
+
+  /* Drawer backdrop */
+  .v2-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(2px);
+    z-index: 190;
+    animation: v2-fadeIn 0.2s ease;
+  }
+  @keyframes v2-fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .hide-mobile { display: block; }
+  .show-mobile-drawer { display: none !important; }
 
   /* ---------- DIALOG ---------- */
   .v2-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(20, 17, 13, 0.6);
+    background: rgba(20, 17, 13, 0.65);
+    backdrop-filter: blur(2px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1134,6 +1434,9 @@ const CSS = `
     padding: 38px 32px 28px;
     text-align: left;
     box-shadow: 12px 12px 0 var(--ink);
+    max-height: 90vh;
+    max-height: 90dvh;
+    overflow-y: auto;
   }
   .v2-dialog::before, .v2-dialog::after {
     content: "";
@@ -1150,13 +1453,15 @@ const CSS = `
     right: 16px;
     background: transparent;
     border: 1px solid var(--ink);
-    width: 30px;
-    height: 30px;
-    font-size: 16px;
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
     line-height: 1;
     cursor: pointer;
     color: var(--ink);
     transition: background 0.15s ease, color 0.15s ease;
+    display: grid;
+    place-items: center;
   }
   .v2-dialog-close:hover { background: var(--ink); color: var(--paper); }
   .v2-cta-title {
@@ -1178,6 +1483,7 @@ const CSS = `
     justify-content: flex-end;
     gap: 10px;
     margin-top: 24px;
+    flex-wrap: wrap;
   }
   .v2-set-btn {
     background: transparent;
@@ -1191,6 +1497,7 @@ const CSS = `
     text-transform: uppercase;
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
+    min-height: 44px;
   }
   .v2-set-btn.ghost:hover { background: var(--ink); color: var(--paper); }
   .v2-submit {
@@ -1205,6 +1512,7 @@ const CSS = `
     text-transform: uppercase;
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
+    min-height: 44px;
   }
   .v2-submit:hover { background: var(--accent-2); border-color: var(--accent-2); }
 
@@ -1273,6 +1581,7 @@ const CSS = `
     text-transform: uppercase;
     cursor: pointer;
     margin-bottom: 22px;
+    min-height: 44px;
   }
   .v2-insight-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 
@@ -1298,6 +1607,7 @@ const CSS = `
     align-items: center;
     gap: 10px;
     margin-bottom: 10px;
+    flex-wrap: wrap;
   }
   .v2-rev-num {
     font-family: 'JetBrains Mono', monospace;
@@ -1330,6 +1640,7 @@ const CSS = `
     line-height: 1.4;
     color: var(--ink);
     margin: 0 0 12px;
+    word-break: break-word;
   }
   .v2-rev-img { max-width: 100%; max-height: 220px; object-fit: contain; border: 1px solid var(--rule); margin: 0 auto 12px; display: block; }
   .v2-rev-opts { display: flex; flex-direction: column; gap: 6px; }
@@ -1362,7 +1673,7 @@ const CSS = `
   }
   .v2-rev-opt.answer .v2-rev-k { background: oklch(0.45 0.13 150); border-color: oklch(0.45 0.13 150); color: #fff; }
   .v2-rev-opt.chosen .v2-rev-k { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .v2-rev-t { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink-2); }
+  .v2-rev-t { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink-2); word-break: break-word; }
 
   .v2-done { margin-top: 4px; }
 
@@ -1401,9 +1712,151 @@ const CSS = `
   .fn { font-style: italic; }
   sup, sub { font-size: 0.72em; line-height: 0; }
 
+  /* ---------- RESPONSIVE ---------- */
+  @media (max-width: 1024px) {
+    .v2-preview-body { grid-template-columns: 1fr 240px; }
+    .v2-pal { grid-template-columns: repeat(5, 1fr); }
+  }
+
   @media (max-width: 960px) {
-    .v2-preview-body { grid-template-columns: 1fr; }
-    .v2-q2 { border-right: 0; border-bottom: 1px solid #2a251d; }
+    .v2-test-wrap {
+      padding: 0;
+      padding-bottom: calc(64px + env(safe-area-inset-bottom));
+    }
+    .v2-preview {
+      border: 0;
+      box-shadow: none;
+      min-height: 100vh;
+      min-height: 100dvh;
+      border-radius: 0;
+    }
+    .v2-preview-bar {
+      padding: 10px 14px;
+      font-size: 10px;
+      gap: 8px;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+    .v2-bar-title { flex: 1 1 100%; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .v2-bar-candidate, .v2-bar-rec { font-size: 10px; }
+    .v2-preview-body {
+      grid-template-columns: 1fr;
+      display: flex;
+      flex-direction: column;
+    }
+    .v2-q2 {
+      border-right: 0;
+      border-bottom: 0;
+      padding: 14px 14px 20px;
+      min-height: auto;
+      flex: 1;
+    }
+    .v2-mobile-strip { display: flex; }
+    .v2-q2-meta { margin-bottom: 12px; font-size: 10px; }
+    .v2-q2-text { font-size: 18px; line-height: 1.4; margin-bottom: 18px; }
+    .v2-opts2 { gap: 10px; }
+    .v2-opt2 { padding: 12px 12px; }
+    .v2-nav { grid-template-columns: 1fr 1fr; margin-top: 20px; }
+    .v2-nav .v2-mark { grid-column: 1 / -1; order: 3; }
+    .v2-mobile-submit { display: block; }
+    .v2-mobile-bottom { display: flex; }
+
+    /* Side drawer */
+    .v2-side2 {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      top: auto;
+      z-index: 200;
+      max-height: 85vh;
+      max-height: 85dvh;
+      border-top: 1px solid #2a251d;
+      border-left: 0;
+      border-right: 0;
+      border-bottom: 0;
+      border-radius: 16px 16px 0 0;
+      padding: 0;
+      transform: translateY(105%);
+      transition: transform 0.32s cubic-bezier(0.32,0.72,0,1);
+      box-shadow: 0 -12px 40px rgba(0,0,0,0.6);
+      background: #0f0d0a;
+      overflow: hidden;
+    }
+    .v2-side2.open {
+      transform: translateY(0);
+    }
+    .v2-side-scroll {
+      padding: 18px 16px;
+      padding-bottom: max(18px, env(safe-area-inset-bottom));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .v2-side-header-mobile { display: flex; }
+    .hide-mobile { display: none !important; }
+    .show-mobile-drawer { display: block !important; }
+    .v2-side2 .v2-tlabel { margin-top: 10px; }
+    .v2-pal { grid-template-columns: repeat(6, minmax(0,1fr)); gap: 8px; }
+    .v2-pdot2 { min-height: 44px; font-size: 12px; }
+    .v2-tval { font-size: 28px; }
+  }
+
+  @media (max-width: 640px) {
+    .v2-center { padding: 16px 12px; padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+    .v2-lobby-card { padding: 22px 16px 18px; box-shadow: 6px 6px 0 #000; max-width: 100%; }
+    .v2-lobby-title { font-size: 28px; }
+    .v2-lobby-desc { font-size: 13px; }
+    .v2-instr { padding: 14px 12px 14px 28px; font-size: 12.5px; }
+    .v2-instr li::before { left: -18px; }
+    .v2-check { font-size: 12.5px; }
+    .v2-field { margin-bottom: 18px; }
+    .v2-name { font-size: 16px; padding: 12px 14px; } /* 16px prevents iOS zoom */
+    .v2-join { width: 100%; justify-content: center; padding: 14px 18px; }
+
+    .v2-preview-bar { padding: 10px 12px; }
+    .v2-q2 { padding: 12px 12px 16px; }
+    .v2-q2-text { font-size: 17px; }
+    .v2-opt2-t { font-size: 13px; }
+    .v2-opt2-k { width: 26px; height: 26px; font-size: 11px; }
+    .v2-pal { grid-template-columns: repeat(5, minmax(0,1fr)); }
+    .v2-overlay { padding: 12px; }
+    .v2-dialog { padding: 26px 18px 18px; max-width: 100%; box-shadow: 8px 8px 0 var(--ink); }
+    .v2-cta-title { font-size: 22px; }
+    .v2-modal-foot { flex-direction: column-reverse; }
+    .v2-modal-foot .v2-set-btn, .v2-modal-foot .v2-submit { width: 100%; justify-content: center; }
+    .v2-res-grid { grid-template-columns: 1fr; }
+    .v2-score-num { font-size: 56px; }
+  }
+
+  @media (max-width: 380px) {
+    .v2-lobby-title { font-size: 24px; }
+    .v2-pal { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; }
+    .v2-mobile-strip { flex-wrap: wrap; }
+    .v2-mobile-time-val { font-size: 14px; }
+    .v2-mobile-pal-btn { padding: 8px 10px; font-size: 10px; }
+    .v2-nav { gap: 6px; }
+    .v2-nav-btn { font-size: 10px; padding: 12px 6px; }
+    .v2-mobile-bottom { padding: 6px 8px; gap: 6px; }
+    .v2-mobile-bottom button { font-size: 11px; padding: 12px 4px; min-height: 44px; }
+  }
+
+  @media (min-width: 961px) {
+    .v2-pal { grid-template-columns: repeat(5, 1fr); }
+    .v2-mobile-strip, .v2-mobile-bottom, .v2-mobile-submit, .v2-drawer-backdrop, .v2-side-header-mobile, .show-mobile-drawer { display: none !important; }
+  }
+
+  /* Landscape small height */
+  @media (max-height: 520px) and (max-width: 960px) {
+    .v2-mobile-strip { position: relative; top: auto; }
+    .v2-side2 { max-height: 92vh; max-height: 92dvh; }
+  }
+
+  /* Print safety - don't print test chrome */
+  @media print {
+    .v2-preview-bar, .v2-side2, .v2-mobile-bottom, .v2-mobile-strip, .v2-nav, .v2-mobile-submit { display: none !important; }
+    .v2-preview { box-shadow: none; border: none; min-height: auto; }
+    .v2-q2 { border: 0; padding: 0; }
   }
 `;
 
