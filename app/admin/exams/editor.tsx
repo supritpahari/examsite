@@ -9,7 +9,7 @@ import { MathPreview, Stepper } from "../shared";
 const STEPS = [
   { label: "Details", desc: "Give your exam a name, duration and status." },
   { label: "Questions", desc: "Pick questions by chapter or choose them individually." },
-  { label: "Review", desc: "Confirm the details and question set, then create your exam." },
+  { label: "Review", desc: "Set the marks and negative marking for each question, confirm the set, then create your exam." },
   { label: "Created", desc: "Your exam is saved — share the code or link with students." },
 ];
 
@@ -17,6 +17,7 @@ const STATUS_META: Record<ExamStatus, { label: string; cls: string }> = {
   completed: { label: "Completed", cls: "ec-badge green" },
   scheduled: { label: "Scheduled", cls: "ec-badge blue" },
   draft: { label: "Draft", cls: "ec-badge gray" },
+  stopped: { label: "Stopped", cls: "ec-badge gray" },
 };
 
 export default function ExamCreator({
@@ -36,6 +37,8 @@ export default function ExamCreator({
   const [mode, setMode] = useState<"chapter" | "choose">("chapter");
   const [selectedChapters, setSelectedChapters] = useState<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [marksMap, setMarksMap] = useState<Record<string, number>>({});
+  const [negativeMap, setNegativeMap] = useState<Record<string, number>>({});
   const [search, setSearch] = useState("");
   const [created, setCreated] = useState<Exam | null>(null);
   const [saving, setSaving] = useState(false);
@@ -114,7 +117,7 @@ export default function ExamCreator({
         duration: `${duration || "0"} min`,
       });
       if (finalIds.length) {
-        await setExamQuestions(exam.id, finalIds);
+        await setExamQuestions(exam.id, finalIds, marksMap, negativeMap);
       }
       setCreated(exam);
       setStep(3);
@@ -128,22 +131,66 @@ export default function ExamCreator({
   const toggleChapter = (c: string) =>
     setSelectedChapters((prev) => {
       const next = new Set(prev);
-      if (next.has(c)) next.delete(c);
-      else next.add(c);
+      if (next.has(c)) {
+        next.delete(c);
+        setMarksMap((m) => {
+          const n = { ...m };
+          for (const qid of chapterQuestionIds(c)) {
+            if (!selectedIds.has(qid)) delete n[qid];
+          }
+          return n;
+        });
+        setNegativeMap((m) => {
+          const n = { ...m };
+          for (const qid of chapterQuestionIds(c)) {
+            if (!selectedIds.has(qid)) delete n[qid];
+          }
+          return n;
+        });
+      } else {
+        next.add(c);
+        setMarksMap((m) => {
+          const n = { ...m };
+          for (const qid of chapterQuestionIds(c)) if (n[qid] == null) n[qid] = 4;
+          return n;
+        });
+        setNegativeMap((m) => {
+          const n = { ...m };
+          for (const qid of chapterQuestionIds(c)) if (n[qid] == null) n[qid] = 0;
+          return n;
+        });
+      }
       return next;
     });
 
   const toggleQuestion = (id: string) =>
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+        setMarksMap((m) => {
+          const n = { ...m };
+          delete n[id];
+          return n;
+        });
+        setNegativeMap((m) => {
+          const n = { ...m };
+          delete n[id];
+          return n;
+        });
+      } else {
+        next.add(id);
+        setMarksMap((m) => (m[id] != null ? m : { ...m, [id]: 4 }));
+        setNegativeMap((m) => (m[id] != null ? m : { ...m, [id]: 0 }));
+      }
       return next;
     });
 
   const clearSelection = () => {
     setSelectedChapters(new Set());
     setSelectedIds(new Set());
+    setMarksMap({});
+    setNegativeMap({});
     setSearch("");
   };
 
@@ -348,6 +395,14 @@ export default function ExamCreator({
         }
         .ec-qprompt { flex: 1; min-width: 0; }
         .ec-qchapter { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; }
+        .ec-qmarks { flex: 0 0 auto; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+        .ec-qmarks span { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.12em; }
+        .ec-qmarks input {
+          width: 68px; background: transparent; border: 1px solid var(--ink); border-radius: 0;
+          padding: 7px 9px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink);
+          outline: none; text-align: center;
+        }
+        .ec-qmarks input:focus { background: #fff; }
 
         /* ---- Created ---- */
         .ec-success {
@@ -671,6 +726,34 @@ export default function ExamCreator({
                           <div className="ec-qprompt">
                             <MathPreview text={q.prompt} compact />
                           </div>
+                          <label className="ec-qmarks">
+                            <span>Marks</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={marksMap[q.id] ?? 4}
+                              onChange={(e) =>
+                                setMarksMap((prev) => ({
+                                  ...prev,
+                                  [q.id]: Math.max(0, Number(e.target.value) || 0),
+                                }))
+                              }
+                            />
+                          </label>
+                          <label className="ec-qmarks">
+                            <span>Negative</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={negativeMap[q.id] ?? 0}
+                              onChange={(e) =>
+                                setNegativeMap((prev) => ({
+                                  ...prev,
+                                  [q.id]: Math.max(0, Number(e.target.value) || 0),
+                                }))
+                              }
+                            />
+                          </label>
                         </div>
                       ))}
                     </div>

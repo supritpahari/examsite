@@ -12,6 +12,7 @@ export default function GlobalError({
 }) {
   const [customTitle, setCustomTitle] = useState<string>("");
   const [customMessage, setCustomMessage] = useState<string>("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     console.error(error);
@@ -20,6 +21,20 @@ export default function GlobalError({
       setCustomMessage(flags.customErrorMessage || "");
     });
   }, [error]);
+
+  const detail = `Error: ${error?.message || "Unknown error"}${
+    error?.digest ? `\nDigest: ${error.digest}` : ""
+  }`;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(detail);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
 
   const title = customTitle || "Something <em style={{ color: 'oklch(0.52 0.20 25)' }}>went wrong</em>";
   const message =
@@ -46,6 +61,19 @@ export default function GlobalError({
       >
         <div
           style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            letterSpacing: "0.22em",
+            textTransform: "uppercase",
+            color: "oklch(0.52 0.20 25)",
+            border: "1px solid #d9d1bf",
+            padding: "6px 14px",
+          }}
+        >
+          500 · Error
+        </div>
+        <div
+          style={{
             fontFamily: "'Instrument Serif', Georgia, serif",
             fontSize: 34,
             lineHeight: 1.1,
@@ -66,6 +94,66 @@ export default function GlobalError({
         >
           {message}
         </p>
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 560,
+            border: "1px solid #14110d",
+            background: "#fffdf8",
+            textAlign: "left",
+            margin: "6px 0 0",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 10,
+              letterSpacing: "0.16em",
+              textTransform: "uppercase",
+              color: "#8a8275",
+              background: "#ebe6da",
+              padding: "10px 14px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <span>Error details</span>
+            <button
+              onClick={copy}
+              style={{
+                background: "transparent",
+                border: "1px solid #d9d1bf",
+                color: "#3a352c",
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 10,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                padding: "6px 12px",
+                cursor: "pointer",
+              }}
+            >
+              {copied ? "Copied ✓" : "Copy"}
+            </button>
+          </div>
+          <pre
+            style={{
+              margin: 0,
+              padding: "14px",
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 12,
+              color: "#3a352c",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              lineHeight: 1.6,
+              maxHeight: 180,
+              overflow: "auto",
+            }}
+          >
+            {detail}
+          </pre>
+        </div>
         <button
           onClick={reset}
           style={{
@@ -79,6 +167,7 @@ export default function GlobalError({
             letterSpacing: "0.04em",
             textTransform: "uppercase",
             cursor: "pointer",
+            marginTop: 6,
           }}
         >
           Try again

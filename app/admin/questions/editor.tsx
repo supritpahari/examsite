@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Question, QuestionOption as Option, QuestionType } from "@/lib/questions";
-import { MathPreview, Stepper } from "../shared";
+import { MathPreview } from "../shared";
 
 const PLACEHOLDER = "Type using LaTeX-style syntax: $x^2$, $\\frac{a}{b}$, $\\vec{v}$, $\\sqrt{x}$";
 
@@ -137,8 +137,6 @@ export default function QuestionEditor({
 
   const [type, setType] = useState<QuestionType>(initial?.type ?? "single");
   const [prompt, setPrompt] = useState(initial?.prompt ?? "");
-  const [marks, setMarks] = useState(String(initial?.marks ?? 4));
-  const [negative, setNegative] = useState(String(initial?.negative ?? 1));
   const [options, setOptions] = useState<Option[]>(
     initial?.options?.length
       ? initial.options.map((o) => ({ ...o }))
@@ -249,8 +247,8 @@ export default function QuestionEditor({
         type,
         prompt: prompt.trim(),
         options: filled,
-        marks: Number(marks) || 0,
-        negative: Number(negative) || 0,
+        marks: 0,
+        negative: 0,
         chapter: chapter.trim() || undefined,
         imageUrl,
       });
@@ -546,8 +544,11 @@ export default function QuestionEditor({
                 )}
               </div>
             </div>
-            <Stepper label="Marks" value={marks} onChange={setMarks} />
-            <Stepper label="Negative" value={negative} onChange={setNegative} />
+          </div>
+
+          <div className="nq-hint" style={{ marginTop: -8, marginBottom: 18 }}>
+            Marks and negative marking are not stored on a question — you set both per exam when
+            you add it to an exam.
           </div>
 
           <div className="nq-field">
@@ -652,8 +653,6 @@ export default function QuestionEditor({
             <div className="nq-preview-card">
               <div className="nq-preview-meta">
                 <span className="nq-badge accent">{type === "mcq" ? "MCQ (Multiple)" : "Single Correct"}</span>
-                <span className="nq-badge">{Number(marks) || 0} mark{Number(marks) === 1 ? "" : "s"}</span>
-                <span className="nq-badge">−{Number(negative) || 0} negative</span>
                 {chapter.trim() && <span className="nq-badge">{chapter.trim()}</span>}
               </div>
 

@@ -228,6 +228,19 @@ export default function AdminDashboard() {
     await copyText(exam.code);
   };
 
+  const toggleStopExam = async (exam: AdminExam) => {
+    const stopping = exam.status !== "stopped";
+    const nextStatus: AdminExam["status"] = stopping ? "stopped" : "scheduled";
+    setExams((prev) =>
+      prev.map((e) => (e.id === exam.id ? { ...e, status: nextStatus } : e))
+    );
+    try {
+      await updateExam(exam.id, { status: nextStatus });
+    } catch {
+      fetchExams().then(setExams).catch(() => {});
+    }
+  };
+
   const handleSignOut = async () => {
     const { getAuthInstance } = await import("@/lib/firebase/client");
     await signOut(getAuthInstance());
@@ -884,6 +897,28 @@ export default function AdminDashboard() {
         .ad-exam-preview-title {
           font-family: 'Instrument Serif', serif; font-size: 19px; color: var(--ink); line-height: 1.2;
         }
+        .ad-qmarks-box { border: 1px solid var(--rule); background: var(--paper); margin-bottom: 22px; }
+        .ad-qmarks-head {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
+          letter-spacing: 0.16em; color: var(--ink-2); border-bottom: 1px solid var(--rule);
+          background: var(--paper-2); padding: 10px 14px;
+        }
+        .ad-qmarks-list { max-height: 32vh; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+        .ad-qmarks-row { display: flex; align-items: center; gap: 12px; }
+        .ad-qmarks-num {
+          flex: 0 0 auto; width: 24px; height: 24px; border: 1px solid var(--rule);
+          display: grid; place-items: center; font-family: 'JetBrains Mono', monospace;
+          font-size: 11px; color: var(--ink-2); background: var(--paper-2);
+        }
+        .ad-qmarks-prompt { flex: 1; min-width: 0; }
+        .ad-qmarks-input { flex: 0 0 auto; display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
+        .ad-qmarks-input span { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.12em; }
+        .ad-qmarks-input input {
+          width: 66px; background: transparent; border: 1px solid var(--ink); border-radius: 0;
+          padding: 6px 9px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink);
+          outline: none; text-align: center;
+        }
+        .ad-qmarks-input input:focus { background: #fff; }
         .ad-exam-preview-meta {
           font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); letter-spacing: 0.04em;
         }
@@ -1270,6 +1305,7 @@ export default function AdminDashboard() {
             onManageQuestions={openManageQuestions}
             onCopyLink={copyExamLink}
             onCopyCode={copyExamCode}
+            onToggleStop={toggleStopExam}
             onShowResults={(exam) =>
               router.push(`/admin/results?exam=${encodeURIComponent(exam.code)}`)
             }
@@ -1341,8 +1377,8 @@ export default function AdminDashboard() {
           questions={questions}
           initialIds={addQuestionsInitial}
           onClose={() => setAddQuestionsExam(null)}
-          onSave={async (questionIds) => {
-            await setExamQuestions(addQuestionsExam.id, questionIds);
+          onSave={async (questionIds, marksMap, negativeMap) => {
+            await setExamQuestions(addQuestionsExam.id, questionIds, marksMap, negativeMap);
             setExamQuestionMap((prev) => ({
               ...prev,
               [addQuestionsExam.id]: questionIds,
@@ -1946,6 +1982,7 @@ const EXAM_STATUS_META: Record<AdminExam["status"], { label: string; cls: string
   completed: { label: "Completed", cls: "bg-green-100 text-green-800" },
   scheduled: { label: "Scheduled", cls: "bg-blue-100 text-blue-800" },
   draft: { label: "Draft", cls: "bg-gray-100 text-gray-700" },
+  stopped: { label: "Stopped", cls: "bg-red-100 text-red-800" },
 };
 
 function ExamsPanel({
@@ -1958,6 +1995,7 @@ function ExamsPanel({
   onManageQuestions,
   onCopyLink,
   onCopyCode,
+  onToggleStop,
   onShowResults,
 }: {
   exams: AdminExam[];
@@ -1969,6 +2007,7 @@ function ExamsPanel({
   onManageQuestions: (exam: AdminExam) => void;
   onCopyLink: (exam: AdminExam) => void;
   onCopyCode: (exam: AdminExam) => void;
+  onToggleStop: (exam: AdminExam) => void;
   onShowResults: (exam: AdminExam) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -2055,6 +2094,17 @@ function ExamsPanel({
                   <button className="ad-exam-btn" onClick={() => onEdit(exam)}>Edit</button>
                   <button className="ad-exam-btn" onClick={() => onManageQuestions(exam)}>
                     {count ? "Questions" : "Add Questions"}
+                  </button>
+                  <button
+                    className={`ad-exam-btn${exam.status === "stopped" ? " danger" : ""}`}
+                    onClick={() => onToggleStop(exam)}
+                    title={
+                      exam.status === "stopped"
+                        ? "Make this exam accessible again"
+                        : "Stop this exam — the link will stop working"
+                    }
+                  >
+                    {exam.status === "stopped" ? "Start" : "Stop"}
                   </button>
                   <button className="ad-exam-btn ghost" onClick={() => handleCopy(exam)}>
                     {copiedId === exam.id ? "Copied ✓" : "Copy link"}
@@ -2616,11 +2666,17 @@ function AddQuestionsDialog({
   questions: Question[];
   initialIds?: string[];
   onClose: () => void;
-  onSave: (questionIds: string[]) => void;
+  onSave: (
+    questionIds: string[],
+    marksMap: Record<string, number>,
+    negativeMap: Record<string, number>
+  ) => void;
 }) {
   const [mode, setMode] = useState<"chapter" | "choose">("chapter");
   const [selectedChapters, setSelectedChapters] = useState<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(initialIds));
+  const [marksMap, setMarksMap] = useState<Record<string, number>>({});
+  const [negativeMap, setNegativeMap] = useState<Record<string, number>>({});
   const [search, setSearch] = useState("");
 
   const chapters = Array.from(
@@ -2635,8 +2691,35 @@ function AddQuestionsDialog({
   const toggleChapter = (chapter: string) => {
     setSelectedChapters((prev) => {
       const next = new Set(prev);
-      if (next.has(chapter)) next.delete(chapter);
-      else next.add(chapter);
+      if (next.has(chapter)) {
+        next.delete(chapter);
+        setMarksMap((m) => {
+          const n = { ...m };
+          for (const qid of chapterQuestionIds(chapter)) {
+            if (!selectedIds.has(qid)) delete n[qid];
+          }
+          return n;
+        });
+        setNegativeMap((m) => {
+          const n = { ...m };
+          for (const qid of chapterQuestionIds(chapter)) {
+            if (!selectedIds.has(qid)) delete n[qid];
+          }
+          return n;
+        });
+      } else {
+        next.add(chapter);
+        setMarksMap((m) => {
+          const n = { ...m };
+          for (const qid of chapterQuestionIds(chapter)) if (n[qid] == null) n[qid] = 4;
+          return n;
+        });
+        setNegativeMap((m) => {
+          const n = { ...m };
+          for (const qid of chapterQuestionIds(chapter)) if (n[qid] == null) n[qid] = 0;
+          return n;
+        });
+      }
       return next;
     });
   };
@@ -2644,8 +2727,23 @@ function AddQuestionsDialog({
   const toggleQuestion = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+        setMarksMap((m) => {
+          const n = { ...m };
+          delete n[id];
+          return n;
+        });
+        setNegativeMap((m) => {
+          const n = { ...m };
+          delete n[id];
+          return n;
+        });
+      } else {
+        next.add(id);
+        setMarksMap((m) => (m[id] != null ? m : { ...m, [id]: 4 }));
+        setNegativeMap((m) => (m[id] != null ? m : { ...m, [id]: 0 }));
+      }
       return next;
     });
   };
@@ -2752,11 +2850,58 @@ function AddQuestionsDialog({
           </span>
         </div>
 
+        {finalIds.length > 0 && (
+          <div className="ad-qmarks-box">
+            <div className="ad-qmarks-head">Set marks for this exam</div>
+            <div className="ad-qmarks-list">
+              {finalIds.map((id, i) => {
+                const q = questions.find((x) => x.id === id);
+                return (
+                  <div className="ad-qmarks-row" key={id}>
+                    <span className="ad-qmarks-num">{i + 1}</span>
+                    <span className="ad-qmarks-prompt">
+                      {q ? <MathPreview text={q.prompt} compact /> : "…"}
+                    </span>
+                    <label className="ad-qmarks-input">
+                      <span>Marks</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={marksMap[id] ?? 4}
+                        onChange={(e) =>
+                          setMarksMap((prev) => ({
+                            ...prev,
+                            [id]: Math.max(0, Number(e.target.value) || 0),
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="ad-qmarks-input">
+                      <span>Neg.</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={negativeMap[id] ?? 0}
+                        onChange={(e) =>
+                          setNegativeMap((prev) => ({
+                            ...prev,
+                            [id]: Math.max(0, Number(e.target.value) || 0),
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="ad-modal-foot">
           <button className="ad-set-btn ghost" onClick={onClose}>Skip for now</button>
           <button
             className="ad-submit ad-submit-inline"
-            onClick={() => onSave(finalIds)}
+            onClick={() => onSave(finalIds, marksMap, negativeMap)}
           >
             {finalIds.length ? `Save ${finalIds.length} Question${finalIds.length === 1 ? "" : "s"}` : "Save Exam"}
           </button>

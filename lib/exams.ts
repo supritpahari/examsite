@@ -12,7 +12,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 
-export type ExamStatus = "completed" | "scheduled" | "draft";
+export type ExamStatus = "completed" | "scheduled" | "draft" | "stopped";
 
 export interface Exam {
   id: string;
@@ -29,7 +29,7 @@ export interface Exam {
 
 const COLLECTION = "exams";
 
-const EXAM_STATUSES: ExamStatus[] = ["completed", "scheduled", "draft"];
+const EXAM_STATUSES: ExamStatus[] = ["completed", "scheduled", "draft", "stopped"];
 
 function asString(value: unknown, fallback: string): string {
   return typeof value === "string" ? value : value == null ? fallback : String(value);
@@ -163,13 +163,15 @@ export async function deleteExamQuestionsByQuestion(
 
 export async function setExamQuestions(
   examId: string,
-  questionIds: string[]
+  questionIds: string[],
+  marksMap: Record<string, number> = {},
+  negativeMap: Record<string, number> = {}
 ): Promise<void> {
   const db = getFirestoreDb();
   const existing = await getDocs(
     query(collection(db, "examQuestions"), where("examId", "==", examId))
   );
-  const existingIds = new Set(existing.docs.map((d) => d.data().questionId as string));
+  const byQid = new Map(existing.docs.map((d) => [d.data().questionId as string, d]));
   for (const d of existing.docs) {
     if (!questionIds.includes(d.data().questionId as string)) {
       await deleteDoc(doc(db, "examQuestions", d.id));
@@ -177,12 +179,47 @@ export async function setExamQuestions(
   }
   for (let i = 0; i < questionIds.length; i++) {
     const qid = questionIds[i];
-    if (existingIds.has(qid)) continue;
+    const marks = Number(marksMap[qid]) || 0;
+    const negative = Number(negativeMap[qid]) || 0;
+    const existingDoc = byQid.get(qid);
+    if (existingDoc) {
+      await updateDoc(doc(db, "examQuestions", existingDoc.id), {
+        order: i,
+        marks,
+        negative,
+      });
+      continue;
+    }
     await addDoc(collection(db, "examQuestions"), {
       examId,
       questionId: qid,
       order: i,
+      marks,
+      negative,
       createdAt: serverTimestamp(),
     });
   }
+}
+
+export interface ExamQuestionMarks {
+  marks: number;
+  negative: number;
+}
+
+export async function fetchExamQuestionMarks(
+  examId: string
+): Promise<Record<string, ExamQuestionMarks>> {
+  const db = getFirestoreDb();
+  const snap = await getDocs(
+    query(collection(db, "examQuestions"), where("examId", "==", examId))
+  );
+  const config: Record<string, ExamQuestionMarks> = {};
+  for (const d of snap.docs) {
+    const qid = d.data().questionId as string;
+    config[qid] = {
+      marks: Number(d.data().marks) || 0,
+      negative: Number(d.data().negative) || 0,
+    };
+  }
+  return config;
 }

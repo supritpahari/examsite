@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import {
   fetchExamByCode,
   fetchExamQuestionIds,
+  fetchExamQuestionMarks,
   type Exam,
 } from "@/lib/exams";
 import { fetchQuestions, type Question, type QuestionType } from "@/lib/questions";
@@ -126,12 +127,25 @@ function ExamContent() {
           setLoading(false);
           return;
         }
+        if (found.status === "stopped") {
+          setError(
+            "This exam has been stopped by the instructor and is no longer accessible."
+          );
+          setExam(found);
+          setLoading(false);
+          return;
+        }
         const questionIds = await fetchExamQuestionIds(found.id);
         const allQuestions = await fetchQuestions();
         const byId = new Map(allQuestions.map((q) => [q.id, q]));
+        const marksByQid = await fetchExamQuestionMarks(found.id);
         const ord = questionIds
           .map((id) => byId.get(id))
-          .filter((q): q is Question => Boolean(q));
+          .filter((q): q is Question => Boolean(q))
+          .map((q) => {
+            const cfg = marksByQid[q.id];
+            return { ...q, marks: cfg?.marks ?? 0, negative: cfg?.negative ?? 0 };
+          });
         if (!active) return;
         if (ord.length === 0) {
           setError(
