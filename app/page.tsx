@@ -20,16 +20,16 @@ export default function Home() {
   const sanitizeCode = (raw: string): string =>
     raw
       .toUpperCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^A-Z0-9-]/g, "")
-      .replace(/-{2,}/g, "-");
+      .replace(/[\s-]+/g, "_")
+      .replace(/[^A-Z0-9_]/g, "")
+      .replace(/_{2,}/g, "_");
 
   const openDialog = () => setDialogOpen(true);
   const closeDialog = () => setDialogOpen(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = code.trim().replace(/^-+|-+$/g, "");
+    const trimmed = code.trim().replace(/^_+|_+$/g, "");
     if (!trimmed) return;
     router.push(`/exam?id=${encodeURIComponent(trimmed)}`);
   };
@@ -445,7 +445,7 @@ export default function Home() {
           <form className="v2-cta-row" onSubmit={handleSubmit}>
             <input
               type="text"
-              placeholder="PHY-JEE-2026-04"
+              placeholder="PHY_JEE_2026_04"
               maxLength={18}
               spellCheck={false}
               autoComplete="off"
@@ -548,7 +548,7 @@ export default function Home() {
             <form className="v2-cta-row" onSubmit={handleSubmit}>
               <input
                 type="text"
-                placeholder="PHY-JEE-2026-04"
+                placeholder="PHY_JEE_2026_04"
                 maxLength={18}
                 spellCheck={false}
                 autoComplete="off"
