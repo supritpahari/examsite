@@ -1148,9 +1148,10 @@ const CSS = `
   .v2-mobile-pal-icon { font-size: 14px; }
 
   .v2-q2-text {
-    font-family: 'Instrument Serif', serif;
-    font-size: 20px;
-    line-height: 1.45;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 18px;
+    font-weight: 450;
+    line-height: 1.55;
     color: #f4ecd8;
     margin: 0 0 24px;
     word-break: break-word;
@@ -1191,7 +1192,7 @@ const CSS = `
   }
   .v2-opt2.sel .v2-opt2-k { background: var(--accent); border-color: var(--accent); color: #fff; }
   .v2-opt2-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-  .v2-opt2-t { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; line-height: 1.5; word-break: break-word; overflow-wrap: anywhere; }
+  .v2-opt2-t { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-size: 15px; line-height: 1.55; word-break: break-word; overflow-wrap: anywhere; }
   .v2-opt2-img { display: block; max-width: 100%; max-width: 200px; max-height: 140px; object-fit: contain; border: 1px solid var(--rule); }
 
   .v2-nav {
@@ -1839,8 +1840,8 @@ const CSS = `
 
     .v2-preview-bar { padding: 10px 12px; }
     .v2-q2 { padding: 12px 12px 16px; }
-    .v2-q2-text { font-size: 17px; }
-    .v2-opt2-t { font-size: 13px; }
+    .v2-q2-text { font-size: 16px; }
+    .v2-opt2-t { font-size: 14.5px; }
     .v2-opt2-k { width: 26px; height: 26px; font-size: 11px; }
     .v2-pal { grid-template-columns: repeat(5, minmax(0,1fr)); }
     .v2-overlay { padding: 12px; }
