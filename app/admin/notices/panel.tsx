@@ -145,9 +145,6 @@ export default function NoticesPanel({ onNavigateTab }: Props) {
                 </span>
               ))}
             </span>
-            <Link href="/admin/zen/control" style={{ color: "var(--accent)" }}>
-              Manage notice →
-            </Link>
           </div>
         </div>
       )}

@@ -169,6 +169,9 @@ export default function QuestionEditor({
   const optionBlobUrlsRef = useRef<Record<string, string>>({});
 
   const [chapter, setChapter] = useState(initial?.chapter ?? "");
+  const [chapterOpen, setChapterOpen] = useState(false);
+  const [chapterQuery, setChapterQuery] = useState("");
+  const [chapterHighlight, setChapterHighlight] = useState(0);
   const [typeOpen, setTypeOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<{ id?: string; msg: string } | null>(null);
@@ -176,6 +179,8 @@ export default function QuestionEditor({
   const [didStartTyping, setDidStartTyping] = useState(false);
 
   const typeRef = useRef<HTMLDivElement>(null);
+  const chapterRef = useRef<HTMLDivElement>(null);
+  const chapterInputRef = useRef<HTMLInputElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
   const savedSnapshot = useMemo(
     () => ({
@@ -200,17 +205,25 @@ export default function QuestionEditor({
     (mainUploadStatus === "uploading" ? 1 : 0) +
     Object.values(optionUploadStatus).filter((s) => s === "uploading").length;
 
-  // Close type dropdown on outside click
+  // Close type / chapter dropdowns on outside click
   useEffect(() => {
-    if (!typeOpen) return;
+    if (!typeOpen && !chapterOpen) return;
     const onDoc = (e: MouseEvent) => {
-      if (typeRef.current && !typeRef.current.contains(e.target as Node)) {
-        setTypeOpen(false);
-      }
+      const t = e.target as Node;
+      if (typeOpen && typeRef.current && !typeRef.current.contains(t)) setTypeOpen(false);
+      if (chapterOpen && chapterRef.current && !chapterRef.current.contains(t)) setChapterOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [typeOpen]);
+  }, [typeOpen, chapterOpen]);
+
+  useEffect(() => {
+    if (chapterOpen) {
+      setChapterQuery("");
+      setChapterHighlight(0);
+      requestAnimationFrame(() => chapterInputRef.current?.focus());
+    }
+  }, [chapterOpen]);
 
   // Warn before leaving the page with unsaved changes
   useEffect(() => {
@@ -665,6 +678,29 @@ export default function QuestionEditor({
         }
         .nq-select-opt:hover { background: var(--paper-2); color: var(--ink); }
         .nq-select-opt.sel { color: var(--accent); border-color: var(--rule); background: var(--paper-2); }
+        .nq-select-opt.hi { background: var(--paper-2); color: var(--ink); }
+        .nq-select-placeholder { color: var(--dim); }
+        .nq-chapter-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .nq-chapter-clear {
+          width: 22px; height: 22px; display: grid; place-items: center;
+          border: 1px solid var(--rule); color: var(--dim); font-size: 16px; line-height: 1;
+        }
+        .nq-chapter-clear:hover { border-color: var(--accent); color: var(--accent); }
+        .nq-chapter-menu {
+          position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 24;
+          background: var(--paper); border: 1px solid var(--ink);
+          box-shadow: 6px 6px 0 rgba(20,17,13,0.12);
+        }
+        .nq-chapter-search {
+          width: 100% !important; border: 0 !important; border-bottom: 1px solid var(--rule) !important;
+          background: #fff !important; font-size: 13px !important; padding: 10px 12px !important;
+        }
+        .nq-chapter-list {
+          position: static !important; top: auto !important; box-shadow: none !important;
+          border: 0 !important; max-height: 220px; overflow-y: auto;
+        }
+        .nq-chapter-create { color: var(--accent) !important; }
+        .nq-chapter-empty { color: var(--dim); cursor: default; }
 
         .nq-hint { font-size: 11px; color: var(--dim); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
         .nq-hint.err { color: var(--err); }
@@ -1057,6 +1093,82 @@ export default function QuestionEditor({
               <div className="nq-preview-meta">
                 <span className="nq-badge accent">{type === "mcq" ? "MCQ (Multiple)" : "Single Correct"}</span>
                 {chapter.trim() && <span className="nq-badge">{chapter.trim()}</span>}
+              </div>
+
+              {imageUrl && <img className="nq-preview-img" src={imageUrl} alt="question" />}
+
+              <div className="nq-preview-prompt">
+                {prompt.trim() ? (
+                  <MathPreview text={prompt} />
+                ) : (
+                  <span className="nq-placeholder">Question text will appear here…</span>
+                )}
+              </div>
+
+              <div className="nq-options">
+                {options.map((o, i) => {
+                  const hasContent = o.text.trim() || o.imageUrl;
+                  return (
+                    <div className={`nq-option${o.correct && hasContent ? " correct" : ""}`} key={o.id}>
+                      <span className="nq-opt-key-badge">{String.fromCharCode(65 + i)}</span>
+                      <div className="nq-opt-text">
+                        {hasContent ? (
+                          <>
+                            {o.text.trim() ? <MathPreview text={o.text} compact /> : null}
+                            {o.imageUrl && <img className="nq-opt-img" src={o.imageUrl} alt={`option ${String.fromCharCode(65 + i)}`} />}
+                          </>
+                        ) : (
+                          <span className="nq-placeholder">Option {String.fromCharCode(65 + i)}…</span>
+                        )}
+                      </div>
+                      {o.correct && hasContent && <span className="nq-correct-tag">Correct</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="nq-footer" ref={footerRef}>
+        {error && <div className="nq-error">{error.msg}</div>}
+        {saved && <div className="nq-toast">Question saved ✓ — returning to list…</div>}
+        {!saved && !error && uploadsInFlight > 0 && (
+          <div className="nq-waiting">
+            Waiting for {uploadsInFlight} image upload{uploadsInFlight === 1 ? "" : "s"} to finish before saving…
+          </div>
+        )}
+        <button
+          className="nq-submit"
+          onClick={save}
+          disabled={saving || uploadsInFlight > 0 || saved}
+          title={
+            uploadsInFlight > 0
+              ? "Cannot save while an image is still uploading"
+              : saving
+                ? "Saving question…"
+                : "Save question"
+          }
+        >
+          {uploadsInFlight > 0
+            ? `Waiting for upload${uploadsInFlight === 1 ? "" : "s"}…`
+            : saving
+              ? "Saving…"
+              : saved
+                ? "Saved ✓"
+                : "Save Question"}
+        </button>
+        {isDirty && !saving && !saved && !error && (
+          <div className="nq-hint" style={{ textAlign: "center", marginTop: 8 }}>
+            You have unsaved changes.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+rim() && <span className="nq-badge">{chapter.trim()}</span>}
               </div>
 
               {imageUrl && <img className="nq-preview-img" src={imageUrl} alt="question" />}
