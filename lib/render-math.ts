@@ -188,6 +188,37 @@ function expand(s: string): string {
     /\\bar\{([^{}]*)\}/g,
     (_m, x) => '<span class="oline">' + expand(x) + "</span>"
   );
+  // \hat{...} — circumflex cap centered over the body
+  s = s.replace(
+    /\\hat\{([^{}]*)\}/g,
+    (_m, x) =>
+      '<span class="mhat"><span class="mhat-cap">ˆ</span><span class="mhat-body">' +
+      expand(x) +
+      "</span></span>"
+  );
+  // \vec{...} — right-arrow over the body, positioned just like hat
+  s = s.replace(
+    /\\vec\{([^{}]*)\}/g,
+    (_m, x) =>
+      '<span class="mvec"><span class="mvec-arrow">→</span><span class="mvec-body">' +
+      expand(x) +
+      "</span></span>"
+  );
+  // Also support \hat x / \vec x (single-char, no braces)
+  s = s.replace(
+    /\\hat\s+([A-Za-z0-9])/g,
+    (_m, x) =>
+      '<span class="mhat"><span class="mhat-cap">ˆ</span><span class="mhat-body">' +
+      x +
+      "</span></span>"
+  );
+  s = s.replace(
+    /\\vec\s+([A-Za-z0-9])/g,
+    (_m, x) =>
+      '<span class="mvec"><span class="mvec-arrow">→</span><span class="mvec-body">' +
+      x +
+      "</span></span>"
+  );
   s = s.replace(
     /\\frac\{([^{}]*)\}\{([^{}]*)\}/g,
     (_m, n, d) =>
@@ -198,9 +229,17 @@ function expand(s: string): string {
       "</span></span>"
   );
   s = s.replace(/\^\{([^{}]*)\}/g, (_m, x) => "<sup>" + expand(x) + "</sup>");
-  s = s.replace(/\^([A-Za-z0-9]+)/g, (_m, x) => "<sup>" + expand(x) + "</sup>");
   s = s.replace(/_\{([^{}]*)\}/g, (_m, x) => "<sub>" + expand(x) + "</sub>");
-  s = s.replace(/_([A-Za-z0-9]+)/g, (_m, x) => "<sub>" + expand(x) + "</sub>");
+  // Bare ^x / _x where x is a single alphanumeric OR x follows a closing HTML tag
+  // (e.g. \hat{p}^2 → after hat expansion the ^ comes right after </span>).
+  s = s.replace(
+    /\^(?:(?:<\/span>[A-Za-z0-9]*)?)([A-Za-z0-9])/g,
+    (_m, x) => "<sup>" + x + "</sup>"
+  );
+  s = s.replace(
+    /_(?:(?:<\/span>[A-Za-z0-9]*)?)([A-Za-z0-9])/g,
+    (_m, x) => "<sub>" + x + "</sub>"
+  );
   return s;
 }
 

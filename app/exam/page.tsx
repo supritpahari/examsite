@@ -1709,6 +1709,29 @@ const CSS = `
   .sqrt > .sym { font-size: 1.1em; line-height: 1; transform: scaleX(0.82); transform-origin: bottom; }
   .sqrt > .body { border-top: 1px solid currentColor; padding: 2px 3px 0; }
   .oline { border-top: 1px solid currentColor; padding-top: 1px; }
+  .mhat { position: relative; display: inline-block; }
+  .mhat-cap {
+    position: absolute;
+    top: -0.55em;
+    left: 50%;
+    transform: translateX(-55%) scaleX(1.1);
+    font-size: 0.85em;
+    line-height: 1;
+    pointer-events: none;
+  }
+  .mhat-body { padding: 0 1px; }
+  .mvec { position: relative; display: inline-block; }
+  .mvec-arrow {
+    position: absolute;
+    top: -0.55em;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.8em;
+    line-height: 1;
+    letter-spacing: -0.05em;
+    pointer-events: none;
+  }
+  .mvec-body { padding: 0 1px; }
   .fn { font-style: italic; }
   sup, sub { font-size: 0.72em; line-height: 0; }
 

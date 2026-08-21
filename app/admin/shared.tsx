@@ -60,8 +60,8 @@ function parseMath(str: string, keyBase = "m"): React.ReactNode[] {
         i = n1;
         push(
           <span key={`${keyBase}-${k++}`} className="nq-vec">
-            {parseMath(body, keyBase + "v")}
-            <span className="nq-vec-arrow">⃗</span>
+            <span className="nq-vec-arrow">→</span>
+            <span className="nq-vec-body">{parseMath(body, keyBase + "v")}</span>
           </span>
         );
         continue;
