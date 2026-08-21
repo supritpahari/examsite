@@ -40,7 +40,9 @@ function toStoreOptions(options: QuestionOption[]): Record<string, unknown>[] {
     id: o.id,
     text: o.text,
     correct: o.correct,
-    ...(o.imageUrl ? { imageUrl: o.imageUrl } : {}),
+    // Always include imageUrl so Firestore set({merge:true}) replaces it rather
+    // than keeping a stale value when an image is removed.
+    imageUrl: o.imageUrl ?? deleteField(),
   }));
 }
 

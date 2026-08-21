@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getAuthInstance, onAuthState } from "@/lib/firebase/client";
 import { signInWithPopup, GoogleAuthProvider, signOut, type User } from "firebase/auth";
 import { loadControlFlags, saveControlFlags, type SiteControlFlags } from "@/lib/settings";
+import NoticeEditor from "../../notices/editor";
 
 const ALLOWED_EMAIL = "obliqllc@gmail.com";
 
@@ -396,6 +397,15 @@ export default function ZenControl() {
         <button className="zen-btn" onClick={handleSave} disabled={saving} style={{ width: "100%", marginTop: 8 }}>
           {saving ? "Saving…" : "Save Changes"}
         </button>
+
+        <div className="zen-card" style={{ marginTop: 28 }}>
+          <h2 className="zen-card-title">Admin <em>Notice</em></h2>
+          <p className="zen-card-desc">
+            Build a notice from blocks (text, images, buttons). Publish it and every admin will
+            see it the next time they open /admin — it becomes the default landing tab.
+          </p>
+          <NoticeEditor publishedBy={user?.email ?? undefined} />
+        </div>
 
         <p style={{ marginTop: 24, textAlign: "center", fontFamily: "'JetBrains Mono', monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8a8275" }}>
           Access this page at <code style={{ background: "#ebe6da", padding: "2px 6px", fontSize: 11 }}>/admin/zen/control</code>

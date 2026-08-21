@@ -32,8 +32,10 @@ import {
   DEFAULT_SITE_INFO,
   type SiteInfo,
 } from "@/lib/settings";
+import NoticesPanel from "./notices/panel";
 
 const NAV = [
+  { key: "notices", label: "Notices" },
   { key: "questions", label: "Questions" },
   { key: "exams", label: "Exams" },
   { key: "students", label: "Students" },
@@ -82,6 +84,13 @@ function NavIcon({ name }: { name: string }) {
       return (
         <svg {...common}><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><path d="M16 5.4a3.2 3.2 0 1 1 0 5.6" /><path d="M17.5 14.2a5.5 5.5 0 0 1 3 4.8" /></svg>
       );
+    case "notices":
+      return (
+        <svg {...common}>
+          <path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2z" />
+          <path d="M10 20a2 2 0 0 0 4 0" />
+        </svg>
+      );
     case "information":
       return (
         <svg {...common}><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
@@ -105,7 +114,7 @@ function NavIcon({ name }: { name: string }) {
 
 export default function AdminDashboard() {
   const [collapsed, setCollapsed] = useState(false);
-  const [active, setActive] = useState("questions");
+  const [active, setActive] = useState("notices");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [examModalOpen, setExamModalOpen] = useState(false);
@@ -781,10 +790,11 @@ export default function AdminDashboard() {
         .ad-frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 2px; font-size: 0.78em; }
         .ad-frac-num { border-bottom: 1px solid var(--ink); padding: 0 5px; }
         .ad-frac-den { padding: 0 5px; }
-        .ad-vec { position: relative; }
-        .ad-vec-arrow { display: inline-block; margin-left: 1px; }
+        .ad-vec { position: relative; display: inline-block; }
+        .ad-vec-arrow { position: absolute; top: -0.55em; left: 50%; transform: translateX(-50%); font-size: 0.8em; line-height: 1; letter-spacing: -0.05em; pointer-events: none; }
+        .ad-vec-body { padding: 0 1px; }
         .ad-hat { position: relative; display: inline-block; }
-        .ad-hat-cap { position: absolute; top: -0.12em; left: 50%; transform: translateX(-50%); font-size: 0.82em; line-height: 1; }
+        .ad-hat-cap { position: absolute; top: -0.55em; left: 50%; transform: translateX(-55%) scaleX(1.1); font-size: 0.85em; line-height: 1; pointer-events: none; }
         .ad-hat-body { padding: 0 1px; }
         .ad-sqrt { border-top: 1px solid var(--ink); padding: 0 2px; }
         .ad-sqrt-body { border-top: 1px solid var(--ink); padding: 0 2px; }
@@ -1165,6 +1175,10 @@ export default function AdminDashboard() {
       </aside>
 
       <main className="ad-main">
+        {active === "notices" && (
+          <NoticesPanel onNavigateTab={(tab) => setActive(tab)} />
+        )}
+
         {active === "questions" && (
           <>
             <div className="ad-head">
@@ -1318,7 +1332,7 @@ export default function AdminDashboard() {
 
         {active === "information" && <InformationPanel siteInfo={siteInfo} onSaved={setSiteInfo} />}
 
-        {active !== "questions" && active !== "settings" && active !== "exams" && active !== "students" && active !== "information" && (
+        {active !== "notices" && active !== "questions" && active !== "settings" && active !== "exams" && active !== "students" && active !== "information" && (
           <div className="ad-head">
             <h1 className="ad-title">{NAV.find((n) => n.key === active)?.label}</h1>
             <span className="ad-count">coming soon</span>
@@ -1499,8 +1513,8 @@ function parseMath(str: string, keyBase = "m"): React.ReactNode[] {
         i = n1;
         push(
           <span key={`${keyBase}-${k++}`} className="ad-vec">
-            {parseMath(body, keyBase + "v")}
-            <span className="ad-vec-arrow">⃗</span>
+            <span className="ad-vec-arrow">→</span>
+            <span className="ad-vec-body">{parseMath(body, keyBase + "v")}</span>
           </span>
         );
         continue;

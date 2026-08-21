@@ -464,10 +464,11 @@ export default function ExamCreator({
         .nq-frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 2px; font-size: 0.78em; }
         .nq-frac-num { border-bottom: 1px solid var(--ink); padding: 0 5px; }
         .nq-frac-den { padding: 0 5px; }
-        .nq-vec { position: relative; }
-        .nq-vec-arrow { display: inline-block; margin-left: 1px; }
+        .nq-vec { position: relative; display: inline-block; }
+        .nq-vec-arrow { position: absolute; top: -0.55em; left: 50%; transform: translateX(-50%); font-size: 0.8em; line-height: 1; letter-spacing: -0.05em; pointer-events: none; }
+        .nq-vec-body { padding: 0 1px; }
         .nq-hat { position: relative; display: inline-block; }
-        .nq-hat-cap { position: absolute; top: -0.12em; left: 50%; transform: translateX(-50%); font-size: 0.82em; line-height: 1; }
+        .nq-hat-cap { position: absolute; top: -0.55em; left: 50%; transform: translateX(-55%) scaleX(1.1); font-size: 0.85em; line-height: 1; pointer-events: none; }
         .nq-hat-body { padding: 0 1px; }
         .nq-sqrt { border-top: 1px solid var(--ink); padding: 0 2px; }
         .nq-sqrt-body { border-top: 1px solid var(--ink); padding: 0 2px; }

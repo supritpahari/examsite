@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Question, QuestionOption as Option, QuestionType } from "@/lib/questions";
 import { MathPreview } from "../shared";
 
 const PLACEHOLDER = "Type using LaTeX-style syntax: $x^2$, $\\frac{a}{b}$, $\\vec{v}$, $\\sqrt{x}$";
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB — ImgBB free tier allows up to 32 MB but 5 MB is plenty for question images
+const IMBB_ENDPOINT = "https://api.imgbb.com/1/upload?key=4125525efeb9a21fe49db324919cdeaf";
 
 interface ToolItem {
   label: string;
@@ -33,6 +35,7 @@ const TOOLBAR: ToolItem[] = [
   { label: "$…$", title: "Math mode", snippet: "$ $", wrap: true },
 ];
 
+type UploadStatus = "idle" | "uploading" | "error";
 
 function insertAtCursor(
   el: HTMLInputElement | HTMLTextAreaElement,
@@ -64,11 +67,13 @@ function MathField({
   onChange,
   placeholder,
   multiline,
+  id,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   multiline?: boolean;
+  id?: string;
 }) {
   const ref = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
@@ -95,6 +100,7 @@ function MathField({
       </div>
       {multiline ? (
         <textarea
+          id={id}
           ref={ref as React.RefObject<HTMLTextAreaElement>}
           className="nq-math-input"
           value={value}
@@ -103,6 +109,7 @@ function MathField({
         />
       ) : (
         <input
+          id={id}
           type="text"
           ref={ref as React.RefObject<HTMLInputElement>}
           className="nq-math-input"
@@ -114,7 +121,6 @@ function MathField({
     </div>
   );
 }
-
 
 export interface QuestionEditorProps {
   initial?: Question | null;
@@ -147,14 +153,54 @@ export default function QuestionEditor({
           { id: "d", text: "", correct: false },
         ]
   );
+
+  // Main image state — stored url may be a blob: preview or the remote ImgBB URL.
+  // `removed` flag tracks explicit removal in edit mode so we know to deleteField on save.
   const [imageUrl, setImageUrl] = useState<string | undefined>(initial?.imageUrl);
-  const [uploading, setUploading] = useState(false);
+  const [mainImgRemoved, setMainImgRemoved] = useState(false);
+  const [mainUploadStatus, setMainUploadStatus] = useState<UploadStatus>("idle");
+  const [mainUploadError, setMainUploadError] = useState("");
+  const mainBlobUrlRef = useRef<string | null>(null);
+
+  // Per-option image state
+  const [optionImgRemoved, setOptionImgRemoved] = useState<Record<string, boolean>>({});
+  const [optionUploadStatus, setOptionUploadStatus] = useState<Record<string, UploadStatus>>({});
+  const [optionUploadError, setOptionUploadError] = useState<Record<string, string>>({});
+  const optionBlobUrlsRef = useRef<Record<string, string>>({});
+
   const [chapter, setChapter] = useState(initial?.chapter ?? "");
   const [typeOpen, setTypeOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const typeRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<{ id?: string; msg: string } | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [didStartTyping, setDidStartTyping] = useState(false);
 
+  const typeRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+  const savedSnapshot = useMemo(
+    () => ({
+      type: initial?.type ?? "single",
+      prompt: initial?.prompt ?? "",
+      options: initial?.options?.length
+        ? initial.options.map((o) => ({ ...o }))
+        : [
+            { id: "a", text: "", correct: false },
+            { id: "b", text: "", correct: false },
+            { id: "c", text: "", correct: false },
+            { id: "d", text: "", correct: false },
+          ],
+      imageUrl: initial?.imageUrl,
+      chapter: initial?.chapter ?? "",
+    }),
+    [initial]
+  );
+
+  // Track any in-flight uploads (main + any option) for the global Save lock
+  const uploadsInFlight =
+    (mainUploadStatus === "uploading" ? 1 : 0) +
+    Object.values(optionUploadStatus).filter((s) => s === "uploading").length;
+
+  // Close type dropdown on outside click
   useEffect(() => {
     if (!typeOpen) return;
     const onDoc = (e: MouseEvent) => {
@@ -166,100 +212,366 @@ export default function QuestionEditor({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [typeOpen]);
 
-  const setOptText = (id: string, text: string) =>
+  // Warn before leaving the page with unsaved changes
+  useEffect(() => {
+    const hasChanges = computeIsDirty();
+    if (!hasChanges || saving) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, prompt, options, imageUrl, mainImgRemoved, optionImgRemoved, chapter, saving, didStartTyping]);
+
+  // Revoke any lingering blob URLs on unmount to avoid memory leaks
+  useEffect(() => {
+    const mainRef = mainBlobUrlRef;
+    const optRef = optionBlobUrlsRef;
+    return () => {
+      if (mainRef.current) URL.revokeObjectURL(mainRef.current);
+      for (const url of Object.values(optRef.current)) URL.revokeObjectURL(url);
+    };
+  }, []);
+
+  // When the admin switches to single-correct, keep only the first currently-correct option
+  // (called synchronously from the type-change click handler to avoid an effect-cascade).
+  function coerceToSingleCorrect(prev: Option[]): Option[] {
+    const firstCorrectIdx = prev.findIndex((o) => o.correct);
+    if (firstCorrectIdx <= 0) return prev;
+    return prev.map((o, i) => ({ ...o, correct: i === firstCorrectIdx }));
+  }
+
+  function switchType(next: QuestionType) {
+    markDirty();
+    setType(next);
+    setTypeOpen(false);
+    if (next === "single") {
+      setOptions((prev) => coerceToSingleCorrect(prev));
+    }
+  }
+
+  function markDirty() {
+    if (!didStartTyping) setDidStartTyping(true);
+  }
+
+  function computeIsDirty(): boolean {
+    if (!initial) {
+      // On "new question", treat any non-empty content as dirty
+      return (
+        didStartTyping ||
+        prompt.trim().length > 0 ||
+        options.some((o) => o.text.trim() || o.imageUrl) ||
+        Boolean(imageUrl) ||
+        chapter.trim().length > 0
+      );
+    }
+    if (type !== savedSnapshot.type) return true;
+    if (prompt !== savedSnapshot.prompt) return true;
+    if ((chapter ?? "") !== (savedSnapshot.chapter ?? "")) return true;
+
+    // image
+    const savedImg = savedSnapshot.imageUrl;
+    if (mainImgRemoved) {
+      if (savedImg) return true;
+    } else {
+      if ((imageUrl ?? "") !== (savedImg ?? "")) {
+        // blob: URLs are local previews — still count as dirty because they need to upload on save
+        if (imageUrl?.startsWith("blob:")) return true;
+        return true;
+      }
+    }
+
+    // options
+    if (options.length !== savedSnapshot.options.length) return true;
+    for (let i = 0; i < options.length; i++) {
+      const a = options[i];
+      const b = savedSnapshot.options[i];
+      if (!b) return true;
+      if (a.id !== b.id || a.text !== b.text || a.correct !== b.correct) return true;
+      const optRemoved = optionImgRemoved[a.id];
+      const optSavedImg = b.imageUrl;
+      if (optRemoved) {
+        if (optSavedImg) return true;
+      } else if ((a.imageUrl ?? "") !== (optSavedImg ?? "")) {
+        if (a.imageUrl?.startsWith("blob:")) return true;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function scrollErrorIntoView() {
+    requestAnimationFrame(() => {
+      footerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  function showErr(msg: string, fieldId?: string) {
+    setError({ id: fieldId, msg });
+    scrollErrorIntoView();
+    if (fieldId) {
+      requestAnimationFrame(() => {
+        document.getElementById(fieldId)?.focus();
+      });
+    }
+  }
+
+  function validateImageFile(f: File): string | null {
+    if (!f.type.startsWith("image/")) return "Only image files are accepted.";
+    if (f.size > MAX_IMAGE_BYTES) {
+      return `Image is too large (${(f.size / 1024 / 1024).toFixed(1)} MB). Max ${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)} MB.`;
+    }
+    return null;
+  }
+
+  async function uploadToImgBB(f: File): Promise<string> {
+    const form = new FormData();
+    form.append("image", f);
+    const res = await fetch(IMBB_ENDPOINT, { method: "POST", body: form });
+    if (!res.ok) throw new Error(`ImgBB responded ${res.status}`);
+    const data = (await res.json()) as {
+      success?: boolean;
+      data?: { url?: string; display_url?: string };
+    };
+    const url = data.data?.display_url || data.data?.url;
+    if (!data.success || !url) throw new Error("Upload failed");
+    return url;
+  }
+
+  const setOptText = (id: string, text: string) => {
+    markDirty();
     setOptions((prev) => prev.map((o) => (o.id === id ? { ...o, text } : o)));
+    if (error?.id === `opt-${id}`) setError(null);
+  };
+
   const setOptImage = (id: string, imageUrl: string | undefined) =>
     setOptions((prev) => prev.map((o) => (o.id === id ? { ...o, imageUrl } : o)));
-  const toggleCorrect = (id: string) =>
+
+  const toggleCorrect = (id: string) => {
+    markDirty();
     setOptions((prev) =>
       prev.map((o) =>
         o.id === id
           ? { ...o, correct: type === "single" ? true : !o.correct }
           : type === "single"
-          ? { ...o, correct: false }
-          : o
+            ? { ...o, correct: false }
+            : o
       )
     );
+    if (error?.id === "options") setError(null);
+  };
 
   const onImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
+    e.target.value = "";
     if (!f) return;
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("image", f);
-      const res = await fetch(
-        "https://api.imgbb.com/1/upload?key=4125525efeb9a21fe49db324919cdeaf",
-        { method: "POST", body: form }
-      );
-      const data = (await res.json()) as {
-        success?: boolean;
-        data?: { url?: string; display_url?: string };
-      };
-      if (data.success && data.data?.url) {
-        setImageUrl(data.data.url);
-      } else {
-        throw new Error("Upload failed");
-      }
-    } catch {
-      setImageUrl(URL.createObjectURL(f));
-    } finally {
-      setUploading(false);
+    const err = validateImageFile(f);
+    if (err) {
+      setMainUploadStatus("error");
+      setMainUploadError(err);
+      showErr(err);
+      return;
     }
+    markDirty();
+    setMainUploadStatus("uploading");
+    setMainUploadError("");
+    setMainImgRemoved(false);
+    setError(null);
+
+    // Local preview while uploading
+    if (mainBlobUrlRef.current) URL.revokeObjectURL(mainBlobUrlRef.current);
+    const previewUrl = URL.createObjectURL(f);
+    mainBlobUrlRef.current = previewUrl;
+    setImageUrl(previewUrl);
+
+    try {
+      const url = await uploadToImgBB(f);
+      setImageUrl(url);
+      setMainUploadStatus("idle");
+      setMainUploadError("");
+    } catch (err) {
+      setMainUploadStatus("error");
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      setMainUploadError(`Upload failed: ${msg}. Please try again or remove the image before saving.`);
+      setImageUrl(previewUrl); // keep local preview so the user sees what they picked
+    }
+  };
+
+  const onRemoveMainImage = () => {
+    markDirty();
+    if (mainBlobUrlRef.current) {
+      URL.revokeObjectURL(mainBlobUrlRef.current);
+      mainBlobUrlRef.current = null;
+    }
+    setImageUrl(undefined);
+    setMainImgRemoved(true);
+    setMainUploadStatus("idle");
+    setMainUploadError("");
+  };
+
+  const onRetryMainImage = () => {
+    // Force the user to re-pick — we can't retry without a File reference
+    const input = document.getElementById("nq-main-file") as HTMLInputElement | null;
+    input?.click();
   };
 
   const onOptionImage = async (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
     const f = e.target.files?.[0];
+    e.target.value = "";
     if (!f) return;
+    const err = validateImageFile(f);
+    if (err) {
+      setOptionUploadStatus((p) => ({ ...p, [id]: "error" }));
+      setOptionUploadError((p) => ({ ...p, [id]: err }));
+      showErr(err, `opt-file-${id}`);
+      return;
+    }
+    markDirty();
+    setOptionUploadStatus((p) => ({ ...p, [id]: "uploading" }));
+    setOptionUploadError((p) => ({ ...p, [id]: "" }));
+    setOptionImgRemoved((p) => {
+      const n = { ...p };
+      delete n[id];
+      return n;
+    });
+    setError(null);
+
+    const oldBlob = optionBlobUrlsRef.current[id];
+    if (oldBlob) URL.revokeObjectURL(oldBlob);
+    const previewUrl = URL.createObjectURL(f);
+    optionBlobUrlsRef.current[id] = previewUrl;
+    setOptImage(id, previewUrl);
+
     try {
-      const form = new FormData();
-      form.append("image", f);
-      const res = await fetch(
-        "https://api.imgbb.com/1/upload?key=4125525efeb9a21fe49db324919cdeaf",
-        { method: "POST", body: form }
-      );
-      const data = (await res.json()) as {
-        success?: boolean;
-        data?: { url?: string; display_url?: string };
-      };
-      if (data.success && data.data?.url) {
-        setOptImage(id, data.data.url);
-      } else {
-        throw new Error("Upload failed");
-      }
-    } catch {
-      setOptImage(id, URL.createObjectURL(f));
-    } finally {
-      e.target.value = "";
+      const url = await uploadToImgBB(f);
+      setOptImage(id, url);
+      setOptionUploadStatus((p) => ({ ...p, [id]: "idle" }));
+      setOptionUploadError((p) => ({ ...p, [id]: "" }));
+    } catch (err2) {
+      setOptionUploadStatus((p) => ({ ...p, [id]: "error" }));
+      const msg = err2 instanceof Error ? err2.message : "Upload failed";
+      setOptionUploadError((p) => ({ ...p, [id]: `Upload failed: ${msg}. Try again or remove the image.` }));
+      setOptImage(id, previewUrl);
     }
   };
 
+  const onRemoveOptionImage = (id: string) => {
+    markDirty();
+    const blob = optionBlobUrlsRef.current[id];
+    if (blob) {
+      URL.revokeObjectURL(blob);
+      delete optionBlobUrlsRef.current[id];
+    }
+    setOptImage(id, undefined);
+    setOptionImgRemoved((p) => ({ ...p, [id]: true }));
+    setOptionUploadStatus((p) => {
+      const n = { ...p };
+      delete n[id];
+      return n;
+    });
+    setOptionUploadError((p) => {
+      const n = { ...p };
+      delete n[id];
+      return n;
+    });
+  };
+
   const save = async () => {
-    const filled = options.filter((o) => o.text.trim().length > 0 || Boolean(o.imageUrl));
-    if (!prompt.trim() || filled.length !== 4 || !filled.some((o) => o.correct)) {
-      setError("Please fill the question text, all 4 options, and mark at least one correct answer.");
+    if (uploadsInFlight > 0) {
+      showErr("Please wait for all image uploads to finish before saving.");
       return;
     }
+    if (mainUploadStatus === "error") {
+      showErr("The question image failed to upload. Please retry or remove it before saving.", "nq-main-file");
+      return;
+    }
+    const failedOpt = Object.entries(optionUploadStatus).find(([, s]) => s === "error");
+    if (failedOpt) {
+      showErr(
+        `An option image failed to upload. Please retry or remove it before saving.`,
+        `opt-file-${failedOpt[0]}`
+      );
+      return;
+    }
+    // Disallow saving blob: URLs (defensive — these are local-only)
+    if (imageUrl?.startsWith("blob:")) {
+      showErr("The question image is still a local preview — wait for the upload to finish or remove it.");
+      return;
+    }
+    for (const o of options) {
+      if (o.imageUrl?.startsWith("blob:")) {
+        showErr(`An option image for ${o.id.toUpperCase()} is still a local preview — wait for the upload to finish or remove it.`);
+        return;
+      }
+    }
+
+    const filled = options.filter((o) => o.text.trim().length > 0 || Boolean(o.imageUrl));
+    if (!prompt.trim()) {
+      showErr("Please fill in the question text.", "nq-prompt");
+      return;
+    }
+    if (filled.length !== 4) {
+      showErr("Please fill all 4 options (each needs text or an image).", "options");
+      return;
+    }
+    if (!filled.some((o) => o.correct)) {
+      showErr("Mark at least one option as the correct answer.", "options");
+      return;
+    }
+
     setSaving(true);
-    setError("");
+    setError(null);
     try {
+      const finalImageUrl = mainImgRemoved ? undefined : imageUrl;
+      const finalOptions = filled.map((o) =>
+        optionImgRemoved[o.id] ? { ...o, imageUrl: undefined } : o
+      );
       await onSave({
         type,
         prompt: prompt.trim(),
-        options: filled,
+        options: finalOptions,
         marks: 0,
         negative: 0,
         chapter: chapter.trim() || undefined,
-        imageUrl,
+        imageUrl: finalImageUrl,
       });
-      router.push(backHref);
+      setSaved(true);
+      // Give the toast a moment to show before navigating away
+      setTimeout(() => {
+        router.push(backHref);
+      }, 650);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save the question. Please try again.");
+      showErr(err instanceof Error ? err.message : "Failed to save the question. Please try again.");
       setSaving(false);
     }
   };
 
+  const onBack = () => {
+    if (saving) return;
+    if (uploadsInFlight > 0) {
+      const ok = window.confirm(
+        "An image is still uploading. Leaving now will cancel the upload and discard this question. Leave anyway?"
+      );
+      if (!ok) return;
+    } else if (computeIsDirty() && !saved) {
+      const ok = window.confirm(
+        "You have unsaved changes. Leave this page without saving?"
+      );
+      if (!ok) return;
+    }
+    router.push(backHref);
+  };
+
+  const onChapterChange = (v: string) => {
+    markDirty();
+    // Normalize internal whitespace but preserve the user's typing; final trim happens on save.
+    setChapter(v.replace(/\s+/g, " "));
+  };
+
   const filled = options.filter((o) => o.text.trim().length > 0 || Boolean(o.imageUrl));
+  const isDirty = computeIsDirty();
 
   return (
     <div
@@ -274,6 +586,8 @@ export default function QuestionEditor({
           "--rule": "#d9d1bf",
           "--accent": "oklch(0.52 0.20 25)",
           "--accent-2": "oklch(0.42 0.22 25)",
+          "--ok": "#0f7a3d",
+          "--err": "#b3261e",
         } as React.CSSProperties
       }
     >
@@ -298,6 +612,7 @@ export default function QuestionEditor({
           font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
         }
         .nq-back:hover { background: var(--ink); color: var(--paper); }
+        .nq-back:disabled { opacity: 0.5; cursor: not-allowed; }
 
         .nq-main {
           display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -351,22 +666,9 @@ export default function QuestionEditor({
         .nq-select-opt:hover { background: var(--paper-2); color: var(--ink); }
         .nq-select-opt.sel { color: var(--accent); border-color: var(--rule); background: var(--paper-2); }
 
-        .nq-stepper { display: flex; align-items: stretch; }
-        .nq-stepper input {
-          flex: 1; width: 100%; background: transparent; border: 1px solid var(--ink); border-right: 0;
-          border-radius: 0; padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px;
-          color: var(--ink); outline: none;
-        }
-        .nq-stepper input:focus { background: #fff; }
-        .nq-stepper-btns { display: flex; flex-direction: column; border: 1px solid var(--ink); border-left: 0; }
-        .nq-stepper-btns button {
-          flex: 1; width: 34px; background: transparent; border: 0; border-bottom: 1px solid var(--ink);
-          cursor: pointer; color: var(--ink-2); font-size: 9px; line-height: 1; display: grid; place-items: center;
-        }
-        .nq-stepper-btns button:last-child { border-bottom: 0; }
-        .nq-stepper-btns button:hover { background: var(--accent); color: #fff; }
-
         .nq-hint { font-size: 11px; color: var(--dim); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
+        .nq-hint.err { color: var(--err); }
+        .nq-hint.ok { color: var(--ok); }
 
         .nq-toolbar {
           display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 0;
@@ -397,7 +699,8 @@ export default function QuestionEditor({
         .nq-opt-img-preview { max-height: 48px; max-width: 120px; border: 1px solid var(--rule); object-fit: contain; }
         .nq-file {
           font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-2);
-          border: 1px solid var(--rule); padding: 10px 12px; display: block; cursor: pointer;
+          border: 1px solid var(--rule); padding: 10px 12px; display: inline-block; cursor: pointer;
+          background: var(--paper);
         }
         .nq-file input { display: none; }
         .nq-file-sm { display: inline-block; padding: 6px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -407,12 +710,42 @@ export default function QuestionEditor({
           letter-spacing: 0.08em; padding: 6px 10px; cursor: pointer;
         }
         .nq-file-sm-remove:hover { color: var(--accent); border-color: var(--accent); }
-        .nq-img-preview { max-height: 90px; margin-top: 10px; border: 1px solid var(--rule); }
+        .nq-file-retry {
+          background: transparent; border: 1px solid var(--err); color: var(--err);
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
+          letter-spacing: 0.08em; padding: 6px 10px; cursor: pointer;
+        }
+        .nq-file-retry:hover { background: var(--err); color: #fff; }
 
-        .nq-footer { padding: 0 34px 34px; max-width: 1280px; margin: 0 auto; }
+        .nq-file.nq-uploading {
+          color: var(--accent); border-color: var(--accent);
+          background: rgba(220, 60, 40, 0.04);
+          cursor: progress;
+        }
+        .nq-file.nq-uploading .nq-spinner {
+          display: inline-block; width: 10px; height: 10px; margin-right: 6px;
+          border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%;
+          vertical-align: -1px;
+          animation: nq-spin 0.7s linear infinite;
+        }
+        .nq-file.nq-error {
+          color: var(--err); border-color: var(--err);
+          background: rgba(179, 38, 30, 0.04);
+        }
+        @keyframes nq-spin { to { transform: rotate(360deg); } }
+
+        .nq-img-preview { max-height: 90px; margin-top: 10px; border: 1px solid var(--rule); display: block; }
+
+        .nq-footer { padding: 0 34px 34px; max-width: 1280px; margin: 0 auto; position: relative; }
         .nq-error {
-          font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent);
-          margin-bottom: 12px; line-height: 1.5;
+          font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--err);
+          margin-bottom: 12px; line-height: 1.5; padding: 10px 12px;
+          border: 1px solid var(--err); background: rgba(179,38,30,0.05);
+        }
+        .nq-toast {
+          font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ok);
+          margin-bottom: 12px; line-height: 1.5; padding: 10px 12px;
+          border: 1px solid var(--ok); background: rgba(15,122,61,0.07);
         }
         .nq-submit {
           width: 100%; background: var(--accent); color: #fff; border: 1px solid var(--accent);
@@ -421,6 +754,10 @@ export default function QuestionEditor({
         }
         .nq-submit:hover { background: var(--accent-2); border-color: var(--accent-2); }
         .nq-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+        .nq-waiting {
+          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
+          margin-bottom: 10px; letter-spacing: 0.04em;
+        }
 
         /* ---- Live preview pane ---- */
         .nq-preview-card {
@@ -454,10 +791,11 @@ export default function QuestionEditor({
         .nq-frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 2px; font-size: 0.78em; }
         .nq-frac-num { border-bottom: 1px solid var(--ink); padding: 0 5px; }
         .nq-frac-den { padding: 0 5px; }
-        .nq-vec { position: relative; }
-        .nq-vec-arrow { display: inline-block; margin-left: 1px; }
+        .nq-vec { position: relative; display: inline-block; }
+        .nq-vec-arrow { position: absolute; top: -0.55em; left: 50%; transform: translateX(-50%); font-size: 0.8em; line-height: 1; letter-spacing: -0.05em; pointer-events: none; }
+        .nq-vec-body { padding: 0 1px; }
         .nq-hat { position: relative; display: inline-block; }
-        .nq-hat-cap { position: absolute; top: -0.12em; left: 50%; transform: translateX(-50%); font-size: 0.82em; line-height: 1; }
+        .nq-hat-cap { position: absolute; top: -0.55em; left: 50%; transform: translateX(-55%) scaleX(1.1); font-size: 0.85em; line-height: 1; pointer-events: none; }
         .nq-hat-body { padding: 0 1px; }
         .nq-sqrt { border-top: 1px solid var(--ink); padding: 0 2px; }
         .nq-sqrt-body { border-top: 1px solid var(--ink); padding: 0 2px; }
@@ -493,8 +831,14 @@ export default function QuestionEditor({
           )}</h1>
           <div className="nq-header-sub">{subtitle}</div>
         </div>
-        <button className="nq-back" onClick={() => router.push(backHref)} aria-label="Back to questions">
-          ← Back
+        <button
+          className="nq-back"
+          onClick={onBack}
+          disabled={saving}
+          aria-label="Back to questions"
+          title={saving ? "Please wait while saving…" : isDirty ? "You have unsaved changes" : ""}
+        >
+          ← Back{isDirty && !saving ? "" : ""}
         </button>
       </header>
 
@@ -522,10 +866,7 @@ export default function QuestionEditor({
                       role="option"
                       aria-selected={type === "single"}
                       className={`nq-select-opt${type === "single" ? " sel" : ""}`}
-                      onClick={() => {
-                        setType("single");
-                        setTypeOpen(false);
-                      }}
+                      onClick={() => switchType("single")}
                     >
                       Single Correct
                     </li>
@@ -533,10 +874,7 @@ export default function QuestionEditor({
                       role="option"
                       aria-selected={type === "mcq"}
                       className={`nq-select-opt${type === "mcq" ? " sel" : ""}`}
-                      onClick={() => {
-                        setType("mcq");
-                        setTypeOpen(false);
-                      }}
+                      onClick={() => switchType("mcq")}
                     >
                       MCQ (Multiple)
                     </li>
@@ -559,7 +897,7 @@ export default function QuestionEditor({
               placeholder="e.g. Kinematics, Thermodynamics"
               list="nq-chapter-suggestions"
               autoComplete="off"
-              onChange={(e) => setChapter(e.target.value)}
+              onChange={(e) => onChapterChange(e.target.value)}
             />
             <datalist id="nq-chapter-suggestions">
               {existingChapters.map((c) => (
@@ -572,8 +910,9 @@ export default function QuestionEditor({
           <div className="nq-field">
             <label>Question {type === "mcq" ? "(select all correct)" : "(select one correct)"}</label>
             <MathField
+              id="nq-prompt"
               value={prompt}
-              onChange={setPrompt}
+              onChange={(v) => { markDirty(); setPrompt(v); if (error?.id === "nq-prompt") setError(null); }}
               placeholder={PLACEHOLDER}
               multiline
             />
@@ -582,61 +921,125 @@ export default function QuestionEditor({
 
           <div className="nq-field">
             <label>Image (optional, max 1)</label>
-            <label className="nq-file">
-              {uploading
-                ? "Uploading to ImgBB…"
-                : imageUrl
-                  ? "Image attached ✓ (change)"
-                  : "Choose image…"}
-              <input type="file" accept="image/*" onChange={onImage} disabled={uploading} />
-            </label>
-            {imageUrl && <img className="nq-img-preview" src={imageUrl} alt="preview" />}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <label
+                htmlFor="nq-main-file"
+                className={`nq-file${mainUploadStatus === "uploading" ? " nq-uploading" : ""}${mainUploadStatus === "error" ? " nq-error" : ""}`}
+              >
+                {mainUploadStatus === "uploading" ? (
+                  <><span className="nq-spinner" />Uploading…</>
+                ) : mainUploadStatus === "error" ? (
+                  <>Upload failed</>
+                ) : imageUrl ? (
+                  <>Image attached ✓ (change)</>
+                ) : (
+                  <>Choose image…</>
+                )}
+                <input
+                  id="nq-main-file"
+                  type="file"
+                  accept="image/*"
+                  onChange={onImage}
+                  disabled={mainUploadStatus === "uploading"}
+                />
+              </label>
+              {imageUrl && mainUploadStatus !== "uploading" && (
+                <button type="button" className="nq-file-sm-remove" onClick={onRemoveMainImage}>
+                  Remove image
+                </button>
+              )}
+              {mainUploadStatus === "error" && (
+                <button type="button" className="nq-file-retry" onClick={onRetryMainImage}>
+                  Retry
+                </button>
+              )}
+            </div>
+            {mainUploadStatus === "uploading" && (
+              <div className="nq-hint">Uploading — save stays locked until this finishes or fails.</div>
+            )}
+            {mainUploadStatus === "error" && (
+              <div className="nq-hint err">{mainUploadError}</div>
+            )}
+            {imageUrl && mainUploadStatus !== "uploading" && (
+              <img className="nq-img-preview" src={imageUrl} alt="preview" />
+            )}
           </div>
 
-          <div className="nq-field">
+          <div className="nq-field" id="options">
             <label>Options (4 required) — optional image per option</label>
-            {options.map((o, i) => (
-              <div className={`nq-opt-edit${o.correct ? " correct-row" : ""}`} key={o.id}>
-                <button
-                  type="button"
-                  className={`nq-opt-key${o.correct ? " correct" : ""}`}
-                  onClick={() => toggleCorrect(o.id)}
-                  aria-pressed={o.correct}
-                  title={type === "single" ? "Select correct answer" : "Toggle correct answer"}
-                >
-                  {String.fromCharCode(65 + i)}
-                </button>
-                <div className="nq-opt-body">
-                  <MathField
-                    value={o.text}
-                    onChange={(v) => setOptText(o.id, v)}
-                    placeholder="Option text — e.g. $\\vec{F} = m\\vec{a}$"
-                  />
-                  <div className="nq-opt-img-row">
-                    {o.imageUrl && (
-                      <img className="nq-opt-img-preview" src={o.imageUrl} alt="option preview" />
-                    )}
-                    <label className="nq-file nq-file-sm">
-                      {o.imageUrl ? "Change image" : "+ Image"}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => onOptionImage(e, o.id)}
-                      />
-                    </label>
-                    {o.imageUrl && (
-                      <button
-                        type="button"
-                        className="nq-file-sm-remove"
-                        onClick={() => setOptImage(o.id, undefined)}
+            {options.map((o, i) => {
+              const optStatus = optionUploadStatus[o.id] ?? "idle";
+              const optErr = optionUploadError[o.id] ?? "";
+              return (
+                <div className={`nq-opt-edit${o.correct ? " correct-row" : ""}`} key={o.id}>
+                  <button
+                    type="button"
+                    className={`nq-opt-key${o.correct ? " correct" : ""}`}
+                    onClick={() => toggleCorrect(o.id)}
+                    aria-pressed={o.correct}
+                    title={type === "single" ? "Select correct answer" : "Toggle correct answer"}
+                  >
+                    {String.fromCharCode(65 + i)}
+                  </button>
+                  <div className="nq-opt-body">
+                    <MathField
+                      id={`opt-${o.id}`}
+                      value={o.text}
+                      onChange={(v) => setOptText(o.id, v)}
+                      placeholder="Option text — e.g. $\\vec{F} = m\\vec{a}$"
+                    />
+                    <div className="nq-opt-img-row">
+                      {o.imageUrl && optStatus !== "uploading" && (
+                        <img className="nq-opt-img-preview" src={o.imageUrl} alt={`option ${String.fromCharCode(65 + i)} preview`} />
+                      )}
+                      <label
+                        htmlFor={`opt-file-${o.id}`}
+                        className={`nq-file nq-file-sm${optStatus === "uploading" ? " nq-uploading" : ""}${optStatus === "error" ? " nq-error" : ""}`}
                       >
-                        Remove
-                      </button>
+                        {optStatus === "uploading" ? (
+                          <><span className="nq-spinner" />Uploading…</>
+                        ) : optStatus === "error" ? (
+                          <>Upload failed</>
+                        ) : o.imageUrl ? (
+                          <>Change image</>
+                        ) : (
+                          <>+ Image</>
+                        )}
+                        <input
+                          id={`opt-file-${o.id}`}
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => onOptionImage(e, o.id)}
+                          disabled={optStatus === "uploading"}
+                        />
+                      </label>
+                      {o.imageUrl && optStatus !== "uploading" && (
+                        <button
+                          type="button"
+                          className="nq-file-sm-remove"
+                          onClick={() => onRemoveOptionImage(o.id)}
+                        >
+                          Remove
+                        </button>
+                      )}
+                      {optStatus === "error" && (
+                        <button
+                          type="button"
+                          className="nq-file-retry"
+                          onClick={() => document.getElementById(`opt-file-${o.id}`)?.click()}
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                    {optStatus === "uploading" && (
+                      <div className="nq-hint">Uploading — save stays locked until this finishes.</div>
                     )}
+                    {optStatus === "error" && <div className="nq-hint err">{optErr}</div>}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -676,7 +1079,7 @@ export default function QuestionEditor({
                         {hasContent ? (
                           <>
                             {o.text.trim() ? <MathPreview text={o.text} compact /> : null}
-                            {o.imageUrl && <img className="nq-opt-img" src={o.imageUrl} alt="option" />}
+                            {o.imageUrl && <img className="nq-opt-img" src={o.imageUrl} alt={`option ${String.fromCharCode(65 + i)}`} />}
                           </>
                         ) : (
                           <span className="nq-placeholder">Option {String.fromCharCode(65 + i)}…</span>
@@ -692,11 +1095,39 @@ export default function QuestionEditor({
         </section>
       </div>
 
-      <div className="nq-footer">
-        {error && <div className="nq-error">{error}</div>}
-        <button className="nq-submit" onClick={save} disabled={saving}>
-          {saving ? "Saving…" : "Save Question"}
+      <div className="nq-footer" ref={footerRef}>
+        {error && <div className="nq-error">{error.msg}</div>}
+        {saved && <div className="nq-toast">Question saved ✓ — returning to list…</div>}
+        {!saved && !error && uploadsInFlight > 0 && (
+          <div className="nq-waiting">
+            Waiting for {uploadsInFlight} image upload{uploadsInFlight === 1 ? "" : "s"} to finish before saving…
+          </div>
+        )}
+        <button
+          className="nq-submit"
+          onClick={save}
+          disabled={saving || uploadsInFlight > 0 || saved}
+          title={
+            uploadsInFlight > 0
+              ? "Cannot save while an image is still uploading"
+              : saving
+                ? "Saving question…"
+                : "Save question"
+          }
+        >
+          {uploadsInFlight > 0
+            ? `Waiting for upload${uploadsInFlight === 1 ? "" : "s"}…`
+            : saving
+              ? "Saving…"
+              : saved
+                ? "Saved ✓"
+                : "Save Question"}
         </button>
+        {isDirty && !saving && !saved && !error && (
+          <div className="nq-hint" style={{ textAlign: "center", marginTop: 8 }}>
+            You have unsaved changes.
+          </div>
+        )}
       </div>
     </div>
   );
