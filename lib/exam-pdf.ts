@@ -4,6 +4,14 @@ import { DEJAVU_SANS_REGULAR_B64 } from "./fonts/dejavu-sans";
 import { DEJAVU_SANS_BOLD_B64 } from "./fonts/dejavu-sans-bold";
 import { HIND_SILIGURI_REGULAR_B64 } from "./fonts/hind-siliguri-reg";
 import { HIND_SILIGURI_BOLD_B64 } from "./fonts/hind-siliguri-bold";
+import {
+  loadShaper,
+  type Shaper,
+  type ShaperFamily,
+  type ShaperFont,
+  type ShaperStyle,
+  type ShapedGlyph,
+} from "./bengali-shaper";
 
 /* ------------------------------------------------------------------ *
  * LaTeX-ish source → readable Unicode plain text for the PDF writer. *
@@ -217,16 +225,352 @@ const PAGE = { w: 210, h: 297 }; // A4, mm
 const MARGIN = 16;
 const CONTENT_W = PAGE.w - MARGIN * 2;
 const BOTTOM = PAGE.h - 14;
+const PT_TO_MM = 25.4 / 72;
 
-/** Bengali script (U+0980–U+09FF). DejaVu Sans has no Bengali glyphs, so we
- *  switch to Hind Siliguri whenever a block contains Bengali characters. */
-const BENGALI_RE = /[\u0980-\u09FF]/;
+/** Bengali script (U+0980–U+09FF), danda/double danda (U+0964/65) and
+ *  joiners. DejaVu Sans has no Bengali glyphs, so we shape with Hind Siliguri
+ *  (via HarfBuzz) whenever a block contains Bengali characters. */
+const BENGALI_RE = /[\u0980-\u09FF\u0964\u0965\u200C\u200D]/;
 function hasBengali(s: string): boolean {
   return BENGALI_RE.test(s);
+}
+function isBengaliChar(ch: string): boolean {
+  return BENGALI_RE.test(ch);
 }
 function pickFamily(s: string): string {
   return hasBengali(s) ? "HindSiliguri" : "DejaVuSans";
 }
+
+/* ------------------------------------------------------------------ *
+ * Shaped (HarfBuzz) text pipeline.                                    *
+ *                                                                     *
+ * jsPDF writes raw glyph ids for embedded TTF fonts (Identity-H with  *
+ * /CIDToGIDMap /Identity), but it chooses those ids through the       *
+ * font's cmap, one glyph per character, in logical order — so Bengali *
+ * conjuncts never form and pre-base matras (ি ে) land after their     *
+ * consonant. Here we shape the text properly with HarfBuzz and feed   *
+ * jsPDF the resulting glyph ids directly.                             *
+ * ------------------------------------------------------------------ */
+
+/** BMP private-use codepoint we address a glyph through for one draw call. */
+const PUA_BASE = 0xe000;
+/** PUA is 6400 codepoints wide; every bundled font has fewer glyphs than that. */
+const PUA_LIMIT = 0xf900 - PUA_BASE;
+
+/** codepoint → glyph id, consulted by the characterToGlyph hook below. */
+const glyphOverrides = new Map<number, number>();
+
+type PdfFontMetadata = {
+  characterToGlyph: (character: number) => number;
+  toUnicode?: Record<number, number>;
+  [key: string]: unknown;
+};
+
+/** Make jsPDF consult our (shaped) glyph overrides. jsPDF 4 pre-filters every
+ *  character through the font's raw `cmap.unicode.codeMap` (dropping unknowns)
+ *  and then maps survivors via `characterToGlyph`, so both lookups must be
+ *  intercepted. The TTFFont metadata exists from addFont() time. */
+function ensureShapeHook(
+  doc: jsPDF,
+  family: ShaperFamily,
+  style: ShaperStyle
+): PdfFontMetadata | null {
+  const font = (doc.getFont as unknown as (f: string, s: string) => { metadata?: PdfFontMetadata })(
+    family,
+    style
+  );
+  const md = font?.metadata;
+  if (!md) return null;
+  if (!md.__shapeHooked) {
+    const cmapUnicode = (md as unknown as {
+      cmap?: { unicode?: { codeMap?: Record<number, number> } };
+    }).cmap?.unicode;
+    if (!cmapUnicode?.codeMap) return null;
+    cmapUnicode.codeMap = new Proxy(cmapUnicode.codeMap, {
+      get(target, prop, receiver) {
+        if (typeof prop === "string" || typeof prop === "number") {
+          const gid = glyphOverrides.get(Number(prop));
+          if (gid !== undefined) return gid;
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const original = md.characterToGlyph.bind(md);
+    md.characterToGlyph = (character: number) =>
+      glyphOverrides.get(character) ?? original(character);
+    md.__shapeHooked = true;
+  }
+  return md;
+}
+
+interface ShapedPiece {
+  font: ShaperFont;
+  /** Substring that was shaped (for glyph → Unicode recovery). */
+  source: string;
+  glyphs: ShapedGlyph[];
+}
+
+interface ShapedWord {
+  text: string;
+  pieces: ShapedPiece[];
+}
+
+type ShapedItem = { kind: "word"; word: ShapedWord } | { kind: "space"; bengali: boolean };
+
+/** Word → shaped pieces, cached across questions/PDFs. */
+const wordCache = new Map<string, ShapedWord>();
+
+function shapeWord(text: string, shaper: Shaper, style: ShaperStyle): ShapedWord {
+  const cacheKey = `${style}|${text}`;
+  const cached = wordCache.get(cacheKey);
+  if (cached) return cached;
+
+  const pieces: ShapedPiece[] = [];
+  // Split into Bengali / other runs so each run is shaped with a font that
+  // covers it (Hind Siliguri for Bengali, DejaVu Sans for Latin/math).
+  let runStart = 0;
+  let runIsBengali = isBengaliChar(text[0]);
+  const pushRun = (from: number, to: number, bengali: boolean) => {
+    if (to <= from) return;
+    const source = text.slice(from, to);
+    const font = shaper.font(bengali ? "HindSiliguri" : "DejaVuSans", style);
+    if (!font) return;
+    pieces.push({ font, source, glyphs: font.shape(source) });
+  };
+  for (let i = 1; i <= text.length; i++) {
+    const bn = i < text.length ? isBengaliChar(text[i]) : !runIsBengali;
+    if (i === text.length || bn !== runIsBengali) {
+      pushRun(runStart, i, runIsBengali);
+      runStart = i;
+      runIsBengali = bn;
+    }
+  }
+
+  const word: ShapedWord = { text, pieces };
+  if (wordCache.size > 8000) wordCache.clear();
+  wordCache.set(cacheKey, word);
+  return word;
+}
+
+function shapeParagraph(text: string, shaper: Shaper, style: ShaperStyle): ShapedItem[] {
+  const items: ShapedItem[] = [];
+  let lastBengaliWord = false;
+  for (const part of text.split(/(\s+)/)) {
+    if (!part) continue;
+    if (/^\s+$/.test(part)) {
+      items.push({ kind: "space", bengali: lastBengaliWord });
+    } else {
+      items.push({ kind: "word", word: shapeWord(part, shaper, style) });
+      lastBengaliWord = hasBengali(part);
+    }
+  }
+  return items;
+}
+
+function pieceWidthMm(piece: ShapedPiece, sizePt: number): number {
+  let units = 0;
+  for (const g of piece.glyphs) units += g.ax;
+  return (units * sizePt * PT_TO_MM) / piece.font.upem;
+}
+
+function wordWidthMm(word: ShapedWord, sizePt: number): number {
+  let w = 0;
+  for (const p of word.pieces) w += pieceWidthMm(p, sizePt);
+  return w;
+}
+
+const spaceWidthCache = new Map<string, number>();
+function spaceWidthMm(shaper: Shaper, style: ShaperStyle, bengali: boolean, sizePt: number): number {
+  const key = `${style}|${bengali}`;
+  let unitsPerEm = spaceWidthCache.get(key);
+  if (unitsPerEm === undefined) {
+    const font = shaper.font(bengali ? "HindSiliguri" : "DejaVuSans", style);
+    const shaped = font ? font.shape(" ") : [];
+    unitsPerEm = font
+      ? shaped.reduce((acc, g) => acc + g.ax, 0) / font.upem
+      : 0.25; // em fraction fallback
+    spaceWidthCache.set(key, unitsPerEm);
+  }
+  return unitsPerEm * sizePt * PT_TO_MM;
+}
+
+/** Break overlong words at grapheme-cluster boundaries (safe for Bengali). */
+function splitByGraphemes(text: string): string[] {
+  const Seg = (Intl as unknown as { Segmenter?: new (
+    locale?: string,
+    opts?: { granularity: "grapheme" }
+  ) => { segment(input: string): Iterable<{ segment: string }> } }).Segmenter;
+  if (Seg) {
+    const seg = new Seg(undefined, { granularity: "grapheme" });
+    return Array.from(seg.segment(text), (s) => s.segment);
+  }
+  return Array.from(text);
+}
+
+/** Greedy word wrap over shaped items. Returns arrays of items per line. */
+function layoutShapedItems(
+  items: ShapedItem[],
+  maxWidthMm: number,
+  sizePt: number,
+  style: ShaperStyle,
+  shaper: Shaper
+): ShapedItem[][] {
+  const lines: ShapedItem[][] = [];
+  let line: ShapedItem[] = [];
+  let lineW = 0;
+
+  const pushItem = (item: ShapedItem, w: number) => {
+    line.push(item);
+    lineW += w;
+  };
+  const newLine = () => {
+    if (line.length) lines.push(line);
+    line = [];
+    lineW = 0;
+  };
+
+  let pendingSpace = false;
+  for (const item of items) {
+    if (item.kind === "space") {
+      if (line.length) pendingSpace = true;
+      continue;
+    }
+    const wordW = wordWidthMm(item.word, sizePt);
+
+    if (wordW > maxWidthMm) {
+      // A single word wider than the column: put it on a fresh line and break
+      // it at grapheme-cluster boundaries (always safe for Bengali).
+      const chunks = splitByGraphemes(item.word.text);
+      if (chunks.length > 1) {
+        newLine();
+        pendingSpace = false;
+        let acc: ShapedItem[] = [];
+        let accW = 0;
+        for (const chunk of chunks) {
+          const chunkWord = shapeWord(chunk, shaper, style);
+          const cw = wordWidthMm(chunkWord, sizePt);
+          if (accW + cw > maxWidthMm && acc.length) {
+            lines.push(acc);
+            acc = [];
+            accW = 0;
+          }
+          acc.push({ kind: "word", word: chunkWord });
+          accW += cw;
+        }
+        if (acc.length) {
+          line = acc;
+          lineW = accW;
+        }
+        continue;
+      }
+    }
+
+    const spaceW = pendingSpace
+      ? spaceWidthMm(shaper, style, item.word.pieces[0]?.font.family === "HindSiliguri", sizePt)
+      : 0;
+    if (line.length && lineW + spaceW + wordW > maxWidthMm) {
+      newLine();
+      pendingSpace = false;
+    }
+    if (pendingSpace && line.length) {
+      pushItem({ kind: "space", bengali: item.word.pieces[0]?.font.family === "HindSiliguri" }, spaceW);
+      pendingSpace = false;
+    }
+    pushItem(item, wordW);
+  }
+  newLine();
+  return lines;
+}
+
+/** Draw one shaped piece; returns the x where the pen stopped (mm). */
+function drawShapedPiece(
+  doc: jsPDF,
+  piece: ShapedPiece,
+  xMm: number,
+  yBaselineMm: number,
+  sizePt: number
+): number {
+  const k = (sizePt * PT_TO_MM) / piece.font.upem;
+  doc.setFont(piece.font.family, piece.font.style);
+  doc.setFontSize(sizePt);
+  const md = ensureShapeHook(doc, piece.font.family, piece.font.style);
+
+  let pen = xMm;
+  let batch: ShapedGlyph[] = [];
+  let batchStartX = pen;
+
+  const rememberUnicode = (glyphs: ShapedGlyph[]) => {
+    if (!md?.toUnicode) return;
+    for (const g of glyphs) {
+      md.toUnicode[g.gid] = piece.source.charCodeAt(Math.min(g.cluster, piece.source.length - 1));
+    }
+  };
+
+  const flushBatch = () => {
+    if (!batch.length) return;
+    glyphOverrides.clear();
+    let str = "";
+    for (const g of batch) {
+      if (g.gid >= PUA_LIMIT) continue; // cannot address — skip drawing
+      glyphOverrides.set(PUA_BASE + g.gid, g.gid);
+      str += String.fromCharCode(PUA_BASE + g.gid);
+    }
+    if (str) doc.text(str, batchStartX, yBaselineMm);
+    rememberUnicode(batch);
+    batch = [];
+  };
+
+  for (const g of piece.glyphs) {
+    const gx = pen + g.dx * k;
+    const gy = yBaselineMm - g.dy * k;
+    if (g.gid === 0) {
+      // Glyph missing in this font: still account for its advance.
+      flushBatch();
+      pen += g.ax * k;
+      batchStartX = pen;
+      continue;
+    }
+    if (g.dx === 0 && g.dy === 0 && g.gid < PUA_LIMIT) {
+      if (!batch.length) batchStartX = pen;
+      batch.push(g);
+    } else {
+      flushBatch();
+      if (g.gid < PUA_LIMIT) {
+        glyphOverrides.clear();
+        glyphOverrides.set(PUA_BASE + g.gid, g.gid);
+        doc.text(String.fromCharCode(PUA_BASE + g.gid), gx, gy);
+        rememberUnicode([g]);
+      }
+    }
+    pen += g.ax * k;
+  }
+  flushBatch();
+  glyphOverrides.clear();
+  return pen;
+}
+
+function drawShapedItems(
+  doc: jsPDF,
+  items: ShapedItem[],
+  xMm: number,
+  yBaselineMm: number,
+  sizePt: number,
+  style: ShaperStyle,
+  shaper: Shaper
+): void {
+  let pen = xMm;
+  for (const item of items) {
+    if (item.kind === "space") {
+      pen += spaceWidthMm(shaper, style, item.bengali, sizePt);
+      continue;
+    }
+    for (const piece of item.word.pieces) {
+      pen = drawShapedPiece(doc, piece, pen, yBaselineMm, sizePt);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
 
 async function fetchImageData(
   url: string
@@ -253,7 +597,7 @@ async function fetchImageData(
   }
 }
 
-export async function downloadExamQuestionsPdf(info: PdfExamInfo): Promise<void> {
+export async function buildExamQuestionsPdf(info: PdfExamInfo): Promise<jsPDF> {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
 
   doc.addFileToVFS("DejaVuSans.ttf", DEJAVU_SANS_REGULAR_B64);
@@ -266,6 +610,16 @@ export async function downloadExamQuestionsPdf(info: PdfExamInfo): Promise<void>
   doc.addFont("HindSiliguri-Bold.ttf", "HindSiliguri", "bold");
   doc.setFont("DejaVuSans", "normal");
 
+  // Bengali (and any mixed Bengali/English) text needs real OpenType shaping,
+  // which jsPDF cannot do — bring in HarfBuzz when the content needs it.
+  const needsShaper =
+    hasBengali(info.examTitle) ||
+    hasBengali(info.subject) ||
+    info.questions.some(
+      (q) => hasBengali(q.prompt) || q.options.some((o) => hasBengali(o.text))
+    );
+  const shaper = needsShaper ? await loadShaper() : null;
+
   let y = MARGIN;
 
   const footer = () => {
@@ -276,9 +630,22 @@ export async function downloadExamQuestionsPdf(info: PdfExamInfo): Promise<void>
       doc.setFontSize(8.5);
       doc.setTextColor(140, 132, 115);
       const brand = `World of Physics · ${info.examTitle}`;
-      doc.setFont(pickFamily(brand), "normal");
-      doc.text(brand, MARGIN, PAGE.h - 8);
+      if (shaper && hasBengali(brand)) {
+        drawShapedItems(
+          doc,
+          shapeParagraph(brand, shaper, "normal"),
+          MARGIN,
+          PAGE.h - 8,
+          8.5,
+          "normal",
+          shaper
+        );
+      } else {
+        doc.setFont(pickFamily(brand), "normal");
+        doc.text(brand, MARGIN, PAGE.h - 8);
+      }
       const label = `Page ${p} of ${total}`;
+      doc.setFont("DejaVuSans", "normal");
       doc.text(label, PAGE.w - MARGIN - doc.getTextWidth(label), PAGE.h - 8);
       doc.setTextColor(20, 17, 13);
     }
@@ -298,10 +665,32 @@ export async function downloadExamQuestionsPdf(info: PdfExamInfo): Promise<void>
     const size = opts.size ?? 10.5;
     const indent = opts.indent ?? 0;
     const gap = opts.gap ?? 1.6;
+    const style: ShaperStyle = opts.bold ? "bold" : "normal";
     const bn = hasBengali(text);
-    doc.setFont(pickFamily(text), opts.bold ? "bold" : "normal");
+    doc.setTextColor(...(opts.color ?? [20, 17, 13]));
+
+    if (shaper && bn) {
+      const lines = layoutShapedItems(
+        shapeParagraph(text, shaper, style),
+        CONTENT_W - indent,
+        size,
+        style,
+        shaper
+      );
+      const lineH = size * 0.48;
+      for (const line of lines) {
+        ensureSpace(lineH);
+        drawShapedItems(doc, line, MARGIN + indent, y, size, style, shaper);
+        y += lineH;
+      }
+      y += gap;
+      doc.setTextColor(20, 17, 13);
+      doc.setFont("DejaVuSans", "normal");
+      return;
+    }
+
+    doc.setFont(pickFamily(text), style);
     doc.setFontSize(size);
-    if (opts.color) doc.setTextColor(...opts.color);
     const lines = doc.splitTextToSize(text, CONTENT_W - indent) as string[];
     const lineH = size * (bn ? 0.48 : 0.42);
     for (const line of lines) {
@@ -408,6 +797,7 @@ export async function downloadExamQuestionsPdf(info: PdfExamInfo): Promise<void>
   }
 
   ensureSpace(10);
+  doc.setFont("DejaVuSans", "normal");
   doc.setFontSize(9);
   doc.setTextColor(140, 132, 115);
   doc.text("— End of question paper —", PAGE.w / 2, Math.min(y + 4, BOTTOM), {
@@ -417,5 +807,10 @@ export async function downloadExamQuestionsPdf(info: PdfExamInfo): Promise<void>
 
   footer();
 
+  return doc;
+}
+
+export async function downloadExamQuestionsPdf(info: PdfExamInfo): Promise<void> {
+  const doc = await buildExamQuestionsPdf(info);
   doc.save(`${(info.code || "exam").replace(/[^\w-]+/g, "_")}-question-paper.pdf`);
 }
