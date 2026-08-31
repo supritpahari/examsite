@@ -32,7 +32,7 @@ interface RuntimeQuestion {
   correctIndex: number;
 }
 
-type PaletteState = "un" | "vis" | "ans" | "mk";
+type PaletteState = "un" | "no" | "ans" | "mk" | "mkans";
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -111,6 +111,7 @@ function ExamContent() {
   const [marked, setMarked] = useState<boolean[]>([]);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [focusWarnOpen, setFocusWarnOpen] = useState(false);
   const [showMobilePalette, setShowMobilePalette] = useState(false);
   const blurCountRef = useRef(0);
@@ -211,7 +212,9 @@ function ExamContent() {
     runtimeRef.current = rt;
     setRuntime(rt);
     setAnswers(new Array(rt.length).fill(null));
-    setVisited(new Array(rt.length).fill(false));
+    // CBT semantics: the first question is opened immediately, so it counts as
+    // "visited" (red / Not Answered) from the start.
+    setVisited(rt.map((_, i) => i === 0));
     setMarked(new Array(rt.length).fill(false));
     setSecondsLeft(durationMinutes * 60);
     setCurrent(0);
@@ -341,36 +344,55 @@ function ExamContent() {
   const selectOption = (optIdx: number) => {
     setAnswers((a) => {
       const next = [...a];
-      next[current] = optIdx;
+      // NTA CBT behaviour: clicking the selected option again clears it.
+      next[current] = next[current] === optIdx ? null : optIdx;
       return next;
     });
     setVisited((v) => {
+      if (v[current]) return v;
       const next = [...v];
       next[current] = true;
       return next;
     });
   };
 
-  const toggleMark = () => {
+  const clearResponse = () => {
+    setAnswers((a) => {
+      const next = [...a];
+      next[current] = null;
+      return next;
+    });
+  };
+
+  const markAndNext = () => {
     setMarked((m) => {
       const next = [...m];
       next[current] = !next[current];
       return next;
     });
+    if (current < totalQuestions - 1) visit(current + 1);
+  };
+
+  const saveAndNext = () => {
+    // Answers are recorded as soon as an option is clicked; "Save & Next"
+    // commits and moves on, as in the CBT interface.
+    if (current < totalQuestions - 1) visit(current + 1);
   };
 
   const paletteState = (idx: number): PaletteState => {
-    if (marked[idx]) return "mk";
-    if (answers[idx] != null) return "ans";
-    if (visited[idx]) return "vis";
+    const answered = answers[idx] != null;
+    if (marked[idx]) return answered ? "mkans" : "mk";
+    if (answered) return "ans";
+    if (visited[idx]) return "no";
     return "un";
   };
 
-  const answeredCount = useMemo(
-    () => answers.filter((a) => a != null).length,
-    [answers]
-  );
-  const markedCount = useMemo(() => marked.filter(Boolean).length, [marked]);
+  const statusCounts = useMemo(() => {
+    const c: Record<PaletteState, number> = { un: 0, no: 0, ans: 0, mk: 0, mkans: 0 };
+    for (let i = 0; i < runtime.length; i++) c[paletteState(i)]++;
+    return c;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runtime, answers, visited, marked]);
 
   return (
     <div
@@ -430,226 +452,321 @@ function ExamContent() {
             ...(currentQuestion.imageUrl ? [currentQuestion.imageUrl] : []),
             ...extractImageUrls(currentQuestion.prompt),
           ].filter((u, i, arr) => arr.indexOf(u) === i);
+          const initials =
+            (name.trim().split(/\s+/) ?? [])
+              .slice(0, 2)
+              .map((w) => w[0]?.toUpperCase() ?? "")
+              .join("") || "C";
+          const lastQ = current === totalQuestions - 1;
+          const firstQ = current === 0;
           return (
-        <div className="v2-preview-wrap v2-test-wrap">
-          <div className="v2-preview">
-            <div className="v2-preview-bar">
-              <span className="v2-bar-title">NTA CBT · {exam.title}</span>
-              <span className="v2-bar-candidate">Candidate: {name.trim() || "—"}</span>
-              <span className="v2-bar-rec" style={{ color: "#d9a300" }}>● Recording</span>
-            </div>
-
-            <div className="v2-preview-body">
-              <div className="v2-q2">
-                <div className="v2-q2-meta">
-                  <span>Section A · {exam.subject}</span>
-                  <span>
-                    <strong>Q. {current + 1}</strong> of {totalQuestions}
-                  </span>
-                </div>
-
-                {/* Mobile sticky top: time + palette button */}
-                <div className="v2-mobile-strip">
-                  <div className="v2-mobile-time">
-                    <span className="v2-mobile-time-label">Time</span>
-                    <span
-                      className="v2-mobile-time-val"
-                      style={{ color: secondsLeft <= 300 ? "#d9a300" : "var(--accent)" }}
-                    >
-                      {formatTime(secondsLeft)}
-                    </span>
+            <div className="cbt-app">
+              {/* ---------- Header ---------- */}
+              <header className="cbt-header">
+                <div className="cbt-brand">
+                  <div className="cbt-brand-org">World of Physics · Online Examination</div>
+                  <div className="cbt-brand-exam">{exam.title}</div>
+                  <div className="cbt-brand-sub">
+                    Subject: {exam.subject} &nbsp;·&nbsp; Code: {exam.code}
                   </div>
-                  <div className="v2-mobile-stats">
-                    <span>{answeredCount}/{totalQuestions} done</span>
-                    {markedCount > 0 && <span>· {markedCount} marked</span>}
+                </div>
+                <div className="cbt-head-right">
+                  <div className="cbt-cand">
+                    <div className="cbt-avatar" aria-hidden="true">{initials}</div>
+                    <div className="cbt-cand-meta">
+                      <span className="cbt-cand-label">Candidate Name</span>
+                      <span className="cbt-cand-name">{name.trim() || "\u2014"}</span>
+                    </div>
+                  </div>
+                  <div className={`cbt-timer${secondsLeft <= 300 ? " warn" : ""}`}>
+                    <span className="cbt-timer-label">Time Left</span>
+                    <span className="cbt-timer-val">{formatTime(secondsLeft)}</span>
                   </div>
                   <button
-                    className="v2-mobile-pal-btn"
+                    type="button"
+                    className="cbt-pal-toggle"
                     onClick={() => setShowMobilePalette(true)}
                     aria-label="Open question palette"
                   >
-                    <span className="v2-mobile-pal-icon">◫</span> Palette
+                    &#8857;
                   </button>
                 </div>
+              </header>
 
-                <p
-                  className="v2-q2-text"
-                  dangerouslySetInnerHTML={{
-                    __html: renderMathHtml(currentQuestion.prompt),
-                  }}
-                />
+              {/* ---------- Section tabs ---------- */}
+              <nav className="cbt-tabs">
+                <span className="cbt-tab active">
+                  {exam.subject}
+                  <i className="cbt-tab-n">{totalQuestions}</i>
+                </span>
+                <span className="cbt-tabs-info">
+                  Marking: +{currentQuestion.marks}
+                  {currentQuestion.negative > 0 ? ` / \u2212${currentQuestion.negative}` : ""}
+                  &nbsp;·&nbsp; MCQ (single correct)
+                </span>
+              </nav>
 
-                {(imageUrls.length > 0) && (
-                  <div className="v2-q-imgs">
-                    {imageUrls.map((src, i) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        key={`${src}-${i}`}
-                        src={src}
-                        alt="Question diagram"
-                        className="v2-q-img"
-                      />
-                    ))}
-                  </div>
-                )}
-
-                <div className="v2-opts2">
-                  {currentQuestion.options.map((opt, i) => {
-                    const selected = answers[current] === i;
-                    return (
-                      <div
-                        key={opt.id}
-                        className={`v2-opt2${selected ? " sel" : ""}`}
-                        onClick={() => selectOption(i)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') selectOption(i); }}
-                      >
-                        <div className="v2-opt2-k">{OPTION_KEYS[i]}</div>
-                        <div className="v2-opt2-main">
-                          <div
-                            className="v2-opt2-t"
-                            dangerouslySetInnerHTML={{ __html: renderMathHtml(opt.text) }}
-                          />
-                          {opt.imageUrl && (
-                            <img className="v2-opt2-img" src={opt.imageUrl} alt={`Option ${OPTION_KEYS[i]}`} />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="v2-nav">
-                  <button
-                    className="v2-nav-btn"
-                    disabled={current === 0}
-                    onClick={() => visit(current - 1)}
-                  >
-                    ← Previous
-                  </button>
-                  <button
-                    className={`v2-nav-btn v2-mark${marked[current] ? " on" : ""}`}
-                    onClick={toggleMark}
-                  >
-                    {marked[current] ? "★ Marked" : "☆ Mark for review"}
-                  </button>
-                  <button
-                    className="v2-nav-btn"
-                    disabled={current === totalQuestions - 1}
-                    onClick={() => visit(current + 1)}
-                  >
-                    Next →
-                  </button>
-                </div>
-
-                <button className="v2-mobile-submit" onClick={() => setConfirmOpen(true)}>
-                  Submit Test
-                </button>
-              </div>
-
-              <aside className={`v2-side2 ${showMobilePalette ? "open" : ""}`}>
-                <div className="v2-side-scroll">
-                  <div className="v2-side-header-mobile">
-                    <div>
-                      <div className="v2-tlabel" style={{ marginBottom: 4 }}>Question Palette</div>
-                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#6b6358' }}>
-                        {answeredCount} answered · {markedCount} marked
-                      </div>
+              {/* ---------- Main ---------- */}
+              <div className="cbt-main">
+                <section className="cbt-qcol">
+                  <div className="cbt-qhead">
+                    <div className="cbt-qno">
+                      Question No. {current + 1}
+                      {marked[current] && (
+                        <span className="cbt-flag" title="Marked for review">&#9873; Marked for Review</span>
+                      )}
                     </div>
+                    <div className="cbt-marks">
+                      <span className="cbt-mk-chip pos">+{currentQuestion.marks}</span>
+                      {currentQuestion.negative > 0 && (
+                        <span className="cbt-mk-chip neg">{"\u2212"}{currentQuestion.negative}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="cbt-qbody">
+                    <p
+                      className="cbt-qtext"
+                      dangerouslySetInnerHTML={{
+                        __html: renderMathHtml(currentQuestion.prompt),
+                      }}
+                    />
+
+                    {imageUrls.length > 0 && (
+                      <div className="cbt-qimgs">
+                        {imageUrls.map((src, i) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={`${src}-${i}`}
+                            src={src}
+                            alt="Question diagram"
+                            className="cbt-qimg"
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="cbt-opts">
+                      {currentQuestion.options.map((opt, i) => {
+                        const selected = answers[current] === i;
+                        return (
+                          <div
+                            key={opt.id}
+                            className={`cbt-opt${selected ? " sel" : ""}`}
+                            onClick={() => selectOption(i)}
+                            role="button"
+                            tabIndex={0}
+                            aria-pressed={selected}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") selectOption(i);
+                            }}
+                          >
+                            <span className="cbt-radio" aria-hidden="true" />
+                            <span className="cbt-opt-key">{OPTION_KEYS[i]}.</span>
+                            <div className="cbt-opt-main">
+                              <div
+                                className="cbt-opt-t"
+                                dangerouslySetInnerHTML={{ __html: renderMathHtml(opt.text) }}
+                              />
+                              {opt.imageUrl && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  className="cbt-opt-img"
+                                  src={opt.imageUrl}
+                                  alt={`Option ${OPTION_KEYS[i]}`}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Compact actions for small screens */}
+                    <div className="cbt-m-actions">
+                      <button type="button" className="cbt-btn cbt-mark" onClick={markAndNext}>
+                        Mark for Review &amp; Next
+                      </button>
+                      <button
+                        type="button"
+                        className="cbt-btn cbt-clear"
+                        onClick={clearResponse}
+                        disabled={answers[current] == null}
+                      >
+                        Clear Response
+                      </button>
+                      <button
+                        type="button"
+                        className="cbt-btn cbt-save"
+                        onClick={saveAndNext}
+                        disabled={lastQ}
+                      >
+                        Save &amp; Next
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ---------- Action bar ---------- */}
+                  <footer className="cbt-actions">
+                    <div className="cbt-actions-l">
+                      <button type="button" className="cbt-btn cbt-mark" onClick={markAndNext}>
+                        Mark for Review &amp; Next
+                      </button>
+                      <button
+                        type="button"
+                        className="cbt-btn cbt-clear"
+                        onClick={clearResponse}
+                        disabled={answers[current] == null}
+                      >
+                        Clear Response
+                      </button>
+                    </div>
+                    <div className="cbt-actions-r">
+                      <button
+                        type="button"
+                        className="cbt-btn cbt-back"
+                        onClick={() => visit(current - 1)}
+                        disabled={firstQ}
+                      >
+                        &lt; Back
+                      </button>
+                      <button
+                        type="button"
+                        className="cbt-btn cbt-save"
+                        onClick={saveAndNext}
+                        disabled={lastQ}
+                      >
+                        Save &amp; Next
+                      </button>
+                    </div>
+                  </footer>
+                </section>
+
+                {/* ---------- Palette sidebar ---------- */}
+                <aside className={`cbt-side${showMobilePalette ? " open" : ""}`}>
+                  <div className="cbt-side-head">
+                    <span>Question Palette</span>
                     <button
-                      className="v2-side-close"
+                      type="button"
+                      className="cbt-side-close"
                       onClick={() => setShowMobilePalette(false)}
-                      aria-label="Close palette"
+                      aria-label="Close question palette"
                     >
-                      ×
+                      &times;
                     </button>
                   </div>
+                  <div className="cbt-side-scroll">
+                    <div className="cbt-legend">
+                      <div className="cbt-legend-title">Legend</div>
+                      <div className="cbt-legend-grid">
+                        <span className="cbt-lg">
+                          <i className="cbt-sw un">1</i> Not Visited
+                        </span>
+                        <span className="cbt-lg">
+                          <i className="cbt-sw no">2</i> Not Answered
+                        </span>
+                        <span className="cbt-lg">
+                          <i className="cbt-sw ans">3</i> Answered
+                        </span>
+                        <span className="cbt-lg">
+                          <i className="cbt-sw mk">4</i> Marked for Review
+                        </span>
+                        <span className="cbt-lg wide">
+                          <i className="cbt-sw mkans">5</i> Answered &amp; Marked for Review
+                          <em>(will be considered for evaluation)</em>
+                        </span>
+                      </div>
+                    </div>
 
-                  <div className="v2-tlabel hide-mobile">Time remaining</div>
-                  <div
-                    className="v2-tval hide-mobile"
-                    style={{
-                      color: secondsLeft <= 300 ? "#d9a300" : "var(--accent)",
-                    }}
-                  >
-                    {formatTime(secondsLeft)}
-                  </div>
+                    <div className="cbt-pal-title">
+                      {exam.subject} &mdash; Section A
+                    </div>
+                    <div className="cbt-pal">
+                      {runtime.map((_, i) => {
+                        const st = paletteState(i);
+                        const isCurrent = i === current;
+                        return (
+                          <button
+                            type="button"
+                            key={i}
+                            className={`cbt-pb ${st}${isCurrent ? " cur" : ""}`}
+                            onClick={() => {
+                              visit(i);
+                              setShowMobilePalette(false);
+                            }}
+                            aria-label={`Question ${i + 1}`}
+                          >
+                            {i + 1}
+                          </button>
+                        );
+                      })}
+                    </div>
 
-                  <div className="v2-tlabel hide-mobile">Progress</div>
-                  <div className="v2-prog hide-mobile">
-                    <span>
-                      <strong>{answeredCount}</strong> answered
-                    </span>
-                    <span>
-                      <strong>{markedCount}</strong> marked
-                    </span>
+                    <div className="cbt-sum-mini">
+                      <span>
+                        <b>{statusCounts.ans + statusCounts.mkans}</b> answered
+                      </span>
+                      <span>
+                        <b>{statusCounts.no}</b> not answered
+                      </span>
+                      <span>
+                        <b>{statusCounts.mk + statusCounts.mkans}</b> marked
+                      </span>
+                    </div>
                   </div>
+                  <div className="cbt-side-foot">
+                    <button
+                      type="button"
+                      className="cbt-btn cbt-clear cbt-side-btn"
+                      onClick={() => setInstructionsOpen(true)}
+                    >
+                      Instructions
+                    </button>
+                    <button
+                      type="button"
+                      className="cbt-btn cbt-submit cbt-side-btn"
+                      onClick={() => setConfirmOpen(true)}
+                    >
+                      Submit
+                    </button>
+                  </div>
+                </aside>
+              </div>
 
-                  <div className="v2-tlabel" style={{ marginTop: 0 }}>
-                    Palette · Section A
-                  </div>
-                  <div className="v2-pal">
-                    {runtime.map((_, i) => {
-                      const st = paletteState(i);
-                      const isCurrent = i === current;
-                      return (
-                        <button
-                          key={i}
-                          className={`v2-pdot2 ${st}${isCurrent ? " cur" : ""}`}
-                          onClick={() => { visit(i); setShowMobilePalette(false); }}
-                        >
-                          {i + 1}
-                        </button>
-                      );
-                    })}
-                  </div>
+              {showMobilePalette && (
+                <div
+                  className="cbt-backdrop"
+                  onClick={() => setShowMobilePalette(false)}
+                />
+              )}
 
-                  <div className="v2-tlabel" style={{ margin: "14px 0 6px" }}>
-                    Legend
-                  </div>
-                  <div className="v2-legend">
-                    <span>
-                      <i className="v2-lg ans" />
-                      Answered
-                    </span>
-                    <span>
-                      <i className="v2-lg mk" />
-                      Marked
-                    </span>
-                    <span>
-                      <i className="v2-lg vis" />
-                      Visited
-                    </span>
-                    <span>
-                      <i className="v2-lg un" />
-                      Not visited
-                    </span>
-                  </div>
-
-                  <button className="v2-submit-btn hide-mobile" onClick={() => setConfirmOpen(true)}>
-                    Submit Test
-                  </button>
-
-                  <button className="v2-submit-btn show-mobile-drawer" onClick={() => { setShowMobilePalette(false); setConfirmOpen(true); }}>
-                    Submit Test
-                  </button>
-                </div>
-              </aside>
+              {/* Mobile bottom navigation */}
+              <div className="cbt-mobile-nav">
+                <button
+                  type="button"
+                  onClick={() => visit(current - 1)}
+                  disabled={firstQ}
+                  aria-label="Previous question"
+                >
+                  &#9664;
+                </button>
+                <button
+                  type="button"
+                  className="mid"
+                  onClick={() => setShowMobilePalette(true)}
+                >
+                  Q {current + 1} / {totalQuestions} &nbsp;·&nbsp; Palette
+                </button>
+                <button
+                  type="button"
+                  onClick={() => visit(current + 1)}
+                  disabled={lastQ}
+                  aria-label="Next question"
+                >
+                  &#9654;
+                </button>
+              </div>
             </div>
-
-            {showMobilePalette && (
-              <div className="v2-drawer-backdrop" onClick={() => setShowMobilePalette(false)} />
-            )}
-          </div>
-
-          {/* Bottom sticky action bar for mobile */}
-          <div className="v2-mobile-bottom">
-            <button disabled={current===0} onClick={()=>visit(current-1)}>← Prev</button>
-            <button onClick={()=>setShowMobilePalette(true)} className="mid">◫ {current+1}/{totalQuestions}</button>
-            <button disabled={current===totalQuestions-1} onClick={()=>visit(current+1)}>Next →</button>
-          </div>
-        </div>
           );
         })()
       )}
@@ -659,31 +776,67 @@ function ExamContent() {
       )}
 
       {confirmOpen && (
-        <div className="v2-overlay" onClick={() => setConfirmOpen(false)}>
-          <div className="v2-dialog" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="v2-dialog-close"
-              onClick={() => setConfirmOpen(false)}
-              aria-label="Close"
-            >
-              ×
-            </button>
-            <h3 className="v2-cta-title">
-              Submit your <em>test</em>?
-            </h3>
-            <p className="v2-cta-desc">
-              Answered {answeredCount} of {totalQuestions}. You can&apos;t return
-              after submitting.
-            </p>
-            <div className="v2-modal-foot">
+        <div className="cbt-overlay" onClick={() => setConfirmOpen(false)}>
+          <div className="cbt-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cbt-modal-head">Submit Test</div>
+            <div className="cbt-modal-body">
+              <p className="cbt-modal-note">
+                You are about to submit your test. Please review the summary
+                of your responses below.
+              </p>
+              <table className="cbt-sum">
+                <tbody>
+                  <tr>
+                    <th>
+                      <i className="cbt-sw un" aria-hidden="true" /> Not Visited
+                    </th>
+                    <td>{statusCounts.un}</td>
+                  </tr>
+                  <tr>
+                    <th>
+                      <i className="cbt-sw no" aria-hidden="true" /> Not Answered
+                    </th>
+                    <td>{statusCounts.no}</td>
+                  </tr>
+                  <tr>
+                    <th>
+                      <i className="cbt-sw ans" aria-hidden="true" /> Answered
+                    </th>
+                    <td>{statusCounts.ans}</td>
+                  </tr>
+                  <tr>
+                    <th>
+                      <i className="cbt-sw mk" aria-hidden="true" /> Marked for Review
+                    </th>
+                    <td>{statusCounts.mk}</td>
+                  </tr>
+                  <tr>
+                    <th>
+                      <i className="cbt-sw mkans" aria-hidden="true" /> Answered &amp;
+                      Marked for Review
+                    </th>
+                    <td>{statusCounts.mkans}</td>
+                  </tr>
+                  <tr className="cbt-sum-total">
+                    <th>Total Questions</th>
+                    <td>{totalQuestions}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="cbt-modal-warn">
+                Once submitted, you cannot return to this test.
+              </p>
+            </div>
+            <div className="cbt-modal-foot">
               <button
-                className="v2-set-btn ghost"
+                type="button"
+                className="cbt-btn cbt-clear"
                 onClick={() => setConfirmOpen(false)}
               >
-                Keep going
+                No
               </button>
-              <button className="v2-submit" onClick={submit}>
-                Submit now
+              <button type="button" className="cbt-btn cbt-save" onClick={submit}>
+                Yes
               </button>
             </div>
           </div>
@@ -691,25 +844,102 @@ function ExamContent() {
       )}
 
       {focusWarnOpen && (
-        <div className="v2-overlay" onClick={() => setFocusWarnOpen(false)}>
-          <div className="v2-dialog" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="v2-dialog-close"
-              onClick={() => setFocusWarnOpen(false)}
-              aria-label="Close"
-            >
-              ×
-            </button>
-            <h3 className="v2-cta-title">
-              Stay in the <em>test</em>
-            </h3>
-            <p className="v2-cta-desc">
-              You left the test window. If you leave again, your test will be
-              automatically submitted.
-            </p>
-            <div className="v2-modal-foot">
-              <button className="v2-submit" onClick={() => setFocusWarnOpen(false)}>
-                Return to test
+        <div className="cbt-overlay" onClick={() => setFocusWarnOpen(false)}>
+          <div className="cbt-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cbt-modal-head cbt-modal-head-warn">
+              &#9888; Test Window Focus Lost
+            </div>
+            <div className="cbt-modal-body">
+              <p className="cbt-modal-note">
+                You left the test window. This activity has been recorded. If
+                you leave again, your test will be submitted automatically.
+              </p>
+            </div>
+            <div className="cbt-modal-foot">
+              <button
+                type="button"
+                className="cbt-btn cbt-save"
+                onClick={() => setFocusWarnOpen(false)}
+              >
+                Return to Test
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {instructionsOpen && (
+        <div className="cbt-overlay" onClick={() => setInstructionsOpen(false)}>
+          <div className="cbt-modal cbt-modal-wide" onClick={(e) => e.stopPropagation()}>
+            <div className="cbt-modal-head">General Instructions</div>
+            <div className="cbt-modal-body cbt-instr-body">
+              <ul className="cbt-instr">
+                <li>
+                  The clock is set at the server. The countdown timer at the
+                  top right corner of the screen will display the remaining
+                  time available for you to complete the examination. When the
+                  timer reaches zero, the examination will end by itself.
+                </li>
+                <li>
+                  The Question Palette displayed on the right side of the
+                  screen will show the status of each question using one of the
+                  following symbols:
+                  <div className="cbt-legend-grid cbt-instr-legend">
+                    <span className="cbt-lg">
+                      <i className="cbt-sw un">1</i> Not Visited
+                    </span>
+                    <span className="cbt-lg">
+                      <i className="cbt-sw no">2</i> Not Answered
+                    </span>
+                    <span className="cbt-lg">
+                      <i className="cbt-sw ans">3</i> Answered
+                    </span>
+                    <span className="cbt-lg">
+                      <i className="cbt-sw mk">4</i> Marked for Review
+                    </span>
+                    <span className="cbt-lg wide">
+                      <i className="cbt-sw mkans">5</i> Answered &amp; Marked for
+                      Review (will be considered for evaluation)
+                    </span>
+                  </div>
+                </li>
+                <li>
+                  You can click any of the question numbers in the palette to
+                  go to that question directly.
+                </li>
+                <li>
+                  Click an option to select it as your answer; click the same
+                  option again (or <b>Clear Response</b>) to remove it. Use{" "}
+                  <b>Save &amp; Next</b> to save your answer and move to the
+                  next question.
+                </li>
+                <li>
+                  <b>Mark for Review &amp; Next</b> flags a question for later
+                  review and moves to the next question.
+                </li>
+                <li>
+                  Each correct answer awards the marks shown next to the
+                  question; an incorrect answer deducts the negative marks
+                  shown.
+                </li>
+                <li>
+                  Do not refresh the page or close the tab &mdash; your progress
+                  will be lost. Leaving the test window repeatedly will submit
+                  your test automatically.
+                </li>
+                <li>
+                  Click <b>Submit</b> only after attempting all the questions
+                  you wish to answer.
+                </li>
+              </ul>
+            </div>
+            <div className="cbt-modal-foot">
+              <button
+                type="button"
+                className="cbt-btn cbt-save"
+                onClick={() => setInstructionsOpen(false)}
+              >
+                Close
               </button>
             </div>
           </div>
@@ -1026,497 +1256,705 @@ const CSS = `
   .v2-join:hover { background: var(--accent-2); border-color: var(--accent-2); }
   .v2-join:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* ---------- TEST WINDOW ---------- */
-  .v2-test-wrap {
-    padding: 24px;
-    padding-bottom: 24px;
-  }
-
-  .v2-preview {
-    border: 1px solid var(--ink);
-    background: #f4f0e8;
-    color: #14110d;
-    position: relative;
-    box-shadow: 12px 12px 0 var(--ink);
+  /* ================== CBT EXAM WINDOW (NTA / JEE style) ================== */
+  .cbt-app {
+    --cbt-navy: #1d3d8f;
+    --cbt-navy-2: #16306e;
+    --cbt-blue: #2563eb;
+    --cbt-blue-mid: #2e6bc4;
+    --cbt-gray-bg: #e9edf4;
+    --cbt-line: #d5dcea;
+    --cbt-ink: #1f2937;
+    --cbt-un: #98a2b3;   /* not visited  */
+    --cbt-no: #e04848;   /* not answered */
+    --cbt-ans: #2fa14e;  /* answered     */
+    --cbt-mk: #8a3fd1;   /* marked       */
+    height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
-    min-height: calc(100vh - 48px);
-    min-height: calc(100dvh - 48px);
-    width: 100%;
-    max-width: 100%;
+    background: #eef1f6;
+    font-family: Arial, Helvetica, sans-serif;
+    color: var(--cbt-ink);
     overflow: hidden;
   }
-  .v2-preview-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 18px;
-    background: #ffffff;
-    border-bottom: 1px solid #d9d1bf;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: #6b6358;
-    letter-spacing: 0.06em;
-    flex-wrap: wrap;
-  }
-  .v2-preview-body { display: grid; grid-template-columns: 1fr 260px; flex: 1; min-height: 0; min-width: 0; }
+  .cbt-app button { font-family: inherit; }
 
-  .v2-q2 {
-    padding: 32px 32px 28px;
-    border-right: 1px solid #d9d1bf;
-    min-height: 480px;
-    min-width: 0;
+  /* ---------- Header ---------- */
+  .cbt-header {
     display: flex;
-    flex-direction: column;
-  }
-  .v2-q2-meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: #6b6358;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 18px;
-    flex-wrap: wrap;
-  }
-  .v2-q2-meta strong { color: var(--accent); }
-
-  /* Mobile top strip - hidden on desktop */
-  .v2-mobile-strip {
-    display: none;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    padding: 12px 14px;
-    background: #f0ece4;
-    border: 1px solid #d9d1bf;
-    margin-bottom: 16px;
-    position: sticky;
-    top: 0;
-    z-index: 20;
-  }
-  .v2-mobile-time {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .v2-mobile-time-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: #8a8275;
-    line-height: 1;
-  }
-  .v2-mobile-time-val {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 16px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    line-height: 1;
-  }
-  .v2-mobile-stats {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: #6b6358;
-    display: flex;
-    gap: 4px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .v2-mobile-pal-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: #ffffff;
-    border: 1px solid #d9d1bf;
-    color: #14110d;
-    padding: 10px 14px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    cursor: pointer;
-    min-height: 40px;
+    gap: 16px;
+    padding: 10px 18px;
+    background: linear-gradient(180deg, #21479b 0%, var(--cbt-navy) 55%, var(--cbt-navy-2) 100%);
+    color: #fff;
     flex-shrink: 0;
   }
-  .v2-mobile-pal-btn:active { background: #f0ece4; }
-  .v2-mobile-pal-icon { font-size: 14px; }
+  .cbt-brand { min-width: 0; }
+  .cbt-brand-org {
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #b9cdf3;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cbt-brand-exam {
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cbt-brand-sub {
+    font-size: 11px;
+    color: #cfdcf8;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cbt-head-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+  .cbt-cand { display: flex; align-items: center; gap: 10px; }
+  .cbt-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #fff;
+    color: var(--cbt-navy);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 14px;
+    border: 2px solid #9db6e8;
+    flex-shrink: 0;
+  }
+  .cbt-cand-meta { display: flex; flex-direction: column; line-height: 1.25; }
+  .cbt-cand-label {
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #b9cdf3;
+  }
+  .cbt-cand-name { font-size: 13.5px; font-weight: 700; white-space: nowrap; }
+  .cbt-timer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #fff;
+    border-radius: 4px;
+    padding: 5px 14px;
+    line-height: 1.25;
+    border: 1px solid #9db6e8;
+  }
+  .cbt-timer-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+  }
+  .cbt-timer-val {
+    font-size: 17px;
+    font-weight: 700;
+    color: #111827;
+    font-variant-numeric: tabular-nums;
+  }
+  .cbt-timer.warn .cbt-timer-val { color: #d13c3c; }
+  .cbt-timer.warn { border-color: #e9a1a1; box-shadow: 0 0 0 2px rgba(209,60,60,0.15); }
+  .cbt-pal-toggle {
+    display: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 4px;
+    border: 1px solid #9db6e8;
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
 
-  .v2-q2-text {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    font-size: 18px;
-    font-weight: 450;
-    line-height: 1.55;
-    color: #14110d;
-    margin: 0 0 24px;
+  /* ---------- Section tabs ---------- */
+  .cbt-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: #d3dbea;
+    padding: 0 10px;
+    border-bottom: 1px solid #c3cee3;
+    flex-shrink: 0;
+  }
+  .cbt-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #45536e;
+    background: #c8d2e6;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 5px 5px 0 0;
+    cursor: default;
+  }
+  .cbt-tab.active {
+    background: #fff;
+    color: var(--cbt-navy);
+    border-color: #c3cee3;
+    position: relative;
+    top: 1px;
+  }
+  .cbt-tab-n {
+    font-style: normal;
+    font-size: 10.5px;
+    background: var(--cbt-navy);
+    color: #fff;
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-weight: 700;
+  }
+  .cbt-tabs-info {
+    margin-left: auto;
+    font-size: 11px;
+    color: #5b6883;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ---------- Main layout ---------- */
+  .cbt-main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 292px;
+    min-height: 0;
+  }
+
+  /* ---------- Question column ---------- */
+  .cbt-qcol { display: flex; flex-direction: column; background: #fff; min-width: 0; min-height: 0; }
+  .cbt-qhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 22px;
+    border-bottom: 1px solid #e3e8f0;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .cbt-qno {
+    font-size: 16px;
+    font-weight: 700;
+    color: #111827;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .cbt-flag {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #fff;
+    background: var(--cbt-mk);
+    border-radius: 3px;
+    padding: 3px 8px;
+  }
+  .cbt-marks { display: flex; gap: 8px; align-items: center; }
+  .cbt-mk-chip {
+    font-size: 12.5px;
+    font-weight: 700;
+    border-radius: 3px;
+    padding: 3px 10px;
+    border: 1px solid;
+  }
+  .cbt-mk-chip.pos { color: #1c7c3c; border-color: #bfe3cb; background: #f0faf3; }
+  .cbt-mk-chip.neg { color: #c02626; border-color: #f0c7c7; background: #fdf3f3; }
+
+  .cbt-qbody {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 26px 26px;
+    min-height: 0;
+  }
+  .cbt-qtext {
+    font-size: 17px;
+    line-height: 1.65;
+    color: #111827;
+    margin: 0 0 20px;
     word-break: break-word;
     overflow-wrap: anywhere;
   }
-  .v2-q-img { max-width: 100%; max-height: 320px; object-fit: contain; border: 1px solid #d9d1bf; margin: 0 auto 20px; display: block; width: auto; height: auto; }
-  .v2-q-imgs { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; width: 100%; }
-  .v2-q-imgs .v2-q-img { margin-bottom: 0; }
+  .cbt-qimgs { display: flex; flex-direction: column; gap: 14px; margin: 0 0 20px; }
+  .cbt-qimg {
+    max-width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+    border: 1px solid #d7dee9;
+    border-radius: 4px;
+    margin: 0 auto;
+    display: block;
+    width: auto;
+    height: auto;
+  }
 
-  .v2-opts2 { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-  .v2-opt2 {
+  .cbt-opts { display: flex; flex-direction: column; gap: 10px; max-width: 780px; }
+  .cbt-opt {
     display: flex;
     align-items: flex-start;
-    gap: 14px;
-    padding: 14px 14px;
-    border: 1px solid #d9d1bf;
-    background: #ffffff;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid #d7dee9;
+    border-radius: 4px;
+    background: #fff;
     cursor: pointer;
-    transition: border-color 0.12s ease, background 0.12s ease, transform 0.08s ease;
     min-height: 48px;
+    transition: border-color 0.12s ease, background 0.12s ease;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
     touch-action: manipulation;
   }
-  .v2-opt2:hover { border-color: #b8ad96; }
-  .v2-opt2:active { transform: scale(0.995); }
-  .v2-opt2.sel { border-color: var(--accent); background: rgba(200,50,30,0.06); }
-  .v2-opt2-k {
-    width: 28px;
-    height: 28px;
-    border: 1px solid #d9d1bf;
-    display: grid;
-    place-items: center;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    color: #6b6358;
+  .cbt-opt:hover { border-color: #93b4f3; background: #f6f9ff; }
+  .cbt-opt:focus-visible { outline: 2px solid var(--cbt-blue); outline-offset: 1px; }
+  .cbt-opt.sel { border-color: var(--cbt-blue); background: #e8f0fe; box-shadow: 0 0 0 1px var(--cbt-blue) inset; }
+  .cbt-radio {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #9aa6bb;
+    background: #fff;
     flex-shrink: 0;
-    margin-top: 1px;
+    margin-top: 2px;
+    transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
   }
-  .v2-opt2.sel .v2-opt2-k { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .v2-opt2-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-  .v2-opt2-t { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-size: 15px; line-height: 1.55; word-break: break-word; overflow-wrap: anywhere; }
-  .v2-opt2-img { display: block; max-width: 100%; max-width: 200px; max-height: 140px; object-fit: contain; border: 1px solid var(--rule); }
+  .cbt-opt.sel .cbt-radio {
+    border-color: var(--cbt-blue);
+    background: var(--cbt-blue);
+    box-shadow: inset 0 0 0 3px #fff;
+  }
+  .cbt-opt-key { font-weight: 700; font-size: 15px; color: #334155; margin-top: 1px; }
+  .cbt-opt-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .cbt-opt-t { font-size: 15.5px; line-height: 1.55; color: #1f2937; word-break: break-word; overflow-wrap: anywhere; }
+  .cbt-opt-img {
+    display: block;
+    max-width: 220px;
+    max-height: 150px;
+    object-fit: contain;
+    border: 1px solid #d7dee9;
+    border-radius: 4px;
+  }
 
-  .v2-nav {
-    display: grid;
-    grid-template-columns: 1fr 1.2fr 1fr;
-    gap: 8px;
-    margin-top: 28px;
-  }
-  .v2-nav-btn {
-    background: transparent;
-    border: 1px solid #d9d1bf;
-    color: #14110d;
-    padding: 14px 10px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+  /* ---------- Buttons ---------- */
+  .cbt-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 3px;
+    border: 1px solid transparent;
     cursor: pointer;
-    transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
-    min-height: 44px;
+    min-height: 40px;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+    white-space: nowrap;
   }
-  .v2-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  .v2-nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .v2-mark.on { border-color: #d9a300; color: #d9a300; background: rgba(217,163,0,0.08); }
+  .cbt-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .cbt-mark { background: var(--cbt-blue-mid); color: #fff; }
+  .cbt-mark:hover:not(:disabled) { background: #255aa8; }
+  .cbt-save { background: var(--cbt-navy); color: #fff; }
+  .cbt-save:hover:not(:disabled) { background: var(--cbt-navy-2); }
+  .cbt-clear, .cbt-back {
+    background: #fff;
+    color: #3f4c66;
+    border-color: #9aa8c2;
+  }
+  .cbt-clear:hover:not(:disabled), .cbt-back:hover:not(:disabled) {
+    background: #f2f5fb;
+    border-color: #6d7d9d;
+  }
+  .cbt-submit { background: #d13c3c; color: #fff; }
+  .cbt-submit:hover { background: #b32f2f; }
 
-  .v2-mobile-submit {
-    display: none;
-    width: 100%;
-    margin-top: 16px;
-    background: var(--accent);
-    color: #fff;
-    border: 1px solid var(--accent);
-    padding: 16px;
-    font-family: 'Inter', sans-serif;
-    font-weight: 700;
-    font-size: 13px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    cursor: pointer;
-    min-height: 50px;
-  }
-
-  .v2-side2 {
-    padding: 22px 20px;
-    background: #f0ece4;
-    min-width: 0;
+  .cbt-actions {
     display: flex;
-    flex-direction: column;
-  }
-  .v2-side-scroll {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-width: none;
-  }
-  .v2-side-scroll::-webkit-scrollbar { display: none; }
-  .v2-side-header-mobile {
-    display: none;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 18px;
-    padding-bottom: 14px;
-    border-bottom: 1px solid #d9d1bf;
+    gap: 10px;
+    padding: 12px 22px;
+    background: #f4f7fb;
+    border-top: 1px solid #dbe2ee;
+    flex-shrink: 0;
+    flex-wrap: wrap;
   }
-  .v2-side-close {
-    width: 36px;
-    height: 36px;
-    display: grid;
-    place-items: center;
-    background: #ffffff;
-    border: 1px solid #d9d1bf;
-    color: #14110d;
+  .cbt-actions-l, .cbt-actions-r { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* Compact action row (small screens only) */
+  .cbt-m-actions {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 780px;
+    margin-top: 22px;
+  }
+  .cbt-m-actions .cbt-btn { width: 100%; }
+
+  /* ---------- Palette sidebar ---------- */
+  .cbt-side {
+    background: var(--cbt-gray-bg);
+    border-left: 1px solid var(--cbt-line);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .cbt-side-head {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 16px;
+    background: var(--cbt-navy);
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .cbt-side-close {
+    width: 34px;
+    height: 34px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.4);
+    background: rgba(255,255,255,0.12);
+    color: #fff;
     font-size: 20px;
     line-height: 1;
     cursor: pointer;
-    flex-shrink: 0;
   }
-  .v2-tlabel {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: #8a8275;
-    letter-spacing: 0.16em;
+  .cbt-side-scroll { flex: 1; overflow-y: auto; padding: 14px; min-height: 0; }
+
+  .cbt-legend {
+    background: #fff;
+    border: 1px solid var(--cbt-line);
+    border-radius: 4px;
+    padding: 10px 12px 12px;
+    margin-bottom: 14px;
+  }
+  .cbt-legend-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
+    color: #5b6883;
     margin-bottom: 8px;
   }
-  .v2-tval {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 32px;
-    font-weight: 500;
-    color: var(--accent);
-    letter-spacing: 0.02em;
-    margin-bottom: 22px;
-    line-height: 1;
-  }
-  .v2-prog {
+  .cbt-legend-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 10px; }
+  .cbt-lg {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-family: 'JetBrains Mono', monospace;
+    align-items: flex-start;
+    gap: 7px;
     font-size: 11px;
-    color: #6b6358;
-    margin-bottom: 18px;
+    line-height: 1.35;
+    color: #333f55;
   }
-  .v2-prog strong { color: #14110d; }
-
-  .v2-pal { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
-  .v2-pdot2 {
-    aspect-ratio: 1;
-    min-height: 36px;
-    display: grid;
+  .cbt-lg.wide { grid-column: 1 / -1; }
+  .cbt-lg em { display: block; font-style: normal; color: #64748b; font-size: 10px; }
+  .cbt-sw {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    display: inline-grid;
     place-items: center;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    cursor: pointer;
-    border: 0;
-    color: inherit;
-    padding: 0;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    transition: transform 0.08s ease, filter 0.12s ease;
-  }
-  .v2-pdot2:active { transform: scale(0.94); }
-  .v2-pdot2.ans { background: var(--accent); color: #fff; }
-  .v2-pdot2.mk  { background: #d9a300; color: #14110d; }
-  .v2-pdot2.vis { background: #d9d1bf; color: #6b6358; }
-  .v2-pdot2.un  { background: transparent; color: #8a8275; border: 1px solid #d9d1bf; }
-  .v2-pdot2.cur { outline: 2px solid #14110d; outline-offset: 1px; z-index: 1; }
-
-  .v2-legend {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: #8a8275;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-  .v2-legend span { display: flex; align-items: center; gap: 6px; }
-  .v2-lg { width: 10px; height: 10px; display: inline-block; flex-shrink: 0; }
-  .v2-lg.ans { background: oklch(0.52 0.20 25); }
-  .v2-lg.mk { background: #d9a300; }
-  .v2-lg.vis { background: #d9d1bf; }
-  .v2-lg.un { border: 1px solid #d9d1bf; background: transparent; }
-
-  .v2-submit-btn {
-    width: 100%;
-    margin-top: 20px;
-    background: var(--accent);
     color: #fff;
-    border: 1px solid var(--accent);
-    padding: 14px;
-    font-family: 'Inter', sans-serif;
-    font-weight: 600;
-    font-size: 13px;
+    font-size: 11px;
+    font-weight: 700;
+    font-style: normal;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .cbt-sw.un { background: var(--cbt-un); }
+  .cbt-sw.no { background: var(--cbt-no); }
+  .cbt-sw.ans { background: var(--cbt-ans); }
+  .cbt-sw.mk { background: var(--cbt-mk); }
+  .cbt-sw.mkans { background: var(--cbt-mk); }
+  .cbt-sw.mkans::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #2fa14e;
+    box-shadow: 0 0 0 1.5px #fff;
+  }
+
+  .cbt-pal-title {
+    font-size: 11px;
+    font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    cursor: pointer;
-    min-height: 44px;
+    color: #45536e;
+    margin: 2px 0 8px;
   }
-  .v2-submit-btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
-  .v2-submit-btn.show-mobile-drawer { display: none; }
+  .cbt-pal { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+  .cbt-pb {
+    aspect-ratio: 1;
+    min-height: 36px;
+    width: 100%;
+    border: none;
+    border-radius: 3px;
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    position: relative;
+    display: grid;
+    place-items: center;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: transform 0.08s ease;
+  }
+  .cbt-pb:active { transform: scale(0.92); }
+  .cbt-pb.un { background: var(--cbt-un); }
+  .cbt-pb.no { background: var(--cbt-no); }
+  .cbt-pb.ans { background: var(--cbt-ans); }
+  .cbt-pb.mk { background: var(--cbt-mk); }
+  .cbt-pb.mkans::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #2fa14e;
+    box-shadow: 0 0 0 2px #fff;
+  }
+  .cbt-pb.cur { outline: 3px solid var(--cbt-navy); outline-offset: 1.5px; z-index: 1; }
 
-  /* Mobile bottom sticky bar - hidden on desktop */
-  .v2-mobile-bottom {
+  .cbt-sum-mini {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    font-size: 11px;
+    color: #5b6883;
+  }
+  .cbt-sum-mini b { color: #1f2937; }
+
+  .cbt-side-foot {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--cbt-line);
+    background: #e2e8f2;
+    flex-shrink: 0;
+  }
+  .cbt-side-btn { width: 100%; }
+
+  /* ---------- Mobile bottom nav ---------- */
+  .cbt-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 190;
+    animation: cbt-fade 0.16s ease;
+  }
+  .cbt-mobile-nav {
     display: none;
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
     z-index: 180;
-    background: #ffffff;
-    border-top: 1px solid #d9d1bf;
+    background: #fff;
+    border-top: 1px solid #c3cee3;
     padding: 8px 10px;
     padding-bottom: max(8px, env(safe-area-inset-bottom));
     gap: 8px;
-    box-shadow: 0 -8px 24px rgba(0,0,0,0.08);
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.1);
   }
-  .v2-mobile-bottom button {
+  .cbt-mobile-nav button {
     flex: 1;
-    background: transparent;
-    border: 1px solid #d9d1bf;
-    color: #14110d;
-    padding: 14px 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    background: #fff;
+    border: 1px solid #9aa8c2;
+    border-radius: 4px;
+    color: #1f2937;
+    padding: 12px 8px;
+    font-size: 13px;
+    font-weight: 700;
     cursor: pointer;
     min-height: 46px;
     -webkit-tap-highlight-color: transparent;
   }
-  .v2-mobile-bottom button:disabled { opacity: 0.35; }
-  .v2-mobile-bottom button.mid {
-    background: #f0ece4;
-    border-color: #c9c1af;
-    font-weight: 600;
-  }
+  .cbt-mobile-nav button:disabled { opacity: 0.4; }
+  .cbt-mobile-nav button.mid { background: #e8f0fe; border-color: #93b4f3; color: var(--cbt-navy); }
 
-  /* Drawer backdrop */
-  .v2-drawer-backdrop {
+  /* ---------- Overlays / modals ---------- */
+  .cbt-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.25);
-    backdrop-filter: blur(2px);
-    z-index: 190;
-    animation: v2-fadeIn 0.2s ease;
-  }
-  @keyframes v2-fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  .hide-mobile { display: block; }
-  .show-mobile-drawer { display: none !important; }
-
-  /* ---------- DIALOG ---------- */
-  .v2-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(20, 17, 13, 0.35);
-    backdrop-filter: blur(2px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    z-index: 1000;
-  }
-  .v2-dialog {
-    width: 100%;
-    max-width: 460px;
-    background: linear-gradient(180deg, #fbf7ee, var(--paper));
-    border: 1px solid var(--ink);
-    color: var(--ink);
-    position: relative;
-    padding: 38px 32px 28px;
-    text-align: left;
-    box-shadow: 12px 12px 0 var(--ink);
-    max-height: 90vh;
-    max-height: 90dvh;
-    overflow-y: auto;
-  }
-  .v2-dialog::before, .v2-dialog::after {
-    content: "";
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    background: var(--ink);
-  }
-  .v2-dialog::before { top: -1px; left: -1px; }
-  .v2-dialog::after { bottom: -1px; right: -1px; }
-  .v2-dialog-close {
-    position: absolute;
-    top: 14px;
-    right: 16px;
-    background: transparent;
-    border: 1px solid var(--ink);
-    width: 36px;
-    height: 36px;
-    font-size: 18px;
-    line-height: 1;
-    cursor: pointer;
-    color: var(--ink);
-    transition: background 0.15s ease, color 0.15s ease;
+    background: rgba(15, 23, 42, 0.55);
     display: grid;
     place-items: center;
+    padding: 16px;
+    z-index: 300;
+    animation: cbt-fade 0.16s ease;
   }
-  .v2-dialog-close:hover { background: var(--ink); color: var(--paper); }
-  .v2-cta-title {
-    font-family: 'Instrument Serif', serif;
-    font-size: 27px;
-    line-height: 1.15;
-    margin: 0 0 12px;
-    color: var(--ink);
+  @keyframes cbt-fade { from { opacity: 0; } to { opacity: 1; } }
+  .cbt-modal {
+    width: min(430px, 100%);
+    background: #fff;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 22px 60px rgba(15, 23, 42, 0.35);
   }
-  .v2-cta-title em { font-style: italic; color: var(--accent); }
-  .v2-cta-desc {
-    font-size: 13.5px;
-    line-height: 1.6;
-    color: var(--ink-2);
+  .cbt-modal-wide { width: min(560px, 100%); }
+  .cbt-modal-head {
+    background: var(--cbt-navy);
+    color: #fff;
+    font-size: 14.5px;
+    font-weight: 700;
+    padding: 12px 18px;
+    letter-spacing: 0.02em;
+  }
+  .cbt-modal-head-warn { background: #b33636; }
+  .cbt-modal-body { padding: 16px 18px; }
+  .cbt-modal-note { margin: 0 0 12px; font-size: 13px; line-height: 1.55; color: #374151; }
+  .cbt-sum { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 12px; }
+  .cbt-sum th {
+    text-align: left;
+    font-weight: 700;
+    color: #1f2937;
+    padding: 7px 10px;
+    border: 1px solid #e3e8f0;
+    background: #f8fafc;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cbt-sum td {
+    text-align: center;
+    width: 64px;
+    padding: 7px 10px;
+    border: 1px solid #e3e8f0;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .cbt-sum tr.cbt-sum-total th { background: #eef2f9; color: #111827; }
+  .cbt-sum tr.cbt-sum-total td { background: #eef2f9; }
+  .cbt-modal-warn {
     margin: 0;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #b33636;
+    background: #fdf3f3;
+    border: 1px solid #f0c7c7;
+    border-radius: 4px;
+    padding: 9px 12px;
   }
-  .v2-modal-foot {
+  .cbt-modal-foot {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    margin-top: 24px;
-    flex-wrap: wrap;
+    padding: 12px 18px;
+    border-top: 1px solid #e5eaf2;
+    background: #f7f9fc;
   }
-  .v2-set-btn {
-    background: transparent;
-    border: 1px solid var(--ink);
-    color: var(--ink);
-    padding: 12px 20px;
-    font-family: 'Inter', sans-serif;
-    font-weight: 600;
-    font-size: 13px;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-    min-height: 44px;
+  .cbt-instr-body { max-height: min(60vh, 520px); overflow-y: auto; }
+  .cbt-instr {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: #374151;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
   }
-  .v2-set-btn.ghost:hover { background: var(--ink); color: var(--paper); }
-  .v2-submit {
-    background: var(--accent);
-    color: #fff;
-    border: 1px solid var(--accent);
-    padding: 12px 22px;
-    font-family: 'Inter', sans-serif;
-    font-weight: 600;
-    font-size: 13px;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
-    min-height: 44px;
+  .cbt-instr b { color: #111827; }
+  .cbt-instr-legend { margin-top: 8px; }
+
+  /* ---------- Responsive: <= 960px ---------- */
+  @media (max-width: 960px) {
+    .cbt-app { height: auto; min-height: 100dvh; overflow: visible; }
+    .cbt-header { padding: 8px 12px; gap: 10px; position: sticky; top: 0; z-index: 40; }
+    .cbt-brand-org { display: none; }
+    .cbt-brand-exam { font-size: 13.5px; }
+    .cbt-brand-sub { font-size: 10px; }
+    .cbt-cand-meta { display: none; }
+    .cbt-avatar { width: 32px; height: 32px; font-size: 12px; }
+    .cbt-timer { padding: 4px 10px; }
+    .cbt-timer-val { font-size: 15px; }
+    .cbt-pal-toggle { display: block; }
+    .cbt-tabs { padding: 0 6px; overflow-x: auto; }
+    .cbt-tab { padding: 8px 12px; font-size: 12px; }
+    .cbt-tabs-info { display: none; }
+
+    .cbt-main { grid-template-columns: 1fr; display: flex; flex-direction: column; }
+    .cbt-qcol { min-height: 0; }
+    .cbt-qhead { padding: 10px 14px; }
+    .cbt-qno { font-size: 14.5px; }
+    .cbt-qbody { padding: 14px 14px 24px; }
+    .cbt-qtext { font-size: 16.5px; line-height: 1.55; margin-bottom: 16px; }
+    .cbt-opts { gap: 9px; }
+    .cbt-opt { padding: 11px 12px; }
+    .cbt-opt-t { font-size: 15px; }
+    .cbt-actions { display: none; }
+    .cbt-m-actions { display: flex; }
+    .cbt-mobile-nav { display: flex; }
+    .cbt-app { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
+
+    /* Palette becomes a bottom drawer */
+    .cbt-side {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      top: auto;
+      z-index: 200;
+      max-height: 84dvh;
+      border-top: 1px solid var(--cbt-line);
+      border-radius: 14px 14px 0 0;
+      transform: translateY(105%);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+      box-shadow: 0 -12px 40px rgba(15, 23, 42, 0.18);
+      overflow: hidden;
+    }
+    .cbt-side.open { transform: translateY(0); }
+    .cbt-backdrop { display: block; }
+    .cbt-side-head { display: flex; }
+    .cbt-pal { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+    .cbt-pb { min-height: 44px; font-size: 13.5px; }
   }
-  .v2-submit:hover { background: var(--accent-2); border-color: var(--accent-2); }
+
+  @media (max-width: 480px) {
+    .cbt-brand-sub { display: none; }
+    .cbt-cand { display: none; }
+    .cbt-header { justify-content: space-between; }
+    .cbt-timer-val { font-size: 14px; }
+    .cbt-pal { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .cbt-modal-foot { flex-direction: column-reverse; }
+    .cbt-modal-foot .cbt-btn { width: 100%; }
+  }
+
+  @media print {
+    .cbt-header, .cbt-tabs, .cbt-side, .cbt-actions, .cbt-mobile-nav,
+    .cbt-m-actions, .cbt-backdrop { display: none !important; }
+    .cbt-app { height: auto; overflow: visible; }
+    .cbt-qbody { overflow: visible; }
+  }
 
   /* ---------- RESULT ---------- */
   .v2-score {
@@ -1737,96 +2175,7 @@ const CSS = `
   .fn { font-style: italic; }
   sup, sub { font-size: 0.72em; line-height: 0; }
 
-  /* ---------- RESPONSIVE ---------- */
-  @media (max-width: 1024px) {
-    .v2-preview-body { grid-template-columns: 1fr 240px; }
-    .v2-pal { grid-template-columns: repeat(5, 1fr); }
-  }
-
-  @media (max-width: 960px) {
-    .v2-test-wrap {
-      padding: 0;
-      padding-bottom: calc(64px + env(safe-area-inset-bottom));
-    }
-    .v2-preview {
-      border: 0;
-      box-shadow: none;
-      min-height: 100vh;
-      min-height: 100dvh;
-      border-radius: 0;
-    }
-    .v2-preview-bar {
-      padding: 10px 14px;
-      font-size: 10px;
-      gap: 8px;
-      position: sticky;
-      top: 0;
-      z-index: 30;
-    }
-    .v2-bar-title { flex: 1 1 100%; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .v2-bar-candidate, .v2-bar-rec { font-size: 10px; }
-    .v2-preview-body {
-      grid-template-columns: 1fr;
-      display: flex;
-      flex-direction: column;
-    }
-    .v2-q2 {
-      border-right: 0;
-      border-bottom: 0;
-      padding: 14px 14px 20px;
-      min-height: auto;
-      flex: 1;
-    }
-    .v2-mobile-strip { display: flex; }
-    .v2-q2-meta { margin-bottom: 12px; font-size: 10px; }
-    .v2-q2-text { font-size: 18px; line-height: 1.4; margin-bottom: 18px; }
-    .v2-opts2 { gap: 10px; }
-    .v2-opt2 { padding: 12px 12px; }
-    .v2-nav { grid-template-columns: 1fr 1fr; margin-top: 20px; }
-    .v2-nav .v2-mark { grid-column: 1 / -1; order: 3; }
-    .v2-mobile-submit { display: block; }
-    .v2-mobile-bottom { display: flex; }
-
-    /* Side drawer */
-    .v2-side2 {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      top: auto;
-      z-index: 200;
-      max-height: 85vh;
-      max-height: 85dvh;
-      border-top: 1px solid #d9d1bf;
-      border-left: 0;
-      border-right: 0;
-      border-bottom: 0;
-      border-radius: 16px 16px 0 0;
-      padding: 0;
-      transform: translateY(105%);
-      transition: transform 0.32s cubic-bezier(0.32,0.72,0,1);
-      box-shadow: 0 -12px 40px rgba(0,0,0,0.12);
-      background: #f4f0e8;
-      overflow: hidden;
-    }
-    .v2-side2.open {
-      transform: translateY(0);
-    }
-    .v2-side-scroll {
-      padding: 18px 16px;
-      padding-bottom: max(18px, env(safe-area-inset-bottom));
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-    .v2-side-header-mobile { display: flex; }
-    .hide-mobile { display: none !important; }
-    .show-mobile-drawer { display: block !important; }
-    .v2-side2 .v2-tlabel { margin-top: 10px; }
-    .v2-pal { grid-template-columns: repeat(6, minmax(0,1fr)); gap: 8px; }
-    .v2-pdot2 { min-height: 44px; font-size: 12px; }
-    .v2-tval { font-size: 28px; }
-  }
-
+  /* ---------- RESPONSIVE (lobby / result screens) ---------- */
   @media (max-width: 640px) {
     .v2-center { padding: 16px 12px; padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom)); }
     .v2-lobby-card { padding: 22px 16px 18px; box-shadow: 6px 6px 0 var(--ink); max-width: 100%; }
@@ -1838,50 +2187,12 @@ const CSS = `
     .v2-field { margin-bottom: 18px; }
     .v2-name { font-size: 16px; padding: 12px 14px; } /* 16px prevents iOS zoom */
     .v2-join { width: 100%; justify-content: center; padding: 14px 18px; }
-
-    .v2-preview-bar { padding: 10px 12px; }
-    .v2-q2 { padding: 12px 12px 16px; }
-    .v2-q2-text { font-size: 16px; }
-    .v2-opt2-t { font-size: 14.5px; }
-    .v2-opt2-k { width: 26px; height: 26px; font-size: 11px; }
-    .v2-pal { grid-template-columns: repeat(5, minmax(0,1fr)); }
-    .v2-overlay { padding: 12px; }
-    .v2-dialog { padding: 26px 18px 18px; max-width: 100%; box-shadow: 8px 8px 0 var(--ink); }
-    .v2-cta-title { font-size: 22px; }
-    .v2-modal-foot { flex-direction: column-reverse; }
-    .v2-modal-foot .v2-set-btn, .v2-modal-foot .v2-submit { width: 100%; justify-content: center; }
     .v2-res-grid { grid-template-columns: 1fr; }
     .v2-score-num { font-size: 56px; }
   }
 
   @media (max-width: 380px) {
     .v2-lobby-title { font-size: 24px; }
-    .v2-pal { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; }
-    .v2-mobile-strip { flex-wrap: wrap; }
-    .v2-mobile-time-val { font-size: 14px; }
-    .v2-mobile-pal-btn { padding: 8px 10px; font-size: 10px; }
-    .v2-nav { gap: 6px; }
-    .v2-nav-btn { font-size: 10px; padding: 12px 6px; }
-    .v2-mobile-bottom { padding: 6px 8px; gap: 6px; }
-    .v2-mobile-bottom button { font-size: 11px; padding: 12px 4px; min-height: 44px; }
-  }
-
-  @media (min-width: 961px) {
-    .v2-pal { grid-template-columns: repeat(5, 1fr); }
-    .v2-mobile-strip, .v2-mobile-bottom, .v2-mobile-submit, .v2-drawer-backdrop, .v2-side-header-mobile, .show-mobile-drawer { display: none !important; }
-  }
-
-  /* Landscape small height */
-  @media (max-height: 520px) and (max-width: 960px) {
-    .v2-mobile-strip { position: relative; top: auto; }
-    .v2-side2 { max-height: 92vh; max-height: 92dvh; }
-  }
-
-  /* Print safety - don't print test chrome */
-  @media print {
-    .v2-preview-bar, .v2-side2, .v2-mobile-bottom, .v2-mobile-strip, .v2-nav, .v2-mobile-submit { display: none !important; }
-    .v2-preview { box-shadow: none; border: none; min-height: auto; }
-    .v2-q2 { border: 0; padding: 0; }
   }
 `;
 
