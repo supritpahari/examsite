@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { MaintenanceWrapper } from "./providers/MaintenanceWrapper";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "World of Physics - The exam before the exam.",
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <MaintenanceWrapper>{children}</MaintenanceWrapper>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
