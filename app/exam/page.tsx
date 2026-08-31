@@ -1277,6 +1277,8 @@ const CSS = `
     font-family: Arial, Helvetica, sans-serif;
     color: var(--cbt-ink);
     overflow: hidden;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   .cbt-app button { font-family: inherit; }
 
@@ -1388,7 +1390,9 @@ const CSS = `
     padding: 0 10px;
     border-bottom: 1px solid #c3cee3;
     flex-shrink: 0;
+    scrollbar-width: none;
   }
+  .cbt-tabs::-webkit-scrollbar { display: none; }
   .cbt-tab {
     display: inline-flex;
     align-items: center;
@@ -1524,6 +1528,7 @@ const CSS = `
   .cbt-opt:hover { border-color: #93b4f3; background: #f6f9ff; }
   .cbt-opt:focus-visible { outline: 2px solid var(--cbt-blue); outline-offset: 1px; }
   .cbt-opt.sel { border-color: var(--cbt-blue); background: #e8f0fe; box-shadow: 0 0 0 1px var(--cbt-blue) inset; }
+  .cbt-opt:active { background: #eef3fd; }
   .cbt-radio {
     width: 18px;
     height: 18px;
@@ -1544,7 +1549,7 @@ const CSS = `
   .cbt-opt-t { font-size: 15.5px; line-height: 1.55; color: #1f2937; word-break: break-word; overflow-wrap: anywhere; }
   .cbt-opt-img {
     display: block;
-    max-width: 220px;
+    max-width: min(220px, 100%);
     max-height: 150px;
     object-fit: contain;
     border: 1px solid #d7dee9;
@@ -1639,7 +1644,14 @@ const CSS = `
     line-height: 1;
     cursor: pointer;
   }
-  .cbt-side-scroll { flex: 1; overflow-y: auto; padding: 14px; min-height: 0; }
+  .cbt-side-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    min-height: 0;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
 
   .cbt-legend {
     background: #fff;
@@ -1720,6 +1732,8 @@ const CSS = `
     display: grid;
     place-items: center;
     -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
     touch-action: manipulation;
     transition: transform 0.08s ease;
   }
@@ -1756,6 +1770,7 @@ const CSS = `
     flex-direction: column;
     gap: 8px;
     padding: 12px 14px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
     border-top: 1px solid var(--cbt-line);
     background: #e2e8f2;
     flex-shrink: 0;
@@ -1815,9 +1830,10 @@ const CSS = `
   @keyframes cbt-fade { from { opacity: 0; } to { opacity: 1; } }
   .cbt-modal {
     width: min(430px, 100%);
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
     background: #fff;
     border-radius: 6px;
-    overflow: hidden;
     box-shadow: 0 22px 60px rgba(15, 23, 42, 0.35);
   }
   .cbt-modal-wide { width: min(560px, 100%); }
@@ -1840,10 +1856,9 @@ const CSS = `
     padding: 7px 10px;
     border: 1px solid #e3e8f0;
     background: #f8fafc;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    white-space: nowrap;
   }
+  .cbt-sum th .cbt-sw { vertical-align: -5px; margin-right: 7px; }
   .cbt-sum td {
     text-align: center;
     width: 64px;
@@ -1947,6 +1962,63 @@ const CSS = `
     .cbt-pal { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .cbt-modal-foot { flex-direction: column-reverse; }
     .cbt-modal-foot .cbt-btn { width: 100%; }
+  }
+
+  /* Very small phones */
+  @media (max-width: 380px) {
+    .cbt-header { gap: 8px; }
+    .cbt-brand-exam { font-size: 12.5px; }
+    .cbt-timer { padding: 3px 8px; }
+    .cbt-timer-label { font-size: 8.5px; }
+    .cbt-timer-val { font-size: 13px; }
+    .cbt-qno { font-size: 13.5px; }
+    .cbt-mk-chip { font-size: 11.5px; padding: 2px 8px; }
+    .cbt-legend-grid { grid-template-columns: 1fr; }
+    .cbt-pal { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+    .cbt-pb { min-height: 40px; font-size: 12.5px; }
+    .cbt-mobile-nav button { font-size: 12px; }
+    .cbt-sum-mini { font-size: 10.5px; }
+  }
+
+  /* Landscape phones: use the width — sidebar visible beside the question,
+     like the desktop CBT, instead of the stacked phone layout. */
+  @media (max-height: 540px) and (max-width: 960px) {
+    .cbt-app { height: 100dvh; min-height: 0; overflow: hidden; padding-bottom: 0; }
+    .cbt-header { position: static; padding: 5px 14px; gap: 12px; }
+    .cbt-brand-org, .cbt-brand-sub { display: none; }
+    .cbt-brand-exam { font-size: 13px; }
+    .cbt-cand { display: flex; }
+    .cbt-cand-meta { display: flex; }
+    .cbt-avatar { width: 30px; height: 30px; font-size: 11px; }
+    .cbt-tabs .cbt-tab { padding: 6px 12px; }
+    .cbt-main { display: grid; grid-template-columns: minmax(0, 1fr) 236px; }
+    .cbt-qhead { padding: 7px 14px; }
+    .cbt-qbody { padding: 12px 16px 16px; }
+    .cbt-qtext { font-size: 15px; margin-bottom: 12px; }
+    .cbt-opts { gap: 8px; }
+    .cbt-opt { padding: 9px 12px; min-height: 42px; }
+    .cbt-opt-t { font-size: 14px; }
+    .cbt-qimg { max-height: 200px; }
+    .cbt-btn { padding: 8px 14px; min-height: 34px; font-size: 12px; }
+    .cbt-actions { display: flex; padding: 8px 14px; }
+    .cbt-m-actions { display: none !important; }
+    .cbt-mobile-nav { display: none !important; }
+    .cbt-pal-toggle { display: none; }
+    .cbt-side {
+      position: static;
+      transform: none;
+      max-height: none;
+      border-radius: 0;
+      box-shadow: none;
+      border-top: 0;
+    }
+    .cbt-side-head { display: none; }
+    .cbt-legend { display: none; }
+    .cbt-side-scroll { padding: 10px; }
+    .cbt-pal-title { margin-top: 0; }
+    .cbt-pal { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .cbt-pb { min-height: 34px; font-size: 12px; }
+    .cbt-side-foot { padding: 8px 10px; flex-direction: row; }
   }
 
   @media print {
