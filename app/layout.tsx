@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { MaintenanceWrapper } from "./providers/MaintenanceWrapper";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "World of Physics - The exam before the exam.",
@@ -29,6 +30,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <MaintenanceWrapper>{children}</MaintenanceWrapper>
+        <Analytics />
       </body>
     </html>
   );
