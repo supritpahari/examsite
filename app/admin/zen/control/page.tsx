@@ -5,6 +5,7 @@ import { getAuthInstance, onAuthState } from "@/lib/firebase/client";
 import { signInWithPopup, GoogleAuthProvider, signOut, type User } from "firebase/auth";
 import { loadControlFlags, saveControlFlags, type SiteControlFlags } from "@/lib/settings";
 import NoticeEditor from "../../notices/editor";
+import { subscribeToLogs, type AppLog } from "@/lib/logs";
 
 const ALLOWED_EMAIL = "obliqllc@gmail.com";
 
@@ -23,6 +24,12 @@ export default function ZenControl() {
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
+  const [logs, setLogs] = useState<AppLog[]>([]);
+
+  useEffect(() => {
+    if (user?.email?.toLowerCase() !== ALLOWED_EMAIL) return;
+    return subscribeToLogs(setLogs);
+  }, [user]);
 
   useEffect(() => {
     const unsub = onAuthState((u) => {
@@ -82,7 +89,7 @@ export default function ZenControl() {
       await saveControlFlags(flags);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
+    } catch {
       setError("Failed to save. Please try again.");
     } finally {
       setSaving(false);
@@ -284,6 +291,19 @@ export default function ZenControl() {
         .zen-btn:hover { background: oklch(0.42 0.22 25); border-color: oklch(0.42 0.22 25); }
         .zen-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .zen-warning { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #b3261e; margin-top: 8px; padding: 8px 12px; background: #fff0ed; border: 1px solid #f5c6b8; }
+        .zen-log-list { max-height: 520px; overflow-y: auto; border-top: 1px solid #d9d1bf; }
+        .zen-log { padding: 14px 0; border-bottom: 1px solid #d9d1bf; }
+        .zen-log-topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 7px; font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+        .zen-log-level { padding: 3px 7px; color: #fff; font-weight: 600; }
+        .zen-log-debug { background: #7b6f5c; }
+        .zen-log-info { background: #326b8c; }
+        .zen-log-warn { background: #a66b16; }
+        .zen-log-error { background: #b3261e; }
+        .zen-log-time, .zen-log-meta { color: #8a8275; }
+        .zen-log-message { font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+        .zen-log-meta { margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; overflow-wrap: anywhere; }
+        .zen-log-details { margin: 8px 0 0; padding: 8px; background: #faf8f5; color: #5e5548; font: 10px/1.45 'JetBrains Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .zen-log-empty { padding: 18px 0; color: #8a8275; font: 11px 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; }
         @media (max-width: 600px) { .zen-card { padding: 24px 20px; } .zen-headline { font-size: clamp(28px, 8vw, 44px); } }
       `}</style>
 
@@ -397,6 +417,35 @@ export default function ZenControl() {
         <button className="zen-btn" onClick={handleSave} disabled={saving} style={{ width: "100%", marginTop: 8 }}>
           {saving ? "Saving…" : "Save Changes"}
         </button>
+
+        <div className="zen-card">
+          <h2 className="zen-card-title">System <em>Logs</em></h2>
+          <p className="zen-card-desc">Live application events · newest first · last 200 entries</p>
+          {logs.length === 0 ? (
+            <div className="zen-log-empty">No logs have been recorded yet.</div>
+          ) : (
+            <div className="zen-log-list">
+              {logs.map((log) => {
+                const timestamp = log.createdAt && "toDate" in log.createdAt && typeof log.createdAt.toDate === "function"
+                  ? log.createdAt.toDate().toLocaleString()
+                  : "Pending…";
+                return (
+                  <div className="zen-log" key={log.id}>
+                    <div className="zen-log-topline">
+                      <span className={`zen-log-level zen-log-${log.level}`}>{log.level}</span>
+                      <span className="zen-log-time">{timestamp}</span>
+                    </div>
+                    <div className="zen-log-message">{log.message}</div>
+                    {(log.path || log.userEmail) && (
+                      <div className="zen-log-meta">{log.path ?? ""}{log.userEmail ? ` · ${log.userEmail}` : ""}</div>
+                    )}
+                    {log.details && <pre className="zen-log-details">{log.details}</pre>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <div className="zen-card" style={{ marginTop: 28 }}>
           <h2 className="zen-card-title">Admin <em>Notice</em></h2>
