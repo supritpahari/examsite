@@ -36,14 +36,18 @@ export interface Question {
 const COLLECTION = "questions";
 
 function toStoreOptions(options: QuestionOption[]): Record<string, unknown>[] {
-  return options.map((o) => ({
-    id: o.id,
-    text: o.text,
-    correct: o.correct,
-    // Always include imageUrl so Firestore set({merge:true}) replaces it rather
-    // than keeping a stale value when an image is removed.
-    imageUrl: o.imageUrl ?? deleteField(),
-  }));
+  // `deleteField()` cannot be used inside an array. Since the whole options
+  // array is replaced when a question is saved, simply leaving imageUrl out
+  // removes an old option image without sending an invalid Firestore value.
+  return options.map((o) => {
+    const stored: Record<string, unknown> = {
+      id: o.id,
+      text: o.text,
+      correct: o.correct,
+    };
+    if (o.imageUrl) stored.imageUrl = o.imageUrl;
+    return stored;
+  });
 }
 
 function toOption(raw: unknown, index: number): QuestionOption {
