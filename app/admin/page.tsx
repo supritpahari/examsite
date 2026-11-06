@@ -33,6 +33,7 @@ import {
   type SiteInfo,
 } from "@/lib/settings";
 import NoticesPanel from "./notices/panel";
+import FormulaSheetsPage from "./formula-sheets/FormulaSheets";
 
 const NAV = [
   { key: "notices", label: "Notices" },
@@ -41,6 +42,7 @@ const NAV = [
   { key: "students", label: "Students" },
   { key: "information", label: "Information" },
   { key: "settings", label: "Settings" },
+  { key: "formula-sheets", label: "Formula Sheets" },
 ];
 
 async function copyText(value: string): Promise<boolean> {
@@ -98,6 +100,10 @@ function NavIcon({ name }: { name: string }) {
     case "settings":
       return (
         <svg {...common}><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1" /></svg>
+      );
+    case "formula-sheets":
+      return (
+        <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M16 13h3M16 17h3" /></svg>
       );
     case "control":
       return (
@@ -1332,7 +1338,9 @@ export default function AdminDashboard() {
 
         {active === "information" && <InformationPanel siteInfo={siteInfo} onSaved={setSiteInfo} />}
 
-        {active !== "notices" && active !== "questions" && active !== "settings" && active !== "exams" && active !== "students" && active !== "information" && (
+        {active === "formula-sheets" && <FormulaSheetsPage />}
+
+        {active !== "notices" && active !== "questions" && active !== "settings" && active !== "exams" && active !== "students" && active !== "information" && active !== "formula-sheets" && (
           <div className="ad-head">
             <h1 className="ad-title">{NAV.find((n) => n.key === active)?.label}</h1>
             <span className="ad-count">coming soon</span>

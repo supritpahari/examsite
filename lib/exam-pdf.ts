@@ -495,6 +495,16 @@ function drawShapedPiece(
   doc.setFontSize(sizePt);
   const md = ensureShapeHook(doc, piece.font.family, piece.font.style);
 
+  // If jsPDF doesn't expose the font cmap we need to install the glyph-override
+  // hook, the shaped PUA codepoints would be dropped by jsPDF's pre-filter and
+  // the text would vanish. Fall back to drawing the source unshaped with the
+  // correct font so Bengali (and any mixed script) stays visible — just without
+  // OpenType shaping — instead of disappearing entirely.
+  if (!md) {
+    doc.text(piece.source, xMm, yBaselineMm);
+    return xMm + doc.getTextWidth(piece.source);
+  }
+
   let pen = xMm;
   let batch: ShapedGlyph[] = [];
   let batchStartX = pen;
@@ -576,7 +586,18 @@ async function fetchImageData(
   url: string
 ): Promise<{ dataUrl: string; ratio: number } | null> {
   try {
-    const res = await fetch(url, { mode: "cors" });
+    // Admin-uploaded images live on ImgBB (cross-origin). Browsers refuse to
+    // read cross-origin image bytes unless the host emits CORS headers, so
+    // route cross-origin URLs through our same-origin image proxy, which fetches
+    // server-side and re-serves with Access-Control-Allow-Origin: *. Same-origin
+    // images are fetched directly.
+    const sameOrigin =
+      typeof location !== "undefined" && new URL(url).origin === location.origin;
+    const fetchUrl = sameOrigin
+      ? url
+      : `/api/image-proxy?url=${encodeURIComponent(url)}`;
+
+    const res = await fetch(fetchUrl, { mode: "cors" });
     if (!res.ok) return null;
     const blob = await res.blob();
     const dataUrl = await new Promise<string>((resolve, reject) => {
