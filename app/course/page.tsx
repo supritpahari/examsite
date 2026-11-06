@@ -5,8 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AdSlot } from "./AdSlot";
 import {
-  COURSE_GRADES,
-  getTopic,
+  fetchCourseGradesFromApi,
   recordPurchase,
   type CourseGrade,
   type CourseTopic,
@@ -20,6 +19,7 @@ export default function CoursePage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
+  const [grades, setGrades] = useState<CourseGrade[]>([]);
   const [step, setStep] = useState<Step>("grade");
   const [selectedGrade, setSelectedGrade] = useState<CourseGrade | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<CourseTopic | null>(null);
@@ -34,6 +34,20 @@ export default function CoursePage() {
       setChecking(false);
     });
     return unsub;
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchCourseGradesFromApi()
+      .then((g) => {
+        if (mounted) setGrades(g);
+      })
+      .catch(() => {
+        if (mounted) setGrades([]);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const checkPurchased = useCallback(async (topicId: string) => {
@@ -86,9 +100,9 @@ export default function CoursePage() {
       const uid = auth.currentUser ? auth.currentUser.uid : undefined;
 
       await recordPurchase({
-        courseId: selectedGrade!.id,
+        courseId: selectedGrade?.id ?? "",
         topicId: selectedTopic.id,
-        gradeId: selectedGrade!.id,
+        gradeId: selectedGrade?.id ?? "",
         amount: selectedTopic.price,
         status: "paid",
         userId: uid,
@@ -570,7 +584,7 @@ export default function CoursePage() {
               is a downloadable formula-sheet PDF.
             </p>
             <div className="course-grade-grid">
-              {COURSE_GRADES.map((g) => (
+              {grades.map((g) => (
                 <button
                   key={g.id}
                   className="course-grade-btn"
@@ -687,7 +701,8 @@ export default function CoursePage() {
             <div className="course-download">
               <a
                 href={
-                  getTopic(selectedGrade!.id, paidTopic)?.pdfUrl ?? "#"
+                  selectedGrade?.topics.find((t) => t.id === paidTopic)
+                    ?.pdfUrl ?? "#"
                 }
                 target="_blank"
                 rel="noopener noreferrer"

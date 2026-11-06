@@ -81,10 +81,8 @@ export async function OPTIONS() {
 
 export async function GET(req: NextRequest): Promise<Response> {
   try {
-    const uid = await verifyIdToken(bearerToken(req) ?? "");
-    if (!uid) {
-      return jsonError("unauthenticated", 401);
-    }
+    // GET is public — anyone can browse uploaded formula sheets.
+    // POST/PATCH/DELETE remain auth-protected.
 
     const db = getFirestoreDb();
     const snap = await getDocs(collection(db, COLLECTION));

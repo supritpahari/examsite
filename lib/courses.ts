@@ -37,9 +37,72 @@ export interface Purchase {
 
 const GRADES_COLLECTION = "course-grades";
 const PURCHASES_COLLECTION = "course-purchases";
+const FORMULA_SHEETS_API = "/api/formula-sheets";
 
 /* ------------------------------------------------------------------ *
- * Static catalog (single source of truth for grades/topics/prices)   *
+ * Slug helper                                                        *
+ * ------------------------------------------------------------------ */
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 60);
+}
+
+/* ------------------------------------------------------------------ *
+ * Fetch uploaded formula sheets from the API and organize by grade   *
+ * ------------------------------------------------------------------ */
+
+interface FormulaSheetItem {
+  id: string;
+  chapter: string;
+  grade: string;
+  price: number;
+  title: string;
+  pdfUrl: string;
+  pdfName: string;
+  fileSize: number;
+  uploadedBy: string;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+/** Fetch all uploaded formula sheets from the public API, organized by grade.
+ * Falls back to the static catalog if the API is unreachable. */
+export async function fetchCourseGradesFromApi(): Promise<CourseGrade[]> {
+  try {
+    const res = await fetch(FORMULA_SHEETS_API, { cache: "no-store" });
+    if (!res.ok) throw new Error(`API responded ${res.status}`);
+    const data = (await res.json()) as { items: FormulaSheetItem[] };
+    const items = data.items ?? [];
+
+    const byGrade = new Map<string, CourseGrade>();
+    for (const item of items) {
+      const gradeName = item.grade || "Uncategorized";
+      const gradeId = slugify(gradeName);
+      let grade = byGrade.get(gradeId);
+      if (!grade) {
+        grade = { id: gradeId, name: gradeName, topics: [] };
+        byGrade.set(gradeId, grade);
+      }
+      grade.topics.push({
+        id: slugify(item.chapter || item.title || item.id),
+        name: item.title || item.chapter || "Untitled",
+        price: item.price,
+        pdfUrl: item.pdfUrl,
+        pdfName: item.pdfName || `${item.chapter || item.title}.pdf`,
+      });
+    }
+    return Array.from(byGrade.values()).sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    return [];
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Static catalog (fallback when API is unreachable)                  *
  * ------------------------------------------------------------------ */
 
 export const COURSE_GRADES: CourseGrade[] = [
@@ -138,6 +201,17 @@ export function getGrade(id: string): CourseGrade | undefined {
 
 export function getTopic(gradeId: string, topicId: string): CourseTopic | undefined {
   const grade = getGrade(gradeId);
+  if (!grade) return undefined;
+  return grade.topics.find((t) => t.id === topicId);
+}
+
+/** Look up a topic in the dynamic (API-fetched) catalog. */
+export async function getTopicFromApi(
+  gradeId: string,
+  topicId: string
+): Promise<CourseTopic | undefined> {
+  const grades = await fetchCourseGradesFromApi();
+  const grade = grades.find((g) => g.id === gradeId);
   if (!grade) return undefined;
   return grade.topics.find((t) => t.id === topicId);
 }
