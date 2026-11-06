@@ -586,6 +586,9 @@ async function fetchImageData(
   url: string
 ): Promise<{ dataUrl: string; ratio: number } | null> {
   try {
+    // Skip blob: and data: URLs — they cannot be fetched through the proxy.
+    if (url.startsWith("blob:") || url.startsWith("data:")) return null;
+
     // Admin-uploaded images live on ImgBB (cross-origin). Browsers refuse to
     // read cross-origin image bytes unless the host emits CORS headers, so
     // route cross-origin URLs through our same-origin image proxy, which fetches
@@ -597,7 +600,22 @@ async function fetchImageData(
       ? url
       : `/api/image-proxy?url=${encodeURIComponent(url)}`;
 
-    const res = await fetch(fetchUrl, { mode: "cors" });
+    let res: Response;
+    try {
+      res = await fetch(fetchUrl, { mode: "cors" });
+    } catch {
+      // If the proxy is down or unreachable, fall back to a direct fetch
+      // (some image hosts do allow CORS).
+      if (!sameOrigin) {
+        try {
+          res = await fetch(url, { mode: "cors" });
+        } catch {
+          return null;
+        }
+      } else {
+        return null;
+      }
+    }
     if (!res.ok) return null;
     const blob = await res.blob();
     const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -613,7 +631,8 @@ async function fetchImageData(
       img.src = dataUrl;
     });
     return { dataUrl, ratio };
-  } catch {
+  } catch (err) {
+    console.error("[exam-pdf] fetchImageData failed:", url, err);
     return null;
   }
 }
