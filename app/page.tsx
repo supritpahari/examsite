@@ -723,6 +723,7 @@ export default function Home() {
         <div className="v2-foot-col">
           <h4>Portal</h4>
           <a href="#" onClick={(e) => { e.preventDefault(); openDialog(); }}>Take your test</a>
+          <a href="/course">Formula Sheets (PDF)</a>
           <a href="/admin">Admin</a>
           <a href="/privacy-policy">Privacy Policy</a>
           <a href="/terms-of-service">Terms of Service</a>
