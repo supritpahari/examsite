@@ -765,6 +765,13 @@ function ExamContent() {
                 >
                   &#9654;
                 </button>
+                <button
+                  type="button"
+                  className="mid cbt-submit-mobile"
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  Submit
+                </button>
               </div>
             </div>
           );
@@ -836,7 +843,7 @@ function ExamContent() {
                 No
               </button>
               <button type="button" className="cbt-btn cbt-save" onClick={submit}>
-                Yes
+                Submit
               </button>
             </div>
           </div>
@@ -1815,6 +1822,8 @@ const CSS = `
   }
   .cbt-mobile-nav button:disabled { opacity: 0.4; }
   .cbt-mobile-nav button.mid { background: #e8f0fe; border-color: #93b4f3; color: var(--cbt-navy); }
+  .cbt-mobile-nav button.cbt-submit-mobile { background: var(--cbt-navy); color: #fff; border-color: var(--cbt-navy); }
+  .cbt-mobile-nav button.cbt-submit-mobile:hover:not(:disabled) { background: var(--cbt-navy-2); }
 
   /* ---------- Overlays / modals ---------- */
   .cbt-overlay {
