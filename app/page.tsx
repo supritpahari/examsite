@@ -736,7 +736,7 @@ export default function Home() {
         </div>
         <div className="v2-foot-bottom">
           <span>{siteInfo.siteName} · © 2026 {siteInfo.contactName}</span>
-          <a href="https://obliqllc.xyz" target="_blank" rel="noopener noreferrer" className="v2-watermark">Developed by Team Obliq. · obliqllc.xyz</a>
+          <a href="https://teamobliq.in" target="_blank" rel="noopener noreferrer" className="v2-watermark">Developed by Team Obliq. · teamobliq.in</a>
           <span>Not affiliated with NTA · For practice only</span>
         </div>
       </footer>
