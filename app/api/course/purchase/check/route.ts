@@ -45,7 +45,7 @@ export async function OPTIONS() {
 }
 
 export async function GET(req: NextRequest): Promise<Response> {
-  const uid = verifyIdToken(bearerToken(req) ?? "");
+  const uid = await verifyIdToken(bearerToken(req) ?? "");
   if (!uid) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: cors() });
   }
