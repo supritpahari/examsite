@@ -27,7 +27,7 @@ export function WithMaintenanceCheck({ children }: { children: React.ReactNode }
         style={{
           minHeight: "100vh",
           background: "var(--color-paper)",
-          color: "var(--color-muted)",
+          color: "var(--color-ink-2)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

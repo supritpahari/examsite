@@ -2,8 +2,6 @@ import { initializeApp, type FirebaseApp } from "firebase/app";
 import { getAnalytics, type Analytics } from "firebase/analytics";
 import {
   getAuth,
-  initializeAuth,
-  browserLocalPersistence,
   onAuthStateChanged,
   type Auth,
   type User,
@@ -51,25 +49,16 @@ export function getStorageInstance(): FirebaseStorage {
 }
 
 /**
- * Auth, explicitly on browser-local persistence (survives restarts).
- * On iOS/Safari the platform still evicts web storage after ~7 days of no
- * visits (ITP) — no client-side fix can change that; see project notes.
+ * NOTE: keep getAuth() — do NOT switch to initializeAuth with an explicit
+ * persistence. IndexedDB-blocked browsers make initializeAuth throw, and the
+ * fallback getAuth() returns a half-initialized instance whose onAuthState
+ * never fires (admin gate stuck on "Loading…" forever). getAuth() defaults
+ * to browser-local persistence on web and degrades gracefully.
  */
 export function getAuthInstance(): Auth {
   const firebaseApp = getFirebaseApp();
   if (!auth) {
-    if (typeof window !== "undefined") {
-      try {
-        auth = initializeAuth(firebaseApp, {
-          persistence: browserLocalPersistence,
-        });
-      } catch {
-        // Already initialized in this session (Fast Refresh) — reuse it.
-        auth = getAuth(firebaseApp);
-      }
-    } else {
-      auth = getAuth(firebaseApp);
-    }
+    auth = getAuth(firebaseApp);
   }
   return auth;
 }
