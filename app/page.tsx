@@ -260,6 +260,7 @@ export default function Home() {
           </a>
           <nav className="lp-nav-center" aria-label="Site">
             <a className="lp-nav-link" href="/course">Formula Sheets</a>
+            <a className="lp-nav-link" href="/account">Account</a>
             <a className="lp-nav-link" href="#interface">The Interface</a>
             <a className="lp-nav-link" href="/privacy-policy">Privacy</a>
           </nav>
@@ -418,6 +419,7 @@ export default function Home() {
           <span>© 2026 {siteInfo.contactName} · Not affiliated with NTA</span>
           <nav className="lp-foot-links" aria-label="Footer">
             <a href="/course">Formula Sheets</a>
+            <a href="/account">Account</a>
             <a href="/admin">Admin</a>
             <a href="/privacy-policy">Privacy</a>
             <a href="/terms-of-service">Terms</a>

@@ -27,7 +27,13 @@ export default function AdminLogin() {
       /* analytics is optional — never let a failure block auth */
     }
     const unsub = onAuthState((user) => {
-      if (user) router.replace("/admin");
+      // Mirror AdminGate: only staff (password sign-in) belong in /admin.
+      // A student phone-OTP session must NOT bounce the page back to /admin,
+      // or the two guards redirect forever.
+      const isStaff = Boolean(
+        user && user.providerData?.some((p) => p.providerId === "password")
+      );
+      if (isStaff) router.replace("/admin");
     });
     return unsub;
   }, [router]);

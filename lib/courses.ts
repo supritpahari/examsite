@@ -6,6 +6,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
+  where,
   serverTimestamp,
   type DocumentSnapshot,
 } from "firebase/firestore";
@@ -232,6 +234,19 @@ function fromDocPurchase(snap: DocumentSnapshot): Purchase {
     paidAt: d.paidAt,
     userId: typeof d.userId === "string" ? d.userId : undefined,
   };
+}
+
+/** Fetch only this user's paid purchases (scoped query — never the whole collection). */
+export async function fetchPurchasesByUid(uid: string): Promise<Purchase[]> {
+  const db = getFirestoreDb();
+  const snap = await getDocs(
+    query(
+      collection(db, PURCHASES_COLLECTION),
+      where("userId", "==", uid),
+      where("status", "==", "paid")
+    )
+  );
+  return snap.docs.map(fromDocPurchase);
 }
 
 export async function fetchPurchases(): Promise<Purchase[]> {

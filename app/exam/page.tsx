@@ -13,8 +13,9 @@ import {
   type Exam,
 } from "@/lib/exams";
 import { fetchQuestions, type Question, type QuestionType } from "@/lib/questions";
-import { onAuthState } from "@/lib/firebase/client";
+import { onAuthState, getAuthInstance } from "@/lib/firebase/client";
 import PhoneAuth from "../_components/PhoneAuth";
+import { fetchProfile } from "@/lib/profile";
 import { saveAttempt, hasAttemptBySession, hasAttemptByName } from "@/lib/attempts";
 import { getDeviceId } from "@/lib/session";
 import { renderMathHtml, extractImageUrls } from "@/lib/render-math";
@@ -137,6 +138,18 @@ function ExamContent() {
     });
     return unsub;
   }, []);
+
+  // Prefill the lobby name from the account profile (only if untouched).
+  useEffect(() => {
+    if (auth !== "in") return;
+    const uid = getAuthInstance().currentUser?.uid;
+    if (!uid) return;
+    fetchProfile(uid)
+      .then((p) => {
+        if (p?.name) setName((prev) => (prev.trim() ? prev : p.name));
+      })
+      .catch(() => {});
+  }, [auth]);
 
   const [exam, setExam] = useState<Exam | null>(null);
   const [ordered, setOrdered] = useState<Question[]>([]);
@@ -1068,6 +1081,12 @@ function Lobby({
   return (
     <div className="v2-center">
       <div className="v2-lobby-card">
+        <div className="v2-account-row">
+          <span className="v2-account-chip">Phone verified</span>
+          <Link href="/account" className="v2-account-link">
+            My account →
+          </Link>
+        </div>
         <div className="v2-cta-num">Before you begin</div>
         <h1 className="v2-lobby-title">{exam.title}</h1>
         <p className="v2-lobby-desc">
@@ -1237,6 +1256,11 @@ const CSS = `
     font-size: 0.72rem;
     color: var(--color-muted);
   }
+
+  .v2-account-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.85rem; }
+  .v2-account-chip { font-family: var(--font-mono); font-size: 0.56rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-mint-deep); border: 1px solid var(--color-mint); border-radius: var(--radius-pill); padding: 0.22rem 0.6rem; }
+  .v2-account-link { font-family: var(--font-mono); font-size: 0.64rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-accent-2-deep); text-decoration: none; }
+  .v2-account-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
   .v2-lobby-card {
     width: 100%;

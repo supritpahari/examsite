@@ -1,4 +1,5 @@
 import { getFirestoreDb } from "./firebase/client";
+import { getAuthInstance } from "./firebase/client";
 import {
   addDoc,
   collection,
@@ -27,6 +28,7 @@ export interface Attempt {
   examCode: string;
   studentName: string;
   sessionId: string;
+  uid?: string;
   score: number;
   total: number;
   correct: number;
@@ -48,6 +50,7 @@ function fromDoc(d: QueryDocumentSnapshot): Attempt {
     examCode: data.examCode ?? "",
     studentName: data.studentName ?? "Anonymous",
     sessionId: data.sessionId ?? "",
+    uid: typeof data.uid === "string" ? data.uid : undefined,
     score: data.score ?? 0,
     total: data.total ?? 0,
     correct: data.correct ?? 0,
@@ -64,11 +67,13 @@ export async function saveAttempt(
   attempt: Omit<Attempt, "id" | "createdAt">
 ): Promise<Attempt> {
   const db = getFirestoreDb();
+  const uid = getAuthInstance().currentUser?.uid ?? null;
   const data: Record<string, unknown> = {
     examId: attempt.examId,
     examCode: attempt.examCode,
     studentName: attempt.studentName,
     sessionId: attempt.sessionId,
+    uid,
     score: attempt.score,
     total: attempt.total,
     correct: attempt.correct,
@@ -81,6 +86,15 @@ export async function saveAttempt(
   };
   const ref = await addDoc(collection(db, COLLECTION), data);
   return { ...attempt, id: ref.id };
+}
+
+/** Fetch this student's attempts (best-effort — rules may deny; caller handles it). */
+export async function fetchAttemptsByUid(uid: string): Promise<Attempt[]> {
+  const db = getFirestoreDb();
+  const snap = await getDocs(query(collection(db, COLLECTION), where("uid", "==", uid)));
+  const items = snap.docs.map(fromDoc);
+  items.sort((a, b) => b.submittedAt - a.submittedAt);
+  return items;
 }
 
 export async function fetchAttemptsByExam(examId: string): Promise<Attempt[]> {
