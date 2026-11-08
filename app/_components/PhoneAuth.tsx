@@ -181,7 +181,7 @@ export default function PhoneAuth() {
         .lp-phone-row { display: flex; gap: 0.5rem; align-items: stretch; }
         .lp-cc { display: flex; align-items: center; padding: 0 0.9rem; background: var(--color-paper-2); border: 1.5px solid transparent; border-radius: var(--radius-input); font-family: var(--font-mono); font-size: 0.95rem; color: var(--color-ink); flex: 0 0 auto; }
         .lp-phone-row input, .lp-otp {
-          flex: 1; min-width: 0; background: var(--color-paper-2); border: 1.5px solid transparent; border-radius: var(--radius-input);
+          flex: 1; width: 100%; min-width: 0; box-sizing: border-box; background: var(--color-paper-2); border: 1.5px solid transparent; border-radius: var(--radius-input);
           padding: 0.75rem 0.9rem; font-family: var(--font-mono); font-size: 1rem; color: var(--color-ink); outline: none;
           letter-spacing: 0.06em; transition: border-color var(--dur-micro), background var(--dur-micro);
         }
@@ -193,7 +193,7 @@ export default function PhoneAuth() {
         .lp-link { font-family: var(--font-body); font-size: 0.8rem; font-weight: 600; color: var(--color-accent-2-deep); background: transparent; border: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 0.25rem 0; }
         .lp-link:disabled { color: var(--color-muted); text-decoration: none; cursor: default; }
         .lp-note { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-muted); margin-top: 1.1rem; text-align: center; line-height: 1.7; }
-        .lp-code-hint { font-size: 0.82rem; color: var(--color-muted); margin: -0.6rem 0 0.75rem; }
+        .lp-code-hint { font-size: 0.84rem; color: var(--color-muted); margin: 0.1rem 0 0.9rem; line-height: 1.5; }
         .lp-code-hint strong { color: var(--color-ink); font-weight: 600; }
       `}</style>
   );
