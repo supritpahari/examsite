@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -78,11 +79,12 @@ export function AdSlot({ slotId, style }: AdSlotProps) {
       ></ins>
       <p
         style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 10,
-          color: "#8a8275",
+          fontFamily: "var(--font-mono)",
+          fontSize: "0.62rem",
+          fontWeight: 500,
+          color: "var(--color-muted)",
           textTransform: "uppercase",
-          letterSpacing: "0.1em",
+          letterSpacing: "0.14em",
           marginTop: 6,
         }}
       >

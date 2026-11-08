@@ -36,7 +36,7 @@ function persistLocal(s: ZenSettings) {
 export async function loadSettings(): Promise<ZenSettings> {
   try {
     const db: Firestore = getFirestoreDb();
-    const snap = await getDoc(doc(db, COLLECTION, DOC));
+    const snap = await withTimeout(getDoc(doc(db, COLLECTION, DOC)), 3000);
     if (snap.exists()) {
       const data = snap.data() as Partial<ZenSettings>;
       const merged: ZenSettings = { apiKey: data.apiKey ?? "", model: data.model ?? "" };
@@ -109,10 +109,18 @@ const DEFAULT_SITE_CONTROL_FLAGS: SiteControlFlags = {
 const CONTROL_DOC = "control";
 const CONTROL_LS = "examsite-control-flags";
 
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+  ]);
+}
+
 export async function loadControlFlags(): Promise<SiteControlFlags> {
   try {
     const db: Firestore = getFirestoreDb();
-    const snap = await getDoc(doc(db, COLLECTION, CONTROL_DOC));
+    // Never let a hanging/offline Firestore pin every page on the loading gate.
+    const snap = await withTimeout(getDoc(doc(db, COLLECTION, CONTROL_DOC)), 3000);
     if (snap.exists()) {
       const data = snap.data() as Partial<SiteControlFlags>;
       const merged: SiteControlFlags = { ...DEFAULT_SITE_CONTROL_FLAGS, ...data };
@@ -164,7 +172,7 @@ export const DEFAULT_SITE_INFO: SiteInfo = {
 export async function loadSiteInfo(): Promise<SiteInfo> {
   try {
     const db: Firestore = getFirestoreDb();
-    const snap = await getDoc(doc(db, COLLECTION, SITE_DOC));
+    const snap = await withTimeout(getDoc(doc(db, COLLECTION, SITE_DOC)), 3000);
     if (snap.exists()) {
       return { ...DEFAULT_SITE_INFO, ...(snap.data() as Partial<SiteInfo>) };
     }

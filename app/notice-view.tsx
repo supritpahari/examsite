@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import type { NoticeBlock, NoticeBlockStyle } from "@/lib/notices";
@@ -31,7 +32,7 @@ function renderRich(text: string) {
           href={m[2]}
           target="_blank"
           rel="noopener noreferrer"
-          style={{ color: "oklch(0.52 0.20 25)", textDecoration: "underline" }}
+          style={{ color: "var(--color-accent-2-deep)", textDecoration: "underline", textUnderlineOffset: 3 }}
         >
           {m[1]}
         </a>
@@ -39,7 +40,7 @@ function renderRich(text: string) {
     }
     if (seg.startsWith("$") && seg.endsWith("$") && seg.length >= 2) {
       return (
-        <span key={i} className="n-prev-math" style={{ fontFamily: "Georgia, serif" }}>
+        <span key={i} className="n-prev-math" style={{ fontFamily: "var(--font-body)" }}>
           <MathPreview text={seg.slice(1, -1)} compact />
         </span>
       );
@@ -58,7 +59,7 @@ function textStyle(s?: NoticeBlockStyle): React.CSSProperties {
   if (s?.bgColor) {
     out.backgroundColor = s.bgColor;
     out.padding = "8px 12px";
-    out.borderRadius = 2;
+    out.borderRadius = 8;
   }
   const sizeMap: Record<string, string> = {
     sm: "14px",
@@ -70,7 +71,7 @@ function textStyle(s?: NoticeBlockStyle): React.CSSProperties {
   };
   if (s?.fontSize) out.fontSize = sizeMap[s.fontSize] ?? "16px";
   out.lineHeight = 1.55;
-  out.fontFamily = "'Inter', 'Georgia', serif";
+  out.fontFamily = "var(--font-body)";
   out.margin = 0;
   out.wordBreak = "break-word";
   return out;
@@ -99,13 +100,15 @@ export function NoticeBlocksView({
     return (
       <div
         style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 12,
-          color: "#8a8275",
+          fontFamily: "var(--font-mono)",
+          fontSize: "0.68rem",
+          fontWeight: 500,
+          color: "var(--color-muted)",
           padding: 16,
-          border: "1px dashed #d9d1bf",
+          border: "1.5px dashed var(--color-rule-2)",
+          borderRadius: "var(--radius-input)",
           textAlign: "center",
-          letterSpacing: "0.08em",
+          letterSpacing: "0.12em",
           textTransform: "uppercase",
         }}
       >
@@ -151,7 +154,9 @@ function BlockView({
       const sz = s?.fontSize ?? (block.type === "heading" ? "2xl" : "base");
       const baseStyle = textStyle({ ...s, fontSize: sz });
       if (block.type === "heading") {
-        baseStyle.fontFamily = "'Instrument Serif', serif";
+        baseStyle.fontFamily = "var(--font-display)";
+        baseStyle.fontWeight = 600;
+        baseStyle.letterSpacing = "-0.025em";
         baseStyle.lineHeight = 1.2;
       }
       return (
@@ -174,7 +179,7 @@ function BlockView({
             style={{
               maxHeight: s?.imgMaxH ?? 240,
               maxWidth: "100%",
-              border: "1px solid #d9d1bf",
+              border: "1px solid var(--color-rule)", borderRadius: "var(--radius-sm)",
               objectFit: "contain",
               display: "block",
             }}
@@ -186,18 +191,20 @@ function BlockView({
       const act = block.action;
       const alignMap = { left: "flex-start", center: "center", right: "flex-end" } as const;
       const justifyContent = alignMap[s?.btnAlign ?? "left"];
-      const btnBg = s?.btnBg || "oklch(0.52 0.20 25)";
+      const btnBg = s?.btnBg || "var(--color-accent)";
+      const hasCustomBg = Boolean(s?.btnBg);
       const style: React.CSSProperties = {
         background: btnBg,
-        color: s?.btnColor || "#fff",
-        border: `1px solid ${btnBg}`,
-        padding: "10px 20px",
-        fontFamily: "'Inter', sans-serif",
+        color: s?.btnColor || (hasCustomBg ? "var(--color-on-panel)" : "var(--color-on-accent)"),
+        border: 0,
+        borderRadius: "var(--radius-pill)",
+        padding: "0.7rem 1.3rem",
+        fontFamily: "var(--font-display)",
         fontWeight: 600,
-        fontSize: 13,
-        letterSpacing: "0.04em",
-        textTransform: "uppercase",
+        fontSize: "0.88rem",
+        letterSpacing: "-0.01em",
         cursor: "pointer",
+        boxShadow: hasCustomBg ? "0 3px 0 0 rgba(0,0,0,0.18)" : "0 3px 0 0 var(--color-accent-deep)",
       };
       const content = block.btnLabel || "Button";
       return (
@@ -228,7 +235,7 @@ function BlockView({
         <hr
           style={{
             border: "none",
-            borderTop: "1px solid #d9d1bf",
+            borderTop: "1px solid var(--color-rule-2)",
             margin: "18px 0",
           }}
         />

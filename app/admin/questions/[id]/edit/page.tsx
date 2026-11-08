@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -33,30 +34,18 @@ export default function EditQuestionPage() {
   if (status !== "ready" || !question) {
     return (
       <div
-        style={
-          {
-            "--paper": "#f4f0e8",
-            "--ink": "#14110d",
-            "--dim": "#8a8275",
-            "--rule": "#d9d1bf",
-          } as React.CSSProperties
-        }
+        style={{
+          minHeight: "100vh", display: "grid", placeItems: "center",
+          background: "var(--color-paper)", color: "var(--color-muted)",
+          fontFamily: "var(--font-mono)", fontSize: "0.72rem", fontWeight: 500,
+          textTransform: "uppercase", letterSpacing: "0.18em",
+        }}
       >
-        <style>{`
-          .nq-load {
-            min-height: 100vh; display: grid; place-items: center; background: var(--paper);
-            color: var(--dim); font-family: 'JetBrains Mono', monospace; font-size: 12px;
-            text-transform: uppercase; letter-spacing: 0.16em;
-          }
-          .nq-load a { color: var(--ink); }
-        `}</style>
-        <div className="nq-load">
           {status === "missing" ? (
-            <span>Question not found — <a href="/admin">back to questions</a></span>
+            <span>Question not found — <a href="/admin" style={{ color: "var(--color-accent-2-deep)" }}>back to questions</a></span>
           ) : (
             <span>Loading question…</span>
           )}
-        </div>
       </div>
     );
   }

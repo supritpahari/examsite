@@ -3,9 +3,10 @@ import { NextResponse } from "next/server";
 /**
  * Same-origin image proxy for the question-paper PDF export.
  *
- * Admin-uploaded question/option images are hosted on ImgBB (cross-origin
- * `i.ibb.co`). Browsers refuse to read cross-origin image bytes unless the host
- * emits `Access-Control-Allow-Origin`, which we cannot control. This route
+ * Admin-uploaded question/option images live in Firebase Storage (token-bearing
+ * download URLs, cross-origin). Browsers refuse to read cross-origin image bytes
+ * unless the host emits `Access-Control-Allow-Origin`, which Storage does not
+ * guarantee. This route
  * fetches the image server-side (no browser CORS restriction) and re-serves it
  * with open CORS headers so `fetch` + `doc.addImage` works client-side.
  *

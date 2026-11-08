@@ -159,7 +159,7 @@ export function Stepper({
   return (
     <div className="nq-field">
       {label && <label>{label}</label>}
-      <div className="nq-stepper">
+      <div className="ad-stepper">
         <input
           type="text"
           inputMode="numeric"
@@ -169,7 +169,7 @@ export function Stepper({
             onChange(cleaned);
           }}
         />
-        <div className="nq-stepper-btns">
+        <div className="ad-stepper-btns">
           <button type="button" aria-label={`Increase ${label}`} onClick={() => set(num + step)}>▲</button>
           <button type="button" aria-label={`Decrease ${label}`} onClick={() => set(num - step)}>▼</button>
         </div>

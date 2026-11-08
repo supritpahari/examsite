@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,6 +9,7 @@ import {
   type AuthError,
 } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import FormulaMarks from "../../_components/FormulaMarks";
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
@@ -59,79 +61,63 @@ export default function AdminLogin() {
   return (
     <div
       className="v2-admin-root"
-      style={
-        {
-          "--paper": "#f4f0e8",
-          "--paper-2": "#ebe6da",
-          "--ink": "#14110d",
-          "--ink-2": "#3a352c",
-          "--dim": "#8a8275",
-          "--rule": "#d9d1bf",
-          "--accent": "oklch(0.52 0.20 25)",
-          "--accent-2": "oklch(0.42 0.22 25)",
-        } as React.CSSProperties
-      }
     >
+      <FormulaMarks />
       <style>{`
         .v2-admin-root {
+          isolation: isolate;
           min-height: 100vh;
-          background: var(--paper);
-          color: var(--ink);
-          font-family: 'Inter', sans-serif;
+          background: var(--color-paper);
+          color: var(--color-ink);
+          font-family: var(--font-body);
           position: relative;
           display: grid;
           grid-template-columns: 1.1fr 0.9fr;
         }
 
-        .v2-admin-root::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          background-image: radial-gradient(rgba(20,17,13,0.04) 1px, transparent 1px);
-          background-size: 4px 4px;
-          opacity: 0.6;
-        }
 
-        .v2-admin-root .serif { font-family: 'Instrument Serif', 'Times New Roman', serif; font-weight: 400; }
-        .v2-admin-root .mono { font-family: 'JetBrains Mono', monospace; }
+        .v2-admin-left .hl { --hl: oklch(86% 0.18 95 / 0.4); }
 
         .v2-admin-left {
           position: relative;
-          padding: 64px 56px;
+          isolation: isolate;
+          padding: 56px;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          border-right: 1px solid var(--rule);
+          gap: 3rem;
+          background: var(--color-panel);
+          color: var(--color-on-panel);
         }
 
         .v2-admin-brand {
-          font-family: 'Instrument Serif', serif;
-          font-size: 22px;
-          letter-spacing: -0.01em;
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: 1.15rem;
+          letter-spacing: -0.03em;
           display: flex;
-          align-items: baseline;
-          gap: 6px;
+          align-items: center;
+          gap: 0.6rem;
+          color: var(--color-on-panel);
         }
-        .v2-admin-brand em { font-style: italic; color: var(--accent); }
 
         .v2-admin-headline {
-          font-family: 'Instrument Serif', serif;
-          font-size: clamp(48px, 5.5vw, 92px);
-          line-height: 0.98;
-          letter-spacing: -0.025em;
-          font-weight: 400;
-          max-width: 14ch;
-          color: var(--ink);
+          font-family: var(--font-display);
+          font-size: clamp(2.6rem, 5.2vw + 1rem, 4.6rem);
+          line-height: 1.0;
+          letter-spacing: -0.035em;
+          font-weight: 600;
+          max-width: 13ch;
+          color: var(--color-on-panel);
         }
-        .v2-admin-headline em { font-style: italic; color: var(--accent); }
 
         .v2-admin-foot {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
+          font-family: var(--font-mono);
+          font-size: 0.64rem;
+          font-weight: 500;
           text-transform: uppercase;
-          letter-spacing: 0.12em;
-          color: var(--dim);
+          letter-spacing: 0.16em;
+          color: var(--color-panel-dim);
         }
 
         .v2-admin-right {
@@ -145,57 +131,37 @@ export default function AdminLogin() {
         .v2-admin-card {
           width: 100%;
           max-width: 420px;
-          background: var(--paper);
-          border: 1px solid var(--ink);
+          background: var(--color-paper);
+          border: 1px solid var(--color-rule-2);
+          border-radius: var(--radius-card);
+          box-shadow: var(--shadow-lift);
           position: relative;
-          padding: 40px 36px 32px;
+          padding: 2.25rem 2rem 1.75rem;
           text-align: left;
         }
-        .v2-admin-card::before, .v2-admin-card::after {
-          content: "";
-          position: absolute;
-          width: 12px;
-          height: 12px;
-          background: var(--ink);
-        }
-        .v2-admin-card::before { top: -1px; left: -1px; }
-        .v2-admin-card::after { bottom: -1px; right: -1px; }
 
-        .v2-admin-num {
-          position: absolute;
-          top: -14px;
-          left: 24px;
-          background: var(--paper);
-          padding: 0 10px;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
-          text-transform: uppercase;
-          letter-spacing: 0.16em;
-          color: var(--ink);
-        }
 
         .v2-admin-title {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-display);
           font-size: 26px;
           line-height: 1.2;
           margin: 0 0 6px;
-          color: var(--ink);
+          color: var(--color-ink);
         }
-        .v2-admin-title em { font-style: italic; color: var(--accent); }
 
         .v2-admin-desc {
           font-size: 13px;
-          color: var(--dim);
+          color: var(--color-muted);
           margin: 0 0 26px;
-          font-family: 'JetBrains Mono', monospace;
+          font-family: var(--font-mono);
           letter-spacing: 0.02em;
         }
 
         .v2-admin-error {
-          font-family: 'JetBrains Mono', monospace;
+          font-family: var(--font-mono);
           font-size: 12px;
-          color: #fff;
-          background: #b3261e;
+          color: var(--color-on-accent);
+          background: var(--color-danger);
           padding: 10px 14px;
           margin-bottom: 20px;
           letter-spacing: 0.02em;
@@ -204,26 +170,26 @@ export default function AdminLogin() {
         .v2-field { margin-bottom: 18px; }
         .v2-field label {
           display: block;
-          font-family: 'JetBrains Mono', monospace;
+          font-family: var(--font-mono);
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.18em;
-          color: var(--ink-2);
+          color: var(--color-ink-2);
           margin-bottom: 8px;
         }
         .v2-field input {
           width: 100%;
           background: transparent;
-          border: 1px solid var(--ink);
-          border-radius: 0;
+          border: 1px solid var(--color-ink);
+          border-radius: var(--radius-input);
           padding: 14px 16px;
-          font-family: 'JetBrains Mono', monospace;
+          font-family: var(--font-mono);
           font-size: 15px;
-          color: var(--ink);
+          color: var(--color-ink);
           outline: none;
         }
-        .v2-field input::placeholder { color: #b8ad96; }
-        .v2-field input:focus { background: #fff; }
+        .v2-field input::placeholder { color: var(--color-faint); }
+        .v2-field input:focus { background: var(--color-paper); }
 
         .v2-password-wrap { position: relative; }
         .v2-password-wrap input { padding-right: 46px; }
@@ -236,13 +202,13 @@ export default function AdminLogin() {
           border: 0;
           padding: 8px;
           cursor: pointer;
-          color: var(--ink-2);
+          color: var(--color-ink-2);
           display: flex;
           align-items: center;
           justify-content: center;
           transition: color 0.15s ease, transform 0.2s ease;
         }
-        .v2-eye:hover { color: var(--accent); }
+        .v2-eye:hover { color: var(--color-accent); }
         .v2-eye:active { transform: translateY(-50%) scale(0.88); }
         .v2-eye svg { width: 18px; height: 18px; display: block; }
 
@@ -263,43 +229,45 @@ export default function AdminLogin() {
           align-items: center;
           justify-content: space-between;
           margin: 4px 0 22px;
-          font-family: 'JetBrains Mono', monospace;
+          font-family: var(--font-mono);
           font-size: 11px;
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          color: var(--dim);
+          color: var(--color-muted);
         }
-        .v2-admin-row a { color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor; }
+        .v2-admin-row a { color: var(--color-accent); text-decoration: none; border-bottom: 1px solid currentColor; }
 
         .v2-admin-btn {
           width: 100%;
-          background: var(--accent);
-          color: #fff;
-          border: 1px solid var(--accent);
-          padding: 15px;
-          font-family: 'Inter', sans-serif;
+          background: var(--color-accent);
+          color: var(--color-on-accent);
+          border: 0;
+          border-radius: var(--radius-pill);
+          padding: 0.9rem;
+          font-family: var(--font-display);
           font-weight: 600;
-          font-size: 14px;
-          letter-spacing: 0.04em;
+          font-size: 0.95rem;
+          letter-spacing: -0.01em;
           cursor: pointer;
-          text-transform: uppercase;
-          transition: background 0.15s ease;
+          box-shadow: 0 4px 0 0 var(--color-accent-deep), 0 6px 12px -3px var(--color-accent-cast);
+          transition: transform var(--dur-micro) var(--ease-press), box-shadow var(--dur-micro) var(--ease-press);
         }
-        .v2-admin-btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
+        .v2-admin-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 0 0 var(--color-accent-deep), 0 12px 20px -4px var(--color-accent-cast); }
+        .v2-admin-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 0 var(--color-accent-deep); }
         .v2-admin-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
         .v2-admin-back {
           display: block;
           text-align: center;
           margin-top: 18px;
-          font-family: 'JetBrains Mono', monospace;
+          font-family: var(--font-mono);
           font-size: 11px;
           text-transform: uppercase;
           letter-spacing: 0.1em;
-          color: var(--dim);
+          color: var(--color-muted);
           text-decoration: none;
         }
-        .v2-admin-back:hover { color: var(--accent); }
+        .v2-admin-back:hover { color: var(--color-accent); }
 
         @media (max-width: 1100px) {
           .v2-admin-headline { font-size: clamp(40px, 8vw, 64px); }
@@ -309,7 +277,7 @@ export default function AdminLogin() {
           .v2-admin-root { grid-template-columns: 1fr; }
           .v2-admin-left {
             border-right: 0;
-            border-bottom: 1px solid var(--rule);
+            border-bottom: 1px solid var(--color-rule);
             padding: 48px 28px;
             min-height: auto;
           }
@@ -328,9 +296,10 @@ export default function AdminLogin() {
       `}</style>
 
       <div className="v2-admin-left">
-        <div className="v2-admin-brand">World of <em>Physics</em></div>
+        <FormulaMarks variant="dark" />
+        <div className="v2-admin-brand"><span style={{ width: 12, height: 12, borderRadius: 999, background: "var(--color-accent)", boxShadow: "0 0 0 3px oklch(86% 0.18 95 / 0.22)" }} aria-hidden="true" />World of <span style={{ color: "var(--color-accent)" }}>Physics</span></div>
         <h1 className="v2-admin-headline">
-          Your Students, <em>Our Management</em>
+          Your Students, <span className="hl">Our Management</span>
         </h1>
         <div className="v2-admin-foot">
           Admin Console · Authorized faculty only
@@ -339,7 +308,7 @@ export default function AdminLogin() {
 
       <div className="v2-admin-right">
         <div className="v2-admin-card">
-          <h3 className="v2-admin-title">Faculty <em>login</em></h3>
+          <h3 className="v2-admin-title">Faculty <span className="hl">login</span></h3>
           <p className="v2-admin-desc">Sign in with your Firebase account.</p>
           {error && (
             <div className="v2-admin-error" role="alert">{error}</div>

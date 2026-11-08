@@ -7,6 +7,7 @@ import {
   type User,
 } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCmpBbUxyPr0S5Nx6NnPbJI3vmRRuAiz74",
@@ -22,6 +23,7 @@ let app: FirebaseApp | null = null;
 let analytics: Analytics | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
+let storage: FirebaseStorage | null = null;
 
 export function getFirestoreDb(): Firestore {
   const firebaseApp = getFirebaseApp();
@@ -36,6 +38,14 @@ export function getFirebaseApp(): FirebaseApp {
     app = initializeApp(firebaseConfig);
   }
   return app;
+}
+
+export function getStorageInstance(): FirebaseStorage {
+  const firebaseApp = getFirebaseApp();
+  if (!storage) {
+    storage = getStorage(firebaseApp);
+  }
+  return storage;
 }
 
 export function getAuthInstance(): Auth {

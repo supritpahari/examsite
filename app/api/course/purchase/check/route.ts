@@ -60,7 +60,8 @@ export async function GET(req: NextRequest): Promise<Response> {
   const q = query(
     collection(db, PURCHASES_COLLECTION),
     where("topicId", "==", topicId),
-    where("status", "==", "paid")
+    where("status", "==", "paid"),
+    where("userId", "==", uid)
   );
   const snap = await getDocs(q);
   return NextResponse.json({ purchased: snap.docs.length > 0 }, { headers: cors() });

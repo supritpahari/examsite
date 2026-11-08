@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
@@ -41,21 +42,20 @@ export function ControlProvider({ children }: { children: ReactNode }) {
       <div
         style={{
           minHeight: "100vh",
-          background: "#f4f0e8",
-          color: "#14110d",
+          background: "var(--color-paper)",
+          color: "var(--color-muted)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontFamily: "'Inter', sans-serif",
+          fontFamily: "var(--font-mono)",
+          fontWeight: 500,
         }}
       >
         <div
           style={{
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 13,
+            fontSize: 12,
             textTransform: "uppercase",
-            letterSpacing: "0.1em",
-            color: "#8a8275",
+            letterSpacing: "0.18em",
           }}
         >
           Loading…

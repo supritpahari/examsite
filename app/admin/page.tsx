@@ -1,7 +1,11 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import { useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+import ConfirmDialog from "../_components/ConfirmDialog";
+import { copyText } from "@/lib/clipboard";
 import { onAuthState } from "@/lib/firebase/client";
 import { signOut } from "firebase/auth";
 import {
@@ -18,6 +22,7 @@ import {
   updateExam,
   setExamQuestions,
   fetchAllExamQuestionLinks,
+  todayIsoLocal, formatTakenOn, toIsoLocal, parseTakenOn,
   type Exam as AdminExam,
 } from "@/lib/exams";
 import {
@@ -40,19 +45,10 @@ const NAV = [
   { key: "questions", label: "Questions" },
   { key: "exams", label: "Exams" },
   { key: "students", label: "Students" },
+  { key: "formula-sheets", label: "Formula Sheets" },
   { key: "information", label: "Information" },
   { key: "settings", label: "Settings" },
-  { key: "formula-sheets", label: "Formula Sheets" },
 ];
-
-async function copyText(value: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function NavIcon({ name }: { name: string }) {
   const common = {
@@ -119,12 +115,18 @@ function NavIcon({ name }: { name: string }) {
 }
 
 export default function AdminDashboard() {
-  const [collapsed, setCollapsed] = useState(false);
   const [active, setActive] = useState("notices");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [examModalOpen, setExamModalOpen] = useState(false);
   const [editingExam, setEditingExam] = useState<AdminExam | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    description: string;
+    confirmLabel?: string;
+    danger?: boolean;
+    action: () => void;
+  } | null>(null);
   const [exams, setExams] = useState<AdminExam[]>([]);
   const [examQuestionMap, setExamQuestionMap] = useState<Record<string, string[]>>({});
   const [attemptsMap, setAttemptsMap] = useState<Record<string, ExamAttemptSummary>>({});
@@ -142,6 +144,9 @@ export default function AdminDashboard() {
     error: string;
   } | null>(null);
   const [qSearch, setQSearch] = useState("");
+  const [qVisibleCount, setQVisibleCount] = useState(20);
+  const [qLoadingMore, setQLoadingMore] = useState(false);
+  const qSentinelRef = useRef<HTMLDivElement>(null);
   const [qChapter, setQChapter] = useState("all");
   const [qSort, setQSort] = useState("newest");
 
@@ -183,8 +188,17 @@ export default function AdminDashboard() {
     return unsub;
   }, [router]);
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this question? It will be removed from every exam that uses it. This cannot be undone.")) return;
+  const handleDelete = (id: string) => {
+    setPendingConfirm({
+      title: "Delete this question?",
+      description: "It will be removed from every exam that uses it. This cannot be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+      action: () => doDeleteQuestion(id),
+    });
+  };
+
+  const doDeleteQuestion = async (id: string) => {
     setQuestions((prev) => prev.filter((q) => q.id !== id));
     setExamQuestionMap((prev) => {
       const next: Record<string, string[]> = {};
@@ -202,8 +216,17 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteExam = async (id: string) => {
-    if (!window.confirm("Delete this exam? All attempts recorded against it will also be deleted. This cannot be undone.")) return;
+  const handleDeleteExam = (id: string) => {
+    setPendingConfirm({
+      title: "Delete this exam?",
+      description: "All attempts recorded against it will also be deleted. This cannot be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+      action: () => doDeleteExam(id),
+    });
+  };
+
+  const doDeleteExam = async (id: string) => {
     setExams((prev) => prev.filter((e) => e.id !== id));
     setExamQuestionMap((prev) => {
       const next = { ...prev };
@@ -234,16 +257,31 @@ export default function AdminDashboard() {
     setAddQuestionsInitial(examQuestionMap[exam.id] ?? []);
   };
 
-  const copyExamLink = async (exam: AdminExam) => {
+  const copyExamLink = async (exam: AdminExam): Promise<boolean> => {
     const link = `${window.location.origin}/exam?id=${encodeURIComponent(exam.code)}`;
-    await copyText(link);
+    return copyText(link);
   };
 
-  const copyExamCode = async (exam: AdminExam) => {
-    await copyText(exam.code);
+  const copyExamCode = async (exam: AdminExam): Promise<boolean> => {
+    return copyText(exam.code);
   };
 
-  const toggleStopExam = async (exam: AdminExam) => {
+  const toggleStopExam = (exam: AdminExam) => {
+    const stopping = exam.status !== "stopped";
+    if (stopping) {
+      setPendingConfirm({
+        title: "Stop this exam?",
+        description: "Students can no longer join this exam — the link stops working until you start it again.",
+        confirmLabel: "Stop exam",
+        danger: true,
+        action: () => doToggleStopExam(exam),
+      });
+      return;
+    }
+    void doToggleStopExam(exam);
+  };
+
+  const doToggleStopExam = async (exam: AdminExam) => {
     const stopping = exam.status !== "stopped";
     const nextStatus: AdminExam["status"] = stopping ? "stopped" : "scheduled";
     setExams((prev) =>
@@ -256,7 +294,16 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleSignOut = async () => {
+  const handleSignOut = () => {
+    setPendingConfirm({
+      title: "Sign out of the admin console?",
+      description: "You'll need to sign back in to manage exams, notices and formula sheets.",
+      confirmLabel: "Sign out",
+      action: doSignOut,
+    });
+  };
+
+  const doSignOut = async () => {
     const { getAuthInstance } = await import("@/lib/firebase/client");
     await signOut(getAuthInstance());
     router.replace("/admin/login");
@@ -333,6 +380,11 @@ export default function AdminDashboard() {
     return Array.from(chapters).sort((a, b) => a.localeCompare(b));
   }, [questions]);
 
+  useEffect(() => {
+    setQVisibleCount(20);
+    setQLoadingMore(false);
+  }, [questions, qSearch, qChapter, qSort]);
+
   const visibleQuestions = useMemo(() => {
     const term = qSearch.trim().toLowerCase();
     let list = questions;
@@ -369,799 +421,44 @@ export default function AdminDashboard() {
     }
     return sorted;
   }, [questions, qSearch, qChapter, qSort]);
+  const pagedQuestions = visibleQuestions.slice(0, qVisibleCount);
+  const qHasMore = qVisibleCount < visibleQuestions.length;
+
+  useEffect(() => {
+    const el = qSentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+        if (!qHasMore || qLoadingMore) return;
+        setQLoadingMore(true);
+        window.setTimeout(() => {
+          setQVisibleCount((c) => c + 20);
+          setQLoadingMore(false);
+        }, 420);
+      },
+      { rootMargin: "400px 0px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [qHasMore, qLoadingMore, pagedQuestions.length]);
+
 
   if (checking || !authed) {
     return (
       <div className="ad-guard">
-        <style>{`
-          .ad-guard {
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
-            background: #f4f0e8;
-            color: #8a8275;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.16em;
-          }
-        `}</style>
         Checking session…
     </div>
   );
 }
 
   return (
-    <div
-      className="ad-root"
-      style={
-        {
-          "--paper": "#f4f0e8",
-          "--paper-2": "#ebe6da",
-          "--ink": "#14110d",
-          "--ink-2": "#3a352c",
-          "--dim": "#8a8275",
-          "--rule": "#d9d1bf",
-          "--accent": "oklch(0.52 0.20 25)",
-          "--accent-2": "oklch(0.42 0.22 25)",
-        } as React.CSSProperties
-      }
-    >
-      <style>{`
-        .ad-root {
-          height: 100vh;
-          overflow: hidden;
-          background: var(--paper);
-          color: var(--ink);
-          font-family: 'Inter', sans-serif;
-          position: relative;
-          display: grid;
-          grid-template-columns: ${collapsed ? "64px" : "240px"} 1fr;
-          transition: grid-template-columns 0.22s ease;
-        }
-        .ad-root::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          background-image: radial-gradient(rgba(20,17,13,0.04) 1px, transparent 1px);
-          background-size: 4px 4px;
-          opacity: 0.6;
-        }
-        .ad-side {
-          position: relative;
-          border-right: 1px solid var(--rule);
-          padding: 20px 14px;
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-          overflow-y: auto;
-        }
-        .ad-brand {
-          font-family: 'Instrument Serif', serif;
-          font-size: 20px;
-          display: flex;
-          align-items: baseline;
-          gap: 6px;
-          padding: 4px 8px 18px;
-          white-space: nowrap;
-          overflow: hidden;
-        }
-        .ad-brand em { font-style: italic; color: var(--accent); }
-        .ad-toggle {
-          position: absolute;
-          top: 22px;
-          right: -12px;
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: var(--ink);
-          color: var(--paper);
-          border: 0;
-          cursor: pointer;
-          font-size: 12px;
-          display: grid;
-          place-items: center;
-          z-index: 5;
-        }
-        .ad-nav-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 11px 12px;
-          border-radius: 0;
-          border: 1px solid transparent;
-          background: transparent;
-          color: var(--ink-2);
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 12px;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          cursor: pointer;
-          white-space: nowrap;
-          overflow: hidden;
-          text-align: left;
-          width: 100%;
-        }
-        .ad-nav-item .dot {
-          width: 8px; height: 8px; border-radius: 50%;
-          background: var(--dim); flex: 0 0 auto;
-        }
-        .ad-nav-item:hover { color: var(--ink); background: var(--paper-2); }
-        .ad-nav-item.active { color: var(--accent); border-color: var(--rule); background: var(--paper-2); }
-        .ad-nav-item.active .dot { background: var(--accent); }
-        .ad-signout {
-          margin-top: auto;
-          display: flex; align-items: center; gap: 10px;
-          padding: 11px 12px; background: transparent; border: 1px solid var(--rule);
-          color: var(--dim); font-family: 'JetBrains Mono', monospace; font-size: 11px;
-          text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; white-space: nowrap;
-          overflow: hidden; width: 100%; text-align: left;
-        }
-        .ad-signout:hover { color: var(--accent); border-color: var(--accent); }
-        .ad-nav-icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; color: inherit; }
-        .ad-brand-text { white-space: nowrap; }
-        .ad-root.collapsed .ad-brand-text { display: none; }
-        .ad-root.collapsed .ad-nav-label {
-          opacity: 0;
-          max-width: 0;
-          overflow: hidden;
-          transition: opacity 0.18s ease;
-        }
-        .ad-root.collapsed .ad-nav-item,
-        .ad-root.collapsed .ad-signout { justify-content: center; padding-left: 0; padding-right: 0; }
-        .ad-root:not(.collapsed) .ad-nav-label { opacity: 1; transition: opacity 0.18s ease; }
+    <div className="ad-root">
 
-        .ad-main {
-          position: relative;
-          padding: 32px 40px;
-          overflow-y: auto;
-        }
-        .ad-head {
-          display: flex;
-          align-items: baseline;
-          justify-content: space-between;
-          margin-bottom: 28px;
-        }
-        .ad-title { font-family: 'Instrument Serif', serif; font-size: 40px; line-height: 1; letter-spacing: -0.02em; color: var(--ink); }
-        .ad-title em { font-style: italic; color: var(--accent); }
-        .ad-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim); }
-        .ad-empty { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--dim); padding: 28px 0; border: 1px dashed var(--rule); text-align: center; letter-spacing: 0.04em; }
-
-        .ad-q {
-          border: 1px solid var(--rule);
-          background: var(--paper);
-          padding: 20px 22px;
-          margin-bottom: 16px;
-        }
-        .ad-q-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; }
-        .ad-q-top-right { display: flex; align-items: center; gap: 12px; }
-        .ad-q-type {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.14em; color: var(--accent); border: 1px solid var(--rule); padding: 3px 8px;
-        }
-        .ad-q-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); }
-        .ad-q-chapter {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.1em; color: var(--ink-2); border: 1px solid var(--rule);
-          background: var(--paper-2); padding: 3px 8px;
-        }
-        .ad-q-toolbar {
-          display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap;
-        }
-        .ad-q-search { flex: 1 1 260px; min-width: 0; }
-        .ad-q-search input {
-          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink); outline: none;
-        }
-        .ad-q-search input:focus { background: #fff; }
-        .ad-q-select select {
-          background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink);
-          outline: none; cursor: pointer; max-width: 190px;
-        }
-        .ad-q-select select:focus { background: #fff; }
-        .ad-q-clear {
-          background: transparent; border: 1px solid var(--rule); color: var(--dim);
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.08em; padding: 10px 12px; cursor: pointer;
-        }
-        .ad-q-clear:hover { color: var(--accent); border-color: var(--accent); }
-        .ad-q-del {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.1em; color: var(--dim); background: transparent;
-          border: 1px solid var(--rule); padding: 4px 10px; cursor: pointer; transition: all 0.15s ease;
-        }
-        .ad-q-del:hover { color: #fff; background: #b3261e; border-color: #b3261e; }
-        .ad-q-edit {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.1em; color: var(--dim); background: transparent;
-          border: 1px solid var(--rule); padding: 4px 10px; cursor: pointer; transition: all 0.15s ease;
-        }
-        .ad-q-edit:hover { color: var(--accent); border-color: var(--accent); }
-        .ad-q-prompt { font-family: 'Instrument Serif', serif; font-size: 19px; line-height: 1.4; color: var(--ink); margin-bottom: 14px; }
-        .ad-q-img { max-height: 160px; border: 1px solid var(--rule); margin-bottom: 14px; }
-        .ad-opts { display: grid; gap: 8px; }
-        .ad-opt { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-2); }
-        .ad-opt .k { width: 24px; height: 24px; border: 1px solid var(--rule); display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; flex: 0 0 auto; }
-        .ad-opt.correct { color: var(--accent); }
-        .ad-opt.correct .k { background: var(--accent); color: #fff; border-color: var(--accent); }
-        .ad-opt-text { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .ad-opt-view { max-height: 48px; max-width: 120px; object-fit: contain; border: 1px solid var(--rule); }
-
-        .ad-q-gen {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.1em; color: var(--dim); background: transparent;
-          border: 1px solid var(--rule); padding: 4px 10px; cursor: pointer; transition: all 0.15s ease;
-          display: inline-flex; align-items: center; gap: 6px;
-        }
-        .ad-q-gen:hover { color: var(--accent); border-color: var(--accent); }
-        .ad-q-gen:disabled { opacity: 0.55; cursor: not-allowed; }
-        .ad-q-gen .spark { color: var(--accent); }
-
-        .ad-explain-body {
-          font-family: 'Inter', sans-serif; font-size: 15px; line-height: 1.7; color: var(--ink-2);
-          white-space: pre-wrap; word-break: break-word; max-height: 52vh; overflow-y: auto;
-        }
-        .ad-explain-status {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.06em;
-          margin-top: 14px;
-        }
-        .ad-explain-status.loading { color: var(--dim); }
-        .ad-explain-status.err { color: #b3261e; }
-
-        .ad-explain-body h2 {
-          font-family: 'Instrument Serif', serif; font-size: 22px; line-height: 1.2;
-          margin: 22px 0 8px; color: var(--ink);
-        }
-        .ad-explain-body h2:first-child { margin-top: 0; }
-        .ad-explain-body h3 {
-          font-family: 'JetBrains Mono', monospace; font-size: 12px; text-transform: uppercase;
-          letter-spacing: 0.12em; color: var(--accent); margin: 18px 0 6px;
-        }
-        .ad-explain-body p { margin: 0 0 12px; }
-        .ad-explain-body ul { margin: 0 0 12px; padding-left: 20px; }
-        .ad-explain-body li { margin-bottom: 6px; }
-        .ad-explain-block {
-          background: #fffdf8; border: 1px solid var(--rule); box-shadow: 4px 4px 0 var(--rule);
-          padding: 12px 16px; margin: 0 0 12px; overflow-x: auto;
-          font-family: 'Georgia', 'Times New Roman', serif; font-size: 17px;
-        }
-        .ad-explain-body strong { color: var(--ink); font-weight: 700; }
-        .ad-explain-body em { font-style: italic; }
-        .ad-explain-body code, .ad-explain-inline {
-          font-family: 'JetBrains Mono', monospace; font-size: 0.9em;
-          background: var(--paper-2); padding: 1px 5px; border: 1px solid var(--rule);
-        }
-        .ad-explain-body .ad-prev-math { font-family: 'Georgia', serif; }
-
-        .ad-share {
-          display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px;
-          border-top: 1px dashed var(--rule); padding-top: 16px;
-        }
-        .ad-share-label {
-          width: 100%; font-family: 'JetBrains Mono', monospace; font-size: 10px;
-          text-transform: uppercase; letter-spacing: 0.16em; color: var(--dim); margin-bottom: 2px;
-        }
-        .ad-share-btn {
-          display: inline-flex; align-items: center; gap: 7px;
-          background: transparent; border: 1px solid var(--rule); color: var(--ink-2);
-          padding: 9px 13px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
-          letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: all 0.15s ease;
-        }
-        .ad-share-btn:hover { color: var(--accent); border-color: var(--accent); }
-        .ad-share-btn.done { color: var(--accent); border-color: var(--accent); }
-        .ad-share-ico { font-size: 13px; line-height: 1; }
-
-        .ad-fab {
-          position: fixed;
-          bottom: 32px;
-          right: 32px;
-          background: var(--accent);
-          color: #fff;
-          border: 0;
-          border-radius: 999px;
-          height: 56px;
-          padding: 0 24px 0 18px;
-          font-size: 14px;
-          font-family: 'Inter', sans-serif;
-          font-weight: 600;
-          letter-spacing: 0.02em;
-          cursor: pointer;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          z-index: 50;
-          transition: transform 0.15s ease, background 0.15s ease;
-        }
-        .ad-fab .plus { font-size: 24px; line-height: 1; }
-        .ad-fab:hover { transform: scale(1.04); background: var(--accent-2); }
-
-        .ad-overlay {
-          position: fixed; inset: 0; background: rgba(20,17,13,0.55);
-          display: flex; align-items: flex-start; justify-content: center;
-          padding: 40px 24px; z-index: 100; overflow-y: auto;
-        }
-        .ad-modal {
-          width: 100%; max-width: 620px; background: var(--paper);
-          border: 1px solid var(--ink); position: relative; padding: 36px 32px 28px;
-        }
-        .ad-modal::before, .ad-modal::after {
-          content: ""; position: absolute; width: 12px; height: 12px; background: var(--ink);
-        }
-        .ad-modal::before { top: -1px; left: -1px; }
-        .ad-modal::after { bottom: -1px; right: -1px; }
-        .ad-close {
-          position: absolute; top: 14px; right: 16px; background: transparent;
-          border: 1px solid var(--ink); width: 30px; height: 30px; font-size: 16px;
-          cursor: pointer; color: var(--ink); line-height: 1;
-        }
-        .ad-close:hover { background: var(--ink); color: var(--paper); }
-        .ad-form-title { font-family: 'Instrument Serif', serif; font-size: 26px; margin: 0 0 18px; color: var(--ink); }
-        .ad-form-title em { font-style: italic; color: var(--accent); }
-
-        .ad-row { display: flex; gap: 14px; margin-bottom: 16px; }
-        .ad-row > * { flex: 1; }
-        .ad-field label {
-          display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px;
-          text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-2); margin-bottom: 8px;
-        }
-        .ad-field input, .ad-field textarea, .ad-field select {
-          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink); outline: none;
-        }
-        .ad-field textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
-        .ad-field input:focus, .ad-field textarea:focus, .ad-field select:focus { background: #fff; }
-
-        .ad-select { position: relative; }
-        .ad-select select {
-          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink); outline: none;
-        }
-        .ad-select select:focus { background: #fff; }
-        .ad-select-trigger {
-          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink);
-          outline: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-        }
-        .ad-select-trigger:focus { background: #fff; }
-        .ad-caret { transition: transform 0.18s ease; font-size: 12px; color: var(--dim); }
-        .ad-caret.open { transform: rotate(180deg); }
-        .ad-select-menu {
-          position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
-          list-style: none; margin: 0; padding: 4px; background: var(--paper);
-          border: 1px solid var(--ink); box-shadow: 6px 6px 0 rgba(20,17,13,0.12);
-        }
-        .ad-select-opt {
-          padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
-          color: var(--ink-2); cursor: pointer; border: 1px solid transparent;
-        }
-        .ad-select-opt:hover { background: var(--paper-2); color: var(--ink); }
-        .ad-select-opt.sel { color: var(--accent); border-color: var(--rule); background: var(--paper-2); }
-
-        .ad-stepper { display: flex; align-items: stretch; }
-        .ad-stepper input {
-          flex: 1; width: 100%; background: transparent; border: 1px solid var(--ink); border-right: 0;
-          border-radius: 0; padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px;
-          color: var(--ink); outline: none;
-        }
-        .ad-stepper input:focus { background: #fff; }
-        .ad-stepper-btns { display: flex; flex-direction: column; border: 1px solid var(--ink); border-left: 0; }
-        .ad-stepper-btns button {
-          flex: 1; width: 34px; background: transparent; border: 0; border-bottom: 1px solid var(--ink);
-          cursor: pointer; color: var(--ink-2); font-size: 9px; line-height: 1; display: grid; place-items: center;
-        }
-        .ad-stepper-btns button:last-child { border-bottom: 0; }
-        .ad-stepper-btns button:hover { background: var(--accent); color: #fff; }
-
-        .ad-hint { font-size: 11px; color: var(--dim); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
-
-        .ad-q-label {
-          display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px;
-          text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-2); margin-bottom: 8px;
-        }
-        .ad-toolbar {
-          display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 0;
-          border: 1px solid var(--rule); border-bottom: 0; padding: 8px;
-          background: var(--paper-2);
-        }
-        .ad-tool {
-          min-width: 34px; height: 32px; padding: 0 8px; background: var(--paper);
-          border: 1px solid var(--rule); cursor: pointer; font-family: 'JetBrains Mono', monospace;
-          font-size: 13px; color: var(--ink-2); line-height: 1;
-        }
-        .ad-tool:hover { color: var(--accent); border-color: var(--accent); }
-        .ad-tool:active { transform: translateY(1px); }
-        .ad-field > .ad-toolbar + textarea,
-        .ad-field > .ad-toolbar + input { border-top: 0; }
-        .ad-field > .ad-toolbar + textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
-        .MathField-input { width: 100%; }
-        .ad-opt-edit .ad-field { flex: 1; margin-bottom: 0; }
-        .ad-preview {
-          margin-top: 10px; border: 1px solid var(--ink); background: #fffdf8;
-          box-shadow: 4px 4px 0 var(--rule);
-        }
-        .ad-preview-label {
-          display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px;
-          text-transform: uppercase; letter-spacing: 0.18em; color: var(--dim);
-          padding: 6px 12px 0;
-        }
-        .ad-preview-body {
-          padding: 8px 12px 12px; font-family: 'Georgia', 'Times New Roman', serif;
-          font-size: 18px; color: var(--ink); line-height: 1.7; word-break: break-word;
-          min-height: 24px;
-        }
-        .ad-prev-math { padding: 0 1px; }
-        .ad-frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 2px; font-size: 0.78em; }
-        .ad-frac-num { border-bottom: 1px solid var(--ink); padding: 0 5px; }
-        .ad-frac-den { padding: 0 5px; }
-        .ad-vec { position: relative; display: inline-block; }
-        .ad-vec-arrow { position: absolute; top: -0.55em; left: 50%; transform: translateX(-50%); font-size: 0.8em; line-height: 1; letter-spacing: -0.05em; pointer-events: none; }
-        .ad-vec-body { padding: 0 1px; }
-        .ad-hat { position: relative; display: inline-block; }
-        .ad-hat-cap { position: absolute; top: -0.55em; left: 50%; transform: translateX(-55%) scaleX(1.1); font-size: 0.85em; line-height: 1; pointer-events: none; }
-        .ad-hat-body { padding: 0 1px; }
-        .ad-sqrt { border-top: 1px solid var(--ink); padding: 0 2px; }
-        .ad-sqrt-body { border-top: 1px solid var(--ink); padding: 0 2px; }
-        .ad-preview-inline {
-          font-family: 'Georgia', 'Times New Roman', serif; font-size: 17px;
-          color: var(--ink); line-height: 1.6; word-break: break-word;
-        }
-
-        .ad-opt-edit { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; transition: background 0.15s ease; }
-        .ad-opt-edit.correct-row { background: rgba(220, 60, 40, 0.08); border: 1px solid var(--accent); padding: 6px; }
-        .ad-opt-edit input[type="text"] { flex: 1; }
-        .ad-opt-key {
-          flex: 0 0 auto; width: 32px; height: 32px; border: 1px solid var(--rule);
-          background: var(--paper); color: var(--ink-2); cursor: pointer;
-          font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600;
-          display: grid; place-items: center; transition: all 0.15s ease;
-        }
-        .ad-opt-key:hover { border-color: var(--accent); color: var(--accent); }
-        .ad-opt-key.correct { background: var(--accent); color: #fff; border-color: var(--accent); }
-        .ad-opt-del {
-          background: transparent; border: 1px solid var(--rule); color: var(--dim);
-          width: 28px; height: 28px; cursor: pointer; flex: 0 0 auto; align-self: center;
-        }
-        .ad-opt-del:hover { color: var(--accent); border-color: var(--accent); }
-        .ad-add-opt {
-          background: transparent; border: 1px dashed var(--rule); color: var(--ink-2);
-          padding: 8px 12px; cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 11px;
-          text-transform: uppercase; letter-spacing: 0.1em;
-        }
-        .ad-add-opt:hover { color: var(--accent); border-color: var(--accent); }
-        .ad-file {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-2);
-          border: 1px solid var(--rule); padding: 10px 12px; display: block; cursor: pointer;
-        }
-        .ad-file input { display: none; }
-        .ad-submit {
-          width: 100%; background: var(--accent); color: #fff; border: 1px solid var(--accent);
-          padding: 14px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14px;
-          letter-spacing: 0.04em; cursor: pointer; text-transform: uppercase; margin-top: 6px;
-        }
-        .ad-submit:hover { background: var(--accent-2); border-color: var(--accent-2); }
-        .ad-img-preview { max-height: 90px; margin-top: 10px; border: 1px solid var(--rule); }
-
-        .ad-opt-body { flex: 1; min-width: 0; }
-        .ad-opt-img-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
-        .ad-opt-img-preview { max-height: 48px; max-width: 120px; border: 1px solid var(--rule); object-fit: contain; }
-        .ad-file.ad-file-sm { display: inline-block; padding: 6px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
-        .ad-file-sm-remove {
-          background: transparent; border: 1px solid var(--rule); color: var(--ink-2);
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.08em; padding: 6px 10px; cursor: pointer;
-        }
-        .ad-file-sm-remove:hover { color: var(--accent); border-color: var(--accent); }
-
-        .ad-modal-sub {
-          font-size: 13px; line-height: 1.5; color: var(--ink-2);
-          margin: -8px 0 22px; max-width: 46ch;
-        }
-
-        .ad-seg {
-          display: flex; border: 1px solid var(--ink); border-radius: 0; overflow: hidden;
-        }
-        .ad-seg-btn {
-          flex: 1; background: transparent; border: 0; border-right: 1px solid var(--rule);
-          padding: 11px 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
-          text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); cursor: pointer;
-          transition: all 0.15s ease;
-        }
-        .ad-seg-btn:last-child { border-right: 0; }
-        .ad-seg-btn:hover { background: var(--paper-2); color: var(--ink); }
-        .ad-seg-btn.active { background: var(--accent); color: #fff; }
-
-        .ad-exam-preview {
-          border: 1px solid var(--rule); background: var(--paper-2); padding: 16px 18px;
-          margin-bottom: 22px; display: flex; flex-direction: column; gap: 6px;
-        }
-        .ad-chapter-list { display: flex; flex-direction: column; gap: 8px; }
-        .ad-chapter-item {
-          display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
-          background: var(--paper); border: 1px solid var(--rule); padding: 13px 16px;
-          cursor: pointer; transition: all 0.15s ease; font-family: 'Inter', sans-serif;
-          color: var(--ink-2); font-size: 14px;
-        }
-        .ad-chapter-item:hover { border-color: var(--accent); color: var(--ink); }
-        .ad-chapter-item.on { border-color: var(--accent); background: rgba(220,60,40,0.06); color: var(--ink); }
-        .ad-chapter-check {
-          flex: 0 0 auto; width: 22px; height: 22px; border: 1px solid var(--rule);
-          display: grid; place-items: center; font-size: 13px; color: #fff;
-        }
-        .ad-chapter-item.on .ad-chapter-check { background: var(--accent); border-color: var(--accent); }
-        .ad-chapter-name { flex: 1; }
-        .ad-chapter-count {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
-          border: 1px solid var(--rule); padding: 2px 8px;
-        }
-        .ad-choose-scroll { max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-        .ad-choose-prompt { font-family: 'Instrument Serif', serif; font-size: 16px; color: var(--ink); }
-        .ad-code-block { border: 1px solid var(--rule); background: var(--paper-2); padding: 16px 18px; margin-bottom: 14px; }
-        .ad-code-label {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.16em; color: var(--dim); margin-bottom: 10px;
-        }
-        .ad-code-row { display: flex; align-items: center; gap: 12px; }
-        .ad-code-value {
-          flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink);
-          background: var(--paper); border: 1px solid var(--rule); padding: 10px 12px;
-          overflow-x: auto; white-space: nowrap;
-        }
-        .ad-code-link { font-size: 12px; color: var(--accent); }
-        .ad-exam-preview-title {
-          font-family: 'Instrument Serif', serif; font-size: 19px; color: var(--ink); line-height: 1.2;
-        }
-        .ad-qmarks-box { border: 1px solid var(--rule); background: var(--paper); margin-bottom: 22px; }
-        .ad-qmarks-head {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.16em; color: var(--ink-2); border-bottom: 1px solid var(--rule);
-          background: var(--paper-2); padding: 10px 14px;
-        }
-        .ad-qmarks-list { max-height: 32vh; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
-        .ad-qmarks-row { display: flex; align-items: center; gap: 12px; }
-        .ad-qmarks-num {
-          flex: 0 0 auto; width: 24px; height: 24px; border: 1px solid var(--rule);
-          display: grid; place-items: center; font-family: 'JetBrains Mono', monospace;
-          font-size: 11px; color: var(--ink-2); background: var(--paper-2);
-        }
-        .ad-qmarks-prompt { flex: 1; min-width: 0; }
-        .ad-qmarks-input { flex: 0 0 auto; display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
-        .ad-qmarks-input span { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.12em; }
-        .ad-qmarks-input input {
-          width: 66px; background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 6px 9px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink);
-          outline: none; text-align: center;
-        }
-        .ad-qmarks-input input:focus { background: #fff; }
-        .ad-exam-preview-meta {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); letter-spacing: 0.04em;
-        }
-
-        .ad-modal-foot { display: flex; gap: 12px; }
-        .ad-modal-foot .ad-set-btn.ghost { flex: 0 0 auto; padding: 0 22px; }
-        .ad-submit-inline { flex: 1; margin-top: 0; }
-        .ad-submit:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        .badge {
-          align-self: flex-start; font-family: 'JetBrains Mono', monospace; font-size: 9px;
-          text-transform: uppercase; letter-spacing: 0.14em; padding: 3px 9px; border-radius: 0;
-        }
-        .bg-green-100 { background: #d9ead3; color: #274e13; }
-        .text-green-800 { color: #274e13; }
-        .bg-blue-100 { background: #cfe2f3; color: #0b3d66; }
-        .text-blue-800 { color: #0b3d66; }
-        .bg-gray-100 { background: var(--paper); color: var(--dim); }
-        .text-gray-700 { color: var(--ink-2); }
-
-        .ad-set-card {
-          border: 1px solid var(--rule);
-          background: var(--paper);
-          padding: 24px 26px;
-          max-width: 620px;
-          margin-bottom: 20px;
-        }
-        .ad-set-card-title {
-          font-family: 'Instrument Serif', serif; font-size: 22px; margin: 0 0 6px; color: var(--ink);
-        }
-        .ad-set-card-title em { font-style: italic; color: var(--accent); }
-        .ad-set-desc { font-size: 13px; line-height: 1.6; color: var(--ink-2); margin: 0 0 20px; }
-        .ad-set-desc code {
-          font-family: 'JetBrains Mono', monospace; font-size: 12px;
-          background: var(--paper-2); padding: 1px 5px; border: 1px solid var(--rule);
-        }
-        .ad-set-row { display: flex; gap: 10px; align-items: stretch; }
-        .ad-set-row input {
-          flex: 1; background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px;
-          color: var(--ink); outline: none;
-        }
-        .ad-set-row input:focus { background: #fff; }
-        .ad-set-btn {
-          background: var(--accent); color: #fff; border: 1px solid var(--accent);
-          padding: 0 22px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14px;
-          letter-spacing: 0.04em; cursor: pointer; text-transform: uppercase; white-space: nowrap;
-        }
-        .ad-set-btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
-        .ad-set-btn:disabled { opacity: 0.55; cursor: not-allowed; }
-        .ad-set-btn.ghost { background: transparent; color: var(--ink-2); border-color: var(--rule); }
-        .ad-set-btn.ghost:hover { color: var(--accent); border-color: var(--accent); }
-        .ad-set-status { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.06em; margin-top: 12px; }
-        .ad-set-status.ok { color: var(--accent); }
-        .ad-set-status.err { color: #b3261e; }
-        .ad-set-status.dim { color: var(--dim); }
-
-        .ad-set-model { max-width: 620px; margin-top: 8px; }
-        .ad-set-hint { font-size: 11px; color: var(--dim); margin-top: 8px; font-family: 'JetBrains Mono', monospace; }
-
-        .ad-model {
-          position: relative;
-        }
-        .ad-model-trigger {
-          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 13px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink);
-          outline: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-        }
-        .ad-model-trigger:focus { background: #fff; }
-        .ad-model-trigger.placeholder { color: var(--dim); }
-        .ad-model-caret { transition: transform 0.18s ease; font-size: 12px; color: var(--dim); }
-        .ad-model-caret.open { transform: rotate(180deg); }
-        .ad-model-menu {
-          position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
-          background: var(--paper); border: 1px solid var(--ink);
-          box-shadow: 6px 6px 0 rgba(20,17,13,0.12); display: flex; flex-direction: column;
-          max-height: 320px;
-        }
-        .ad-model-search {
-          border: 0; border-bottom: 1px solid var(--rule); background: var(--paper-2);
-          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink); outline: none;
-        }
-        .ad-model-list { list-style: none; margin: 0; padding: 4px; overflow-y: auto; }
-        .ad-model-opt {
-          padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
-          color: var(--ink-2); cursor: pointer; border: 1px solid transparent;
-          display: flex; align-items: center; justify-content: space-between; gap: 10px;
-        }
-        .ad-model-opt:hover { background: var(--paper-2); color: var(--ink); }
-        .ad-model-opt.sel { color: var(--accent); border-color: var(--rule); background: var(--paper-2); }
-        .ad-model-opt .tag { font-size: 10px; color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; }
-        .ad-model-empty { padding: 14px 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--dim); }
-
-        .ad-exam-list { display: flex; flex-direction: column; gap: 12px; }
-        .ad-exam-row {
-          border: 1px solid var(--rule); background: var(--paper);
-          padding: 18px 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-        }
-        .ad-exam-main { flex: 1; min-width: 240px; }
-        .ad-exam-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
-        .ad-exam-title { font-family: 'Instrument Serif', serif; font-size: 21px; color: var(--ink); }
-        .ad-exam-meta {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
-          letter-spacing: 0.04em; display: flex; gap: 8px; flex-wrap: wrap;
-        }
-        .ad-exam-side { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-        .ad-exam-caret {
-          background: transparent; border: 0; cursor: pointer; font-size: 14px; color: var(--accent);
-          padding: 0 4px 0 0; line-height: 1;
-        }
-        .ad-exam-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-        .ad-chip {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.04em;
-          background: var(--paper-2); border: 1px solid var(--rule); color: var(--ink-2);
-          padding: 4px 9px; text-transform: uppercase;
-        }
-        .ad-chip strong { color: var(--ink); }
-        .ad-chip.mono { text-transform: none; letter-spacing: 0.08em; color: var(--accent); }
-        .ad-exam-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-        .ad-exam-btn {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase;
-          letter-spacing: 0.08em; background: var(--accent); color: #fff; border: 1px solid var(--accent);
-          padding: 8px 14px; cursor: pointer; transition: all 0.15s ease;
-        }
-        .ad-exam-btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
-        .ad-exam-btn.ghost { background: transparent; color: var(--ink-2); border-color: var(--rule); }
-        .ad-exam-btn.ghost:hover { color: var(--accent); border-color: var(--accent); }
-        .ad-exam-btn.danger { background: transparent; color: #b42318; border-color: #f0c2bb; }
-        .ad-exam-btn.danger:hover { background: #b42318; color: #fff; border-color: #b42318; }
-        .ad-exam-row.open { border-color: var(--accent); }
-        .ad-exam-detail { flex-basis: 100%; border-top: 1px dashed var(--rule); margin-top: 16px; padding-top: 16px; }
-        .ad-empty.small { font-size: 13px; padding: 8px 0; }
-        .ad-q-detail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-        .ad-q-detail { border: 1px solid var(--rule); background: var(--paper-2); padding: 12px 14px; }
-        .ad-q-detail-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
-        .ad-q-detail-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--accent); }
-        .ad-q-detail-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); }
-        .ad-q-detail-prompt { font-size: 14px; color: var(--ink); margin-bottom: 8px; }
-        .ad-q-detail-opts { display: flex; flex-wrap: wrap; gap: 6px 14px; }
-        .ad-q-detail-opt {
-          font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-2);
-          display: inline-flex; align-items: center; gap: 6px;
-        }
-        .ad-q-detail-opt i {
-          font-style: normal; width: 18px; height: 18px; display: grid; place-items: center;
-          border: 1px solid var(--rule); color: var(--dim); font-size: 10px; flex-shrink: 0;
-        }
-        .ad-q-detail-opt.correct { color: #0f7a3d; }
-        .ad-q-detail-opt.correct i { background: #0f7a3d; border-color: #0f7a3d; color: #fff; }
-
-        .ad-attempts { margin-top: 22px; border-top: 1px solid var(--rule); padding-top: 16px; }
-        .ad-attempts-head {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase;
-          letter-spacing: 0.14em; color: var(--accent); margin-bottom: 12px;
-        }
-        .ad-attempt-list { display: flex; flex-direction: column; gap: 8px; }
-        .ad-attempt { border: 1px solid var(--rule); background: var(--paper-2); }
-        .ad-attempt-row {
-          width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px;
-          background: transparent; border: 0; cursor: pointer; text-align: left;
-        }
-        .ad-attempt-row:hover { background: rgba(0,0,0,0.03); }
-        .ad-attempt-caret { color: var(--accent); font-size: 12px; }
-        .ad-attempt-name { font-family: 'Instrument Serif', serif; font-size: 17px; color: var(--ink); flex: 1; }
-        .ad-attempt-score { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-2); }
-        .ad-attempt-tags { display: flex; gap: 6px; }
-        .ad-atag { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 6px; color: #fff; }
-        .ad-atag.ok { background: #0f7a3d; }
-        .ad-atag.bad { background: var(--accent); }
-        .ad-atag.skip { background: #b8ad96; color: #14110d; }
-        .ad-attempt-detail { border-top: 1px dashed var(--rule); padding: 12px 14px; background: var(--paper); }
-        .ad-attempt-qlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-        .ad-attempt-q { border-left: 3px solid var(--rule); padding: 4px 0 4px 12px; }
-        .ad-attempt-q.ok { border-left-color: #0f7a3d; }
-        .ad-attempt-q.bad { border-left-color: var(--accent); }
-        .ad-attempt-q.skip { border-left-color: #b8ad96; }
-        .ad-aq-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
-        .ad-aq-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--ink); }
-        .ad-aq-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; padding: 2px 6px; color: #fff; }
-        .ad-aq-tag.ok { background: #0f7a3d; }
-        .ad-aq-tag.bad { background: var(--accent); }
-        .ad-aq-tag.skip { background: #b8ad96; color: #14110d; }
-        .ad-aq-marks { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-2); }
-        .ad-aq-prompt { font-size: 13px; color: var(--ink); margin-bottom: 6px; }
-        .ad-aq-ans { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-2); display: flex; gap: 8px; margin-top: 3px; }
-        .ad-aq-label { color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; }
-        .ad-aq-chosen.bad { color: var(--accent); }
-        .ad-aq-chosen.skip { color: var(--dim); font-style: italic; }
-        .ad-aq-correct { color: #0f7a3d; }
-
-        .ad-info-card { max-width: 720px; border: 1px solid var(--rule); background: var(--paper); padding: 24px 26px; }
-        .ad-info-sub { font-size: 13.5px; line-height: 1.6; color: var(--ink-2); margin: 0 0 20px; }
-        .ad-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
-        .ad-info-grid .ad-field label { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); }
-        .ad-info-grid .ad-field input {
-          width: 100%; background: var(--paper-2); border: 1px solid var(--rule); border-radius: 0;
-          padding: 11px 13px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink); outline: none;
-        }
-        .ad-info-grid .ad-field input:focus { background: #fff; border-color: var(--accent); }
-        .ad-modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 22px; }
-        .ad-saved { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #0f7a3d; }
-        .ad-submit { background: var(--accent); color: #fff; border: 1px solid var(--accent); padding: 12px 22px; font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; }
-        .ad-submit:hover { background: var(--accent-2); border-color: var(--accent-2); }
-        .ad-submit:disabled { opacity: 0.5; cursor: not-allowed; }
-        .ad-submit-inline { display: inline-flex; }
-
-        .ad-stu-quick { margin-top: 26px; max-width: 860px; }
-        .ad-stu-quick-list { display: flex; flex-wrap: wrap; gap: 8px; }
-        .ad-stu-quick-btn {
-          cursor: pointer; background: var(--paper); padding: 9px 14px;
-          text-transform: none; font-size: 12px; letter-spacing: 0.04em;
-        }
-        .ad-stu-quick-btn:hover { color: var(--accent); border-color: var(--accent); }
-
-        @media (max-width: 720px) {
-          .ad-root { grid-template-columns: 1fr; }
-          .ad-side { display: none; }
-          .ad-main { padding: 24px 18px; }
-        }
-      `}</style>
-
-      <aside className={`ad-side${collapsed ? " collapsed" : ""}`}>
-        <button className="ad-toggle" onClick={() => setCollapsed((c) => !c)} aria-label="Toggle sidebar">
-          {collapsed ? "»" : "«"}
-        </button>
+      <aside className="ad-side">
         <div className="ad-brand">
-          <span className="ad-brand-text">World of <em>Physics</em></span>
+          <Image src="/logo.png" alt="" width={30} height={30} className="ad-brand-logo" priority />
+          <span className="ad-brand-text">World of <span className="hl">Physics</span></span>
         </div>
         {NAV.map((n) => (
           <button
@@ -1188,11 +485,9 @@ export default function AdminDashboard() {
         {active === "questions" && (
           <>
             <div className="ad-head">
-              <h1 className="ad-title">All <em>Questions</em></h1>
+              <h1 className="ad-title">All <span className="hl">Questions</span></h1>
               <span className="ad-count">
-                {qSearch || qChapter !== "all"
-                  ? `${visibleQuestions.length} of ${questions.length}`
-                  : `${questions.length} in bank`}
+                {`Showing ${pagedQuestions.length} of ${visibleQuestions.length}`}
               </span>
             </div>
 
@@ -1249,13 +544,12 @@ export default function AdminDashboard() {
               <div className="ad-empty">No questions match your filters.</div>
             )}
 
-            {visibleQuestions.map((q) => (
+            {pagedQuestions.map((q) => (
               <div className="ad-q" key={q.id}>
                 <div className="ad-q-top">
                   <span className="ad-q-type">{q.type === "mcq" ? "MCQ · Multi" : "Single Correct"}</span>
                   <span className="ad-q-top-right">
                     {q.chapter && <span className="ad-q-chapter">{q.chapter}</span>}
-                    <span className="ad-q-meta">+{q.marks} / -{q.negative}</span>
                     <button
                       type="button"
                       className="ad-q-edit"
@@ -1270,7 +564,7 @@ export default function AdminDashboard() {
                       onClick={() => generateExplanation(q)}
                       aria-label="Generate explanation"
                     >
-                      <span className="spark">✦</span> Generate
+                      <span className="spark"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.7 7.3L22 12l-7.3 2.7L12 22l-2.7-7.3L2 12l7.3-2.7L12 2z" /></svg></span> Generate
                     </button>
                     <button
                       type="button"
@@ -1301,13 +595,39 @@ export default function AdminDashboard() {
                 </div>
               </div>
             ))}
+
+            {qLoadingMore && (
+              <>
+                {[0, 1].map((i) => (
+                  <div className="ad-q-skeleton" key={`skel-${i}`} aria-hidden="true">
+                    <div className="ad-skel-row">
+                      <div className="ad-skel-line w40" />
+                      <div className="ad-skel-line w20" />
+                    </div>
+                    <div className="ad-skel-line w80" />
+                    <div className="ad-skel-line w60" />
+                    <div className="ad-skel-opts">
+                      <div className="ad-skel-line pill" />
+                      <div className="ad-skel-line pill" />
+                      <div className="ad-skel-line pill" />
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            <div ref={qSentinelRef} aria-hidden="true" style={{ height: 1 }} />
+
+            {!qHasMore && visibleQuestions.length > 20 && (
+              <div className="ad-list-end">— End of the list —</div>
+            )}
           </>
         )}
 
         {active === "settings" && (
           <>
             <div className="ad-head">
-              <h1 className="ad-title">AI <em>Settings</em></h1>
+              <h1 className="ad-title">AI <span className="hl">Settings</span></h1>
               <span className="ad-count">Gemini</span>
             </div>
             <SettingsPanel />
@@ -1419,6 +739,20 @@ export default function AdminDashboard() {
           onClose={closeExplain}
         />
       )}
+
+      <ConfirmDialog
+        open={pendingConfirm !== null}
+        title={pendingConfirm?.title ?? ""}
+        description={pendingConfirm?.description ?? ""}
+        confirmLabel={pendingConfirm?.confirmLabel}
+        danger={pendingConfirm?.danger}
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={() => {
+          const action = pendingConfirm?.action;
+          setPendingConfirm(null);
+          action?.();
+        }}
+      />
     </div>
   );
 }
@@ -1734,7 +1068,7 @@ function SettingsPanel() {
   return (
     <>
       <div className="ad-set-card">
-        <h2 className="ad-set-card-title">Google <em>Gemini</em></h2>
+        <h2 className="ad-set-card-title">Google <span className="hl">Gemini</span></h2>
         <p className="ad-set-desc">
           Supply your Google AI (Gemini) API key to enable AI explanations. We call{" "}
           <code>{`${baseUrl}/v1beta/models`}</code> to list available Gemini
@@ -1781,7 +1115,7 @@ function SettingsPanel() {
 
       {models.length > 0 && (
         <div className="ad-set-model">
-          <h2 className="ad-set-card-title">AI <em>Model</em></h2>
+          <h2 className="ad-set-card-title">AI <span className="hl">Model</span></h2>
           <p className="ad-set-desc">
             Choose the model used for explanations. Type to search the list.
           </p>
@@ -1928,12 +1262,10 @@ function ExplanationDialog({
   const shareText = `Question: ${q.prompt}\n\nAI Explanation:\n${text}`;
 
   const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareText);
+    const ok = await copyText(shareText);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
-    } catch {
-      /* clipboard unavailable */
     }
   };
 
@@ -1960,12 +1292,12 @@ function ExplanationDialog({
     <div className="ad-overlay" onClick={onClose}>
       <div className="ad-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680 }}>
         <button className="ad-close" onClick={onClose} aria-label="Close">×</button>
-        <h3 className="ad-form-title">AI <em>Explanation</em></h3>
+        <h3 className="ad-form-title">AI <span className="hl">Explanation</span></h3>
         <div className="ad-q-prompt" style={{ marginBottom: 18 }}>
           <MathPreview text={q.prompt} compact />
         </div>
         {loading && (
-          <div className="ad-explain-body" style={{ color: "var(--dim)" }}>
+          <div className="ad-explain-body" style={{ color: "var(--color-muted)" }}>
             Generating explanation…
           </div>
         )}
@@ -1987,7 +1319,7 @@ function ExplanationDialog({
               className={`ad-share-btn${copied ? " done" : ""}`}
               onClick={copyLink}
             >
-              <span className="ad-share-ico">{copied ? "✓" : "⧉"}</span>
+              <span className="ad-share-ico">{copied ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>}</span>
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
@@ -2001,11 +1333,77 @@ function ExplanationDialog({
 }
 
 const EXAM_STATUS_META: Record<AdminExam["status"], { label: string; cls: string }> = {
-  completed: { label: "Completed", cls: "bg-green-100 text-green-800" },
-  scheduled: { label: "Scheduled", cls: "bg-blue-100 text-blue-800" },
-  draft: { label: "Draft", cls: "bg-gray-100 text-gray-700" },
-  stopped: { label: "Stopped", cls: "bg-red-100 text-red-800" },
+  completed: { label: "Completed", cls: "tint-neutral" },
+  scheduled: { label: "Scheduled", cls: "tint-cyan" },
+  draft: { label: "Live", cls: "tint-mint" },
+  stopped: { label: "Stopped", cls: "tint-danger" },
 };
+
+/** Icon set for the exams panel — single stroke voice, matches NavIcon. */
+function ExamIcon({ name, size = 16 }: { name: string; size?: number }) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true as const,
+  };
+  switch (name) {
+    case "chart":
+      return <svg {...common}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>;
+    case "edit":
+      return <svg {...common}><path d="M14.5 5.5l4 4L8 20H4v-4l10.5-10.5z" /><path d="M12.5 7.5l4 4" /></svg>;
+    case "eye":
+      return <svg {...common}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>;
+    case "stack":
+      return <svg {...common}><path d="M6 3h9l4 4v14H6z" /><path d="M9 10h6M9 14h6" /></svg>;
+    case "link":
+      return <svg {...common}><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1L11.4 4.5" /><path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.6-1.6" /></svg>;
+    case "code":
+      return <svg {...common}><path d="M8 8l-4 4 4 4M16 8l4 4-4 4" /></svg>;
+    case "trash":
+      return <svg {...common}><path d="M4 7h16" /><path d="M9 7V5h6v2" /><path d="M6 7l1.3 14h9.4L18 7" /><path d="M10.5 11v6M13.5 11v6" /></svg>;
+    case "search":
+      return <svg {...common}><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.8-3.8" /></svg>;
+    case "list":
+      return <svg {...common}><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" strokeWidth={2.4} /></svg>;
+    case "grid":
+      return <svg {...common}><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></svg>;
+    case "bookmark":
+      return <svg {...common}><path d="M7 3h10v18l-5-4-5 4z" /></svg>;
+    case "bookmark-fill":
+      return <svg {...common} fill="currentColor"><path d="M7 3h10v18l-5-4-5 4z" /></svg>;
+    case "alert":
+      return <svg {...common}><path d="M12 8v5" /><path d="M12 16.5h.01" /><path d="M10.3 3.9L2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></svg>;
+    case "check":
+      return <svg {...common}><path d="M4 12.5l5 5L20 6.5" /></svg>;
+    case "chevron":
+      return <svg {...common}><path d="M6 9l6 6 6-6" /></svg>;
+    case "file":
+      return <svg {...common}><path d="M6 3h9l4 4v14H6z" /><path d="M9 8h5M9 12h5M9 16h5" /></svg>;
+    default:
+      return null;
+  }
+}
+
+function PinButton({ questionId, pinned, onToggle }: { questionId: string; pinned: boolean; onToggle: (id: string) => void }) {
+  return (
+    <button
+      type="button"
+      className={`ad-pin${pinned ? " on" : ""}`}
+      onClick={() => onToggle(questionId)}
+      aria-pressed={pinned}
+      title={pinned ? "Unpin" : "Pin for later review"}
+      aria-label={pinned ? "Unpin question" : "Pin question for later review"}
+    >
+      <ExamIcon name={pinned ? "bookmark-fill" : "bookmark"} size={15} />
+    </button>
+  );
+}
 
 function ExamsPanel({
   exams,
@@ -2027,14 +1425,43 @@ function ExamsPanel({
   onDelete: (id: string) => void;
   onEdit: (exam: AdminExam) => void;
   onManageQuestions: (exam: AdminExam) => void;
-  onCopyLink: (exam: AdminExam) => void;
-  onCopyCode: (exam: AdminExam) => void;
+  onCopyLink: (exam: AdminExam) => Promise<boolean> | boolean;
+  onCopyCode: (exam: AdminExam) => Promise<boolean> | boolean;
   onToggleStop: (exam: AdminExam) => void;
   onShowResults: (exam: AdminExam) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [tab, setTab] = useState<Record<string, "questions" | "analytics" | "attempts" | "settings">>({});
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [openAttempts, setOpenAttempts] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | AdminExam["status"]>("all");
+  const [view, setView] = useState<"list" | "grid">("list");
+  const [pinned, setPinned] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem("examsite.pinned-questions");
+      if (raw) setPinned(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      /* session storage unavailable — pins live in memory only */
+    }
+  }, []);
+  const [collapsedQ, setCollapsedQ] = useState(false);
+
+  const togglePin = (id: string) => {
+    setPinned((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        window.sessionStorage.setItem("examsite.pinned-questions", JSON.stringify([...next]));
+      } catch {
+        /* session storage unavailable — pin lives in state only */
+      }
+      return next;
+    });
+  };
 
   const bankById = useMemo(() => {
     const m = new Map<string, Question>();
@@ -2042,10 +1469,25 @@ function ExamsPanel({
     return m;
   }, [bank]);
 
-  const optionText = (q: Question | undefined, optId: string | null): string | null => {
-    if (!q || !optId) return null;
-    return q.options.find((o) => o.id === optId)?.text ?? null;
-  };
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return exams.filter((exam) => {
+      if (filter !== "all" && exam.status !== filter) return false;
+      if (!q) return true;
+      return (
+        exam.title.toLowerCase().includes(q) ||
+        exam.subject.toLowerCase().includes(q) ||
+        exam.code.toLowerCase().includes(q) ||
+        exam.takenOn.toLowerCase().includes(q)
+      );
+    });
+  }, [exams, query, filter]);
+
+  const counts = useMemo(() => {
+    const c = { all: exams.length, draft: 0, scheduled: 0, stopped: 0, completed: 0 };
+    for (const e of exams) c[e.status] += 1;
+    return c;
+  }, [exams]);
 
   const questionsFor = (examId: string): Question[] => {
     const ids = questionMap[examId] ?? [];
@@ -2054,142 +1496,300 @@ function ExamsPanel({
       .filter((q): q is Question => Boolean(q));
   };
 
-  const handleCopy = async (exam: AdminExam) => {
-    await onCopyLink(exam);
-    setCopiedId(exam.id);
-    setTimeout(() => setCopiedId((c) => (c === exam.id ? null : c)), 1600);
+  const statsFor = (examId: string) => {
+    const summary = attemptsMap[examId];
+    const attempts = summary?.attempts ?? [];
+    if (attempts.length === 0) return { attempts: 0, avg: 0, best: 0, low: 0 };
+    const pcts = attempts.map((a) => (a.total > 0 ? (a.score / a.total) * 100 : 0));
+    const avg = Math.round((pcts.reduce((s, p) => s + p, 0) / pcts.length) * 10) / 10;
+    return { attempts: pcts.length, avg, best: Math.round(Math.max(...pcts)), low: Math.round(Math.min(...pcts)) };
   };
+
+  const [copyFailLinkId, setCopyFailLinkId] = useState<string | null>(null);
+  const [copyFailCodeId, setCopyFailCodeId] = useState<string | null>(null);
+
+  const handleCopyLink = async (exam: AdminExam) => {
+    const ok = await onCopyLink(exam);
+    if (ok) {
+      setCopiedLinkId(exam.id);
+      setTimeout(() => setCopiedLinkId((c) => (c === exam.id ? null : c)), 1600);
+    } else {
+      setCopyFailLinkId(exam.id);
+      setTimeout(() => setCopyFailLinkId((c) => (c === exam.id ? null : c)), 1600);
+    }
+  };
+  const handleCopyCode = async (exam: AdminExam) => {
+    const ok = await onCopyCode(exam);
+    if (ok) {
+      setCopiedCodeId(exam.id);
+      setTimeout(() => setCopiedCodeId((c) => (c === exam.id ? null : c)), 1600);
+    } else {
+      setCopyFailCodeId(exam.id);
+      setTimeout(() => setCopyFailCodeId((c) => (c === exam.id ? null : c)), 1600);
+    }
+  };
+
+  const filterPills: Array<{ key: "all" | AdminExam["status"]; label: string }> = [
+    { key: "all", label: "All" },
+    { key: "draft", label: "Live" },
+    { key: "scheduled", label: "Scheduled" },
+    { key: "stopped", label: "Stopped" },
+    { key: "completed", label: "Completed" },
+  ];
 
   return (
     <>
       <div className="ad-head">
-        <h1 className="ad-title">All <em>Exams</em></h1>
-        <span className="ad-count">{exams.length} total</span>
+        <div>
+          <h1 className="ad-title">All <span className="hl">Exams</span></h1>
+          <p className="ad-subhead">Create, manage and take exams.</p>
+        </div>
+        <span className="ad-count ad-total"><ExamIcon name="file" size={13} /> {exams.length} TOTAL</span>
       </div>
 
-      {exams.length === 0 && (
+      <div className="ad-exam-toolbar">
+        <label className="ad-search">
+          <ExamIcon name="search" size={15} />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search exams…"
+            aria-label="Search exams"
+          />
+        </label>
+        <div className="ad-pills" role="tablist" aria-label="Filter by status">
+          {filterPills.map((p) => (
+            <button
+              key={p.key}
+              role="tab"
+              aria-selected={filter === p.key}
+              className={`ad-pill${filter === p.key ? " active" : ""}`}
+              onClick={() => setFilter(p.key)}
+            >
+              {p.label}
+              <span className="ad-pill-count">{counts[p.key]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="ad-segview" aria-label="View">
+          <button
+            className={`ad-segview-btn${view === "list" ? " active" : ""}`}
+            onClick={() => setView("list")}
+            aria-pressed={view === "list"}
+            title="List view"
+            aria-label="List view"
+          >
+            <ExamIcon name="list" size={15} />
+          </button>
+          <button
+            className={`ad-segview-btn${view === "grid" ? " active" : ""}`}
+            onClick={() => setView("grid")}
+            aria-pressed={view === "grid"}
+            title="Grid view"
+            aria-label="Grid view"
+          >
+            <ExamIcon name="grid" size={15} />
+          </button>
+        </div>
+      </div>
+
+      {filtered.length === 0 && (
         <div className="ad-empty">
-          No exams yet. Tap <strong>+</strong> to create your first one.
+          {exams.length === 0
+            ? "No exams yet. Tap “+ New Exam” to create your first one."
+            : "No exams match that search."}
         </div>
       )}
 
-      <div className="ad-exam-list">
-        {exams.map((exam) => {
-          const meta = EXAM_STATUS_META[exam.status] ?? EXAM_STATUS_META.draft;
+      <div className={`ad-exam-list${view === "grid" ? " grid" : ""}`}>
+        {filtered.map((exam) => {
+          const taken = parseTakenOn(exam.takenOn);
+          const liveNow = exam.status === "scheduled" && taken !== null && Date.now() >= taken.getTime();
+          const meta = liveNow ? { label: "Live", cls: "tint-mint" } : EXAM_STATUS_META[exam.status] ?? EXAM_STATUS_META.draft;
           const qIds = questionMap[exam.id] ?? [];
           const count = qIds.length;
           const summary = attemptsMap[exam.id];
           const attempts = summary?.attempts ?? [];
+          const stats = statsFor(exam.id);
           const isOpen = expanded === exam.id;
-          const questions = isOpen ? questionsFor(exam.id) : [];
+          const activeTab = tab[exam.id] ?? "questions";
+          const questions = isOpen && activeTab === "questions" ? questionsFor(exam.id) : [];
+          const setActiveTab = (t: typeof activeTab) =>
+            setTab((prev) => ({ ...prev, [exam.id]: t }));
           return (
             <div className={`ad-exam-row${isOpen ? " open" : ""}`} key={exam.id}>
               <div className="ad-exam-main">
-                <div className="ad-exam-top">
-                  <button
-                    className="ad-exam-caret"
-                    onClick={() => setExpanded(isOpen ? null : exam.id)}
-                    aria-label={isOpen ? "Collapse" : "Expand"}
-                  >
-                    {isOpen ? "▾" : "▸"}
-                  </button>
-                  <span className="ad-exam-title">{exam.title}</span>
-                  <span className={`badge ${meta.cls}`}>{meta.label}</span>
+                <button
+                  className="ad-exam-caret"
+                  onClick={() => setExpanded(isOpen ? null : exam.id)}
+                  aria-label={isOpen ? "Collapse exam" : "Expand exam"}
+                  aria-expanded={isOpen}
+                >
+                  <ExamIcon name="chevron" size={14} />
+                </button>
+                <div className="ad-exam-fileicon" aria-hidden="true">
+                  <ExamIcon name="file" size={22} />
                 </div>
-                <div className="ad-exam-meta">
-                  <span>{exam.subject}</span>
-                  <span>·</span>
-                  <span>{exam.duration}</span>
-                  <span>·</span>
-                  <span>{exam.status === "draft" ? "Not published" : `Taken ${exam.takenOn}`}</span>
-                </div>
-                <div className="ad-exam-chips">
-                  <span className="ad-chip"><strong>{count}</strong> questions</span>
-                  <span className="ad-chip"><strong>{attempts.length}</strong> attempted</span>
-                  <span className="ad-chip"><strong>{summary?.avgScore ?? 0}%</strong> avg</span>
-                  <span className="ad-chip mono">{exam.code}</span>
+                <div className="ad-exam-body">
+                  <div className="ad-exam-top">
+                    <span className="ad-exam-title">{exam.title}</span>
+                    <code className="ad-exam-codechip">{exam.code}</code>
+                    <span className={`ad-status-chip ${meta.cls}`}>{meta.label}</span>
+                  </div>
+                  <div className="ad-exam-meta">
+                    <span>{exam.subject}</span>
+                    <span>·</span>
+                    <span>{exam.duration}</span>
+                    <span>·</span>
+                    <span>{exam.status === "draft" ? "Not published" : `Taken ${formatTakenOn(exam.takenOn)}`}</span>
+                  </div>
+                  <div className="ad-exam-chips">
+                    <span className="ad-chip"><ExamIcon name="file" size={12} /><strong>{count}</strong> Questions</span>
+                    <span className="ad-chip"><strong>{stats.attempts}</strong> Attempted</span>
+                    <span className="ad-chip"><strong>{stats.attempts ? `${stats.avg}%` : "—"}</strong> Avg</span>
+                  </div>
                 </div>
               </div>
-              <div className="ad-exam-side">
-                <div className="ad-exam-actions">
-                  <button className="ad-exam-btn" onClick={() => onShowResults(exam)}>Results</button>
-                  <button className="ad-exam-btn" onClick={() => onEdit(exam)}>Edit</button>
-                  <button className="ad-exam-btn" onClick={() => onManageQuestions(exam)}>
-                    {count ? "Questions" : "Add Questions"}
-                  </button>
-                  <button
-                    className={`ad-exam-btn${exam.status === "stopped" ? " danger" : ""}`}
-                    onClick={() => onToggleStop(exam)}
-                    title={
-                      exam.status === "stopped"
-                        ? "Make this exam accessible again"
-                        : "Stop this exam — the link will stop working"
-                    }
-                  >
-                    {exam.status === "stopped" ? "Start" : "Stop"}
-                  </button>
-                  <button className="ad-exam-btn ghost" onClick={() => handleCopy(exam)}>
-                    {copiedId === exam.id ? "Copied ✓" : "Copy link"}
-                  </button>
-                  <button className="ad-exam-btn ghost" onClick={() => onCopyCode(exam)}>
-                    Copy code
-                  </button>
-                  <button
-                    className="ad-exam-btn danger"
-                    onClick={() => onDelete(exam.id)}
-                    aria-label={`Delete ${exam.title}`}
-                  >
-                    Delete
-                  </button>
-                </div>
+              <div className="ad-icon-actions" role="group" aria-label="Exam actions">
+                <button className="ad-icon-btn" onClick={() => onShowResults(exam)} title="Open results" aria-label="Open results">
+                  <ExamIcon name="chart" size={16} />
+                </button>
+                <button className="ad-icon-btn" onClick={() => onEdit(exam)} title="Edit exam" aria-label="Edit exam">
+                  <ExamIcon name="edit" size={16} />
+                </button>
+                <a className="ad-icon-btn" href={`/exam?id=${encodeURIComponent(exam.code)}`} target="_blank" rel="noopener noreferrer" title="Preview as student" aria-label="Preview as student">
+                  <ExamIcon name="eye" size={16} />
+                </a>
+                <button className="ad-icon-btn" onClick={() => onManageQuestions(exam)} title={count ? "Manage questions" : "Add questions"} aria-label={count ? "Manage questions" : "Add questions"}>
+                  <ExamIcon name="stack" size={16} />
+                </button>
+                <button className="ad-icon-btn" onClick={() => handleCopyLink(exam)} title={copiedLinkId === exam.id ? "Copied!" : copyFailLinkId === exam.id ? "Couldn't copy — select the code and copy manually" : "Copy link"} aria-label="Copy exam link">
+                  <ExamIcon name={copiedLinkId === exam.id ? "check" : copyFailLinkId === exam.id ? "alert" : "link"} size={16} />
+                </button>
+                <button className="ad-icon-btn" onClick={() => handleCopyCode(exam)} title={copiedCodeId === exam.id ? "Copied!" : copyFailCodeId === exam.id ? "Couldn't copy — select the code and copy manually" : "Copy code"} aria-label="Copy exam code">
+                  <ExamIcon name={copiedCodeId === exam.id ? "check" : copyFailCodeId === exam.id ? "alert" : "code"} size={16} />
+                </button>
+                <button className="ad-icon-btn danger" onClick={() => onDelete(exam.id)} title="Delete exam" aria-label={`Delete ${exam.title}`}>
+                  <ExamIcon name="trash" size={16} />
+                </button>
               </div>
 
               {isOpen && (
                 <div className="ad-exam-detail">
-                  {questions.length === 0 ? (
-                    <div className="ad-empty small">
-                      No questions added yet. Use <strong>Add Questions</strong> to build this exam.
+                  <div className="ad-exam-tabsbar">
+                    <div className="ad-tabs" role="tablist" aria-label="Exam detail tabs">
+                      <button role="tab" aria-selected={activeTab === "questions"} className={`ad-tab${activeTab === "questions" ? " active" : ""}`} onClick={() => setActiveTab("questions")}>
+                        Questions <span className="ad-tab-count">{count}</span>
+                      </button>
+                      <button role="tab" aria-selected={activeTab === "analytics"} className={`ad-tab${activeTab === "analytics" ? " active" : ""}`} onClick={() => setActiveTab("analytics")}>
+                        <ExamIcon name="chart" size={13} /> Analytics
+                      </button>
+                      <button role="tab" aria-selected={activeTab === "attempts"} className={`ad-tab${activeTab === "attempts" ? " active" : ""}`} onClick={() => setActiveTab("attempts")}>
+                        Attempts <span className="ad-tab-count">{attempts.length}</span>
+                      </button>
+                      <button role="tab" aria-selected={activeTab === "settings"} className={`ad-tab${activeTab === "settings" ? " active" : ""}`} onClick={() => setActiveTab("settings")}>
+                        Settings
+                      </button>
                     </div>
-                  ) : (
-                    <ol className="ad-q-detail-list">
-                      {questions.map((q, i) => {
-                        const correctIdx = q.options.findIndex((o) => o.correct);
-                        const keys = ["A", "B", "C", "D", "E", "F", "G", "H"];
-                        return (
-                          <li className="ad-q-detail" key={q.id}>
-                            <div className="ad-q-detail-head">
-                              <span className="ad-q-detail-num">Q. {i + 1}</span>
-                              <span className="ad-q-detail-sub">
-                                {q.chapter ? `${q.chapter} · ` : ""}
-                                {q.marks} marks{q.negative ? ` · −${q.negative} neg` : ""}
-                              </span>
-                            </div>
-                            <div className="ad-q-detail-prompt">
-                              <MathPreview text={q.prompt} compact />
-                            </div>
-                            <div className="ad-q-detail-opts">
-                              {q.options.map((o, oi) => (
-                                <span
-                                  key={o.id}
-                                  className={`ad-q-detail-opt${oi === correctIdx ? " correct" : ""}`}
-                                >
-                                  <i>{keys[oi]}</i>
-                                  <MathPreview text={o.text} compact />
-                                </span>
-                              ))}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ol>
+                    {activeTab === "questions" && (
+                      <button className="ad-expandall" onClick={() => setCollapsedQ((v) => !v)} aria-pressed={!collapsedQ}>
+                        {collapsedQ ? "Expand all" : "Collapse all"}
+                        <ExamIcon name="chevron" size={12} />
+                      </button>
+                    )}
+                  </div>
+
+                  {activeTab === "questions" && (
+                    questions.length === 0 ? (
+                      <div className="ad-empty small">
+                        No questions added yet. Use the <strong>stack</strong> button above to add questions.
+                      </div>
+                    ) : (
+                      <ol className="ad-qrows">
+                        {questions.map((q, i) => {
+                          const correctIdx = q.options.findIndex((o) => o.correct);
+                          const keys = ["A", "B", "C", "D", "E", "F", "G", "H"];
+                          return (
+                            <li className="ad-qrow" key={q.id}>
+                              <div className="ad-qrow-num">{String(i + 1).padStart(2, "0")}</div>
+                              <div className="ad-qrow-body">
+                                <div className="ad-qrow-head">
+                                  <span className="ad-qrow-tags">
+                                    {q.chapter && <span>{q.chapter}</span>}
+                                    <span>{q.marks} MARKS{q.negative ? ` · −${q.negative} NEG` : ""}</span>
+                                  </span>
+                                  <PinButton questionId={q.id} pinned={pinned.has(q.id)} onToggle={togglePin} />
+                                </div>
+                                <div className="ad-qrow-prompt">
+                                  <MathPreview text={q.prompt} compact />
+                                </div>
+                                {!collapsedQ && (
+                                  <div className="ad-qrow-opts">
+                                    {q.options.map((o, oi) => (
+                                      <span key={o.id} className={`ad-optpill${oi === correctIdx ? " correct" : ""}`}>
+                                        <i>{keys[oi]}</i>
+                                        <span><MathPreview text={o.text} compact /></span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    )
                   )}
 
-                  <ExamAttempts
-                    attempts={attempts}
-                    bankById={bankById}
-                    openAttempts={openAttempts}
-                    setOpenAttempts={setOpenAttempts}
-                  />
+                  {activeTab === "analytics" && (
+                    <div className="ad-ana">
+                      <div className="ad-ana-grid">
+                        <div className="ad-ana-cell"><strong className="tnum">{stats.attempts}</strong><span>Attempts</span></div>
+                        <div className="ad-ana-cell"><strong className="tnum">{stats.attempts ? `${stats.avg}%` : "—"}</strong><span>Average</span></div>
+                        <div className="ad-ana-cell ok"><strong className="tnum">{stats.attempts ? `${stats.best}%` : "—"}</strong><span>Best</span></div>
+                        <div className="ad-ana-cell bad"><strong className="tnum">{stats.attempts ? `${stats.low}%` : "—"}</strong><span>Lowest</span></div>
+                      </div>
+                      <p className="ad-ana-note">Per-attempt detail lives in the <button className="ad-inline-link" onClick={() => setActiveTab("attempts")}>Attempts</button> tab.</p>
+                    </div>
+                  )}
+
+                  {activeTab === "attempts" && (
+                    <ExamAttempts
+                      attempts={attempts}
+                      bankById={bankById}
+                      openAttempts={openAttempts}
+                      setOpenAttempts={setOpenAttempts}
+                    />
+                  )}
+
+                  {activeTab === "settings" && (
+                    <div className="ad-settings-list">
+                      <div className="ad-settings-row">
+                        <div>
+                          <div className="ad-settings-title">{exam.status === "stopped" ? "Start exam" : "Stop exam"}</div>
+                          <div className="ad-settings-desc">{exam.status === "stopped" ? "Make the exam link work again for students." : "Disable the exam link — students can no longer join."}</div>
+                        </div>
+                        <button className={`ad-set-btn ${exam.status === "stopped" ? "" : "ghost danger-text"}`} onClick={() => onToggleStop(exam)}>
+                          {exam.status === "stopped" ? "Start" : "Stop"}
+                        </button>
+                      </div>
+                      <div className="ad-settings-row">
+                        <div>
+                          <div className="ad-settings-title">Edit exam</div>
+                          <div className="ad-settings-desc">Title, subject, duration, schedule, marks.</div>
+                        </div>
+                        <button className="ad-set-btn ghost" onClick={() => onEdit(exam)}>Edit</button>
+                      </div>
+                      <div className="ad-settings-row danger-zone">
+                        <div>
+                          <div className="ad-settings-title">Delete this exam</div>
+                          <div className="ad-settings-desc">Removes the exam and its attempts. Question bank stays intact.</div>
+                        </div>
+                        <button className="ad-exam-btn danger" onClick={() => onDelete(exam.id)}>Delete</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2230,7 +1830,7 @@ function StudentsPanel({
   return (
     <>
       <div className="ad-head">
-        <h1 className="ad-title">Student <em>Analysis</em></h1>
+        <h1 className="ad-title">Student <span className="hl">Analysis</span></h1>
         <span className="ad-count">combined across all exams</span>
       </div>
 
@@ -2334,7 +1934,7 @@ function InformationPanel({
   return (
     <>
       <div className="ad-head">
-        <h1 className="ad-title">Site <em>Information</em></h1>
+        <h1 className="ad-title">Site <span className="hl">Information</span></h1>
         <span className="ad-count">public details</span>
       </div>
 
@@ -2356,7 +1956,7 @@ function InformationPanel({
           ))}
         </div>
         <div className="ad-modal-foot">
-          <span className="ad-saved">{saved ? "Saved ✓" : ""}</span>
+          <span className="ad-saved">{saved ? (<span style={{ display: "inline-flex", alignItems: "center", gap: "0.35em" }}>Saved <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg></span>) : ""}</span>
           <button
             className="ad-submit ad-submit-inline"
             onClick={save}
@@ -2413,7 +2013,7 @@ function ExamAttempts({
                 <span className="ad-attempt-name">{a.studentName}</span>
                 <span className="ad-attempt-score">{a.score}/{a.total} · {pct}%</span>
                 <span className="ad-attempt-tags">
-                  <span className="ad-atag ok">{a.correct}✓</span>
+                  <span className="ad-atag ok" style={{display:"inline-flex",alignItems:"center",gap:"0.3em"}}>{a.correct}<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg></span>
                   <span className="ad-atag bad">{a.wrong}✗</span>
                   <span className="ad-atag skip">{a.unattempted}–</span>
                 </span>
@@ -2483,7 +2083,7 @@ function NewExamModal({
   );
   const [status, setStatus] = useState<AdminExam["status"]>(exam?.status ?? "draft");
   const [takenOn, setTakenOn] = useState(
-    exam && exam.takenOn !== "—" ? exam.takenOn : ""
+    exam && exam.takenOn !== "—" ? toIsoLocal(exam.takenOn) : ""
   );
 
   const today = new Date().toLocaleDateString("en-US", {
@@ -2491,7 +2091,7 @@ function NewExamModal({
     day: "2-digit",
     year: "numeric",
   });
-  const resolvedDate = status === "draft" ? "—" : takenOn.trim() || today;
+  const resolvedDate = status === "draft" ? "—" : takenOn || todayIsoLocal();
 
   const generateCode = (): string => {
     if (exam?.code) return exam.code;
@@ -2525,11 +2125,11 @@ function NewExamModal({
     <div className="ad-overlay" onClick={onClose}>
       <div className="ad-modal" onClick={(e) => e.stopPropagation()}>
         <button className="ad-close" onClick={onClose} aria-label="Close">×</button>
-        <h3 className="ad-form-title">{exam ? "Edit" : "New"} <em>Exam</em></h3>
+        <h3 className="ad-form-title">{exam ? "Edit" : "New"} <span className="hl">Exam</span></h3>
         <p className="ad-modal-sub">
           {exam
             ? "Update this exam. Changes are saved to Firestore immediately."
-            : "Set up a new exam. Drafts stay hidden from students until published."}
+            : "Set up a new exam. Students can join right away with the exam code."}
         </p>
 
         <div className="ad-field" style={{ marginBottom: 16 }}>
@@ -2620,12 +2220,10 @@ function ExamCodeDialog({
       : `/exam?id=${encodeURIComponent(exam.code)}`;
 
   const copy = async (value: string, which: "code" | "link") => {
-    try {
-      await navigator.clipboard.writeText(value);
+    const ok = await copyText(value);
+    if (ok) {
       setCopied(which);
       setTimeout(() => setCopied(null), 1800);
-    } catch {
-      /* clipboard unavailable */
     }
   };
 
@@ -2633,7 +2231,7 @@ function ExamCodeDialog({
     <div className="ad-overlay" onClick={onClose}>
       <div className="ad-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
         <button className="ad-close" onClick={onClose} aria-label="Close">×</button>
-        <h3 className="ad-form-title">Exam <em>Created</em></h3>
+        <h3 className="ad-form-title">Exam <span className="hl">Created</span></h3>
         <p className="ad-modal-sub">
           Your exam “{exam.title}” is saved. Share it with students using the code or link below.
         </p>
@@ -2646,7 +2244,7 @@ function ExamCodeDialog({
               className={`ad-share-btn${copied === "code" ? " done" : ""}`}
               onClick={() => copy(exam.code, "code")}
             >
-              <span className="ad-share-ico">{copied === "code" ? "✓" : "⧉"}</span>
+              <span className="ad-share-ico">{copied === "code" ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>}</span>
               {copied === "code" ? "Copied" : "Copy"}
             </button>
           </div>
@@ -2660,7 +2258,7 @@ function ExamCodeDialog({
               className={`ad-share-btn${copied === "link" ? " done" : ""}`}
               onClick={() => copy(link, "link")}
             >
-              <span className="ad-share-ico">{copied === "link" ? "✓" : "⧉"}</span>
+              <span className="ad-share-ico">{copied === "link" ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>}</span>
               {copied === "link" ? "Copied" : "Copy"}
             </button>
           </div>
@@ -2783,7 +2381,7 @@ function AddQuestionsDialog({
     <div className="ad-overlay" onClick={onClose}>
       <div className="ad-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
         <button className="ad-close" onClick={onClose} aria-label="Close">×</button>
-        <h3 className="ad-form-title">Add Questions to <em>{exam.title}</em></h3>
+        <h3 className="ad-form-title">Add Questions to <span className="hl">{exam.title}</span></h3>
         <p className="ad-modal-sub">
           Choose how to fill this exam. You can combine both methods — the final set is
           the union of your selections.
@@ -2821,7 +2419,7 @@ function AddQuestionsDialog({
                   className={`ad-chapter-item${on ? " on" : ""}`}
                   onClick={() => toggleChapter(c)}
                 >
-                  <span className="ad-chapter-check">{on ? "✓" : ""}</span>
+                  <span className="ad-chapter-check">{on ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg> : null}</span>
                   <span className="ad-chapter-name">{c}</span>
                   <span className="ad-chapter-count">{count}</span>
                 </button>
@@ -2853,7 +2451,7 @@ function AddQuestionsDialog({
                     className={`ad-chapter-item${on ? " on" : ""}`}
                     onClick={() => toggleQuestion(q.id)}
                   >
-                    <span className="ad-chapter-check">{on ? "✓" : ""}</span>
+                    <span className="ad-chapter-check">{on ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg> : null}</span>
                     <span className="ad-chapter-name ad-choose-prompt">
                       <MathPreview text={q.prompt} compact />
                     </span>

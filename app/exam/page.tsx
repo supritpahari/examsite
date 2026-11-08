@@ -7,12 +7,19 @@ import {
   fetchExamByCode,
   fetchExamQuestionIds,
   fetchExamQuestionMarks,
+  parseTakenOn,
+  formatTakenOn,
+  toLocalInputValue,
   type Exam,
 } from "@/lib/exams";
 import { fetchQuestions, type Question, type QuestionType } from "@/lib/questions";
+import { onAuthState } from "@/lib/firebase/client";
+import PhoneAuth from "../_components/PhoneAuth";
 import { saveAttempt, hasAttemptBySession, hasAttemptByName } from "@/lib/attempts";
 import { getDeviceId } from "@/lib/session";
 import { renderMathHtml, extractImageUrls } from "@/lib/render-math";
+import FormulaMarks from "../_components/FormulaMarks";
+import ConfirmDialog from "../_components/ConfirmDialog";
 
 interface RuntimeOption {
   id: string;
@@ -82,9 +89,54 @@ function formatTime(totalSeconds: number): string {
 
 const OPTION_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
+function OpensCountdown({ at }: { at: Date }) {
+  const [now, setNow] = useState(() => Date.now());
+  const reloadedRef = useRef(false);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      if (t >= at.getTime() && !reloadedRef.current) {
+        reloadedRef.current = true;
+        window.location.reload();
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [at]);
+
+  const remaining = Math.max(0, at.getTime() - now);
+  const totalSeconds = Math.floor(remaining / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const time = days > 0
+    ? `${days}d ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+    : `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+
+  return (
+    <div className="v2-countdown" aria-live="polite">{time}</div>
+  );
+}
+
 function ExamContent() {
   const searchParams = useSearchParams();
   const code = searchParams.get("id") ?? "";
+
+  const [auth, setAuth] = useState<"loading" | "in" | "out">("loading");
+  useEffect(() => {
+    // Students must arrive via Phone OTP. A persisted admin (password) session
+    // must NOT unlock the exam — admin sign-in is not student phone verification.
+    const unsub = onAuthState((u) => {
+      const phoneVerified = Boolean(
+        u && u.providerData?.some((p) => p.providerId === "phone")
+      );
+      setAuth(phoneVerified ? "in" : "out");
+    });
+    return unsub;
+  }, []);
 
   const [exam, setExam] = useState<Exam | null>(null);
   const [ordered, setOrdered] = useState<Question[]>([]);
@@ -111,12 +163,14 @@ function ExamContent() {
   const [marked, setMarked] = useState<boolean[]>([]);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [notYetLiveAt, setNotYetLiveAt] = useState<Date | null>(null);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [focusWarnOpen, setFocusWarnOpen] = useState(false);
   const [showMobilePalette, setShowMobilePalette] = useState(false);
   const blurCountRef = useRef(0);
 
   useEffect(() => {
+    if (auth !== "in") return; // gate: students must verify their phone first
     let active = true;
     (async () => {
       try {
@@ -136,6 +190,14 @@ function ExamContent() {
           setExam(found);
           setLoading(false);
           return;
+        }
+        if (found.status === "scheduled") {
+          const at = parseTakenOn(found.takenOn);
+          if (at && Date.now() < at.getTime()) {
+            setNotYetLiveAt(at);
+            setLoading(false);
+            return;
+          }
         }
         const questionIds = await fetchExamQuestionIds(found.id);
         const allQuestions = await fetchQuestions();
@@ -180,10 +242,11 @@ function ExamContent() {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code]);
+  }, [code, auth]);
 
   const durationMinutes = exam ? parseMinutes(exam.duration) : 60;
 
+  const [joinConfirmOpen, setJoinConfirmOpen] = useState(false);
   const join = async () => {
     if (!exam || !name.trim() || !agreed || ordered.length === 0) return;
     if (!sessionId) return;
@@ -394,22 +457,20 @@ function ExamContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runtime, answers, visited, marked]);
 
+  if (auth === "loading") {
+    return (
+      <div className="v2-center">
+        <div className="v2-loading">Loading…</div>
+      </div>
+    );
+  }
+
+  if (auth === "out") {
+    return <PhoneAuth />;
+  }
+
   return (
-    <div
-      className="v2-root"
-      style={
-        {
-          "--paper": "#f4f0e8",
-          "--paper-2": "#ebe6da",
-          "--ink": "#14110d",
-          "--ink-2": "#3a352c",
-          "--dim": "#8a8275",
-          "--rule": "#d9d1bf",
-          "--accent": "oklch(0.52 0.20 25)",
-          "--accent-2": "oklch(0.42 0.22 25)",
-        } as React.CSSProperties
-      }
-    >
+    <div className="v2-root">
       <style>{CSS}</style>
 
       {loading && (
@@ -418,16 +479,34 @@ function ExamContent() {
         </div>
       )}
 
+      {!loading && notYetLiveAt && (
+        <div className="v2-center">
+          <div className="v2-lobby-card">
+            <div className="v2-cta-num">Scheduled</div>
+            <h1 className="v2-lobby-title">Not yet <span className="hl">live</span></h1>
+            <p className="v2-lobby-desc">
+              This exam opens on <strong>{formatTakenOn(toLocalInputValue(notYetLiveAt))}</strong>.
+              Keep this page open — it will refresh automatically when the exam goes live.
+            </p>
+            <OpensCountdown at={notYetLiveAt} />
+            <div className="v2-actions-note">The countdown is to the scheduled time set by your instructor.</div>
+            <Link href="/" className="btn btn--soft" style={{ marginTop: "var(--space-md)" }}>
+              Back home
+            </Link>
+          </div>
+        </div>
+      )}
+
       {!loading && error && (
         <div className="v2-center">
           <div className="v2-lobby-card">
-            <div className="v2-cta-num">§ 00 · Not Found</div>
+            <div className="v2-cta-num">Not found</div>
             <h1 className="v2-lobby-title">
-              Exam <em>unavailable</em>
+              Exam <span className="hl">unavailable</span>
             </h1>
             <p className="v2-lobby-desc">{error}</p>
-            <Link href="/" className="v2-join">
-              Return home →
+            <Link href="/" className="btn">
+              Return home
             </Link>
           </div>
         </div>
@@ -441,9 +520,21 @@ function ExamContent() {
           setName={setName}
           agreed={agreed}
           setAgreed={setAgreed}
-          onJoin={join}
+          onJoin={() => setJoinConfirmOpen(true)}
         />
       )}
+
+      <ConfirmDialog
+        open={joinConfirmOpen}
+        title="Join the test?"
+        description="Once you join, the clock starts. Questions appear in a randomized order — there's no pausing."
+        confirmLabel="Join now"
+        onCancel={() => setJoinConfirmOpen(false)}
+        onConfirm={() => {
+          setJoinConfirmOpen(false);
+          void join();
+        }}
+      />
 
       {!loading && !error && exam && stage === "test" && runtime.length > 0 && (
         (() => {
@@ -977,7 +1068,7 @@ function Lobby({
   return (
     <div className="v2-center">
       <div className="v2-lobby-card">
-        <div className="v2-cta-num">§ 00 · Before you begin</div>
+        <div className="v2-cta-num">Before you begin</div>
         <h1 className="v2-lobby-title">{exam.title}</h1>
         <p className="v2-lobby-desc">
           Read the instructions carefully. Once you join, the clock starts and
@@ -1025,8 +1116,8 @@ function Lobby({
           />
         </div>
 
-        <button className="v2-join" disabled={!canJoin} onClick={onJoin}>
-          Join Test →
+        <button className="btn v2-join" disabled={!canJoin} onClick={onJoin}>
+          Join test
         </button>
       </div>
     </div>
@@ -1074,9 +1165,9 @@ function SubmittedScreen({
   return (
     <div className="v2-center">
       <div className="v2-lobby-card v2-result-card">
-        <div className="v2-cta-num">§ 03 · Submitted</div>
+        <div className="v2-cta-num">Submitted</div>
         <h1 className="v2-lobby-title">
-          Test <em>submitted</em>
+          Test <span className="hl">submitted</span>
         </h1>
         <p className="v2-lobby-desc">
           Well done, {name.trim() || "candidate"}. Your responses for{" "}
@@ -1089,182 +1180,187 @@ function SubmittedScreen({
           for practice and revision.
         </div>
 
-        <button
-          className="v2-insight-btn"
-          onClick={downloadPdf}
-          disabled={pdfBusy}
-        >
-          {pdfBusy ? "Preparing PDF…" : "⬇ Download question paper (PDF)"}
-        </button>
         {pdfError && <div className="v2-pdf-err">{pdfError}</div>}
-
-        <Link href="/" className="v2-join v2-done">
-          Done →
-        </Link>
+        <div className="v2-actions">
+          <Link href="/" className="btn btn--soft">
+            Done
+          </Link>
+          <button
+            className="btn"
+            onClick={downloadPdf}
+            disabled={pdfBusy}
+          >
+            {pdfBusy ? "Preparing PDF…" : "Download question paper (PDF)"}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
 const CSS = `
-  .v2-root {
-    min-height: 100vh;
-    min-height: 100dvh;
-    background: #f4f0e8;
-    color: #14110d;
-    font-family: 'Inter', sans-serif;
-    position: relative;
-    overflow-x: clip;
-  }
-  .v2-root .serif { font-family: 'Instrument Serif', 'Times New Roman', serif; font-weight: 400; }
-  .v2-root .mono { font-family: 'JetBrains Mono', monospace; }
-
   .v2-center {
     min-height: 100vh;
     min-height: 100dvh;
     display: grid;
     place-items: center;
-    padding: 40px 24px;
+    padding: 2.5rem 1.25rem;
     position: relative;
   }
 
-  .v2-loading {
-    font-family: 'JetBrains Mono', monospace;
+  .v2-countdown {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(2.5rem, 6vw + 1rem, 4rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--color-ink);
+    margin: 0 0 var(--space-sm);
+    text-align: center;
+  }
+  .v2-actions-note {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    letter-spacing: 0.16em;
-    font-size: 12px;
-    color: var(--ink-2);
+    color: var(--color-muted);
+    text-align: center;
+  }
+
+  .v2-loading {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 0.72rem;
+    color: var(--color-muted);
   }
 
   .v2-lobby-card {
     width: 100%;
     max-width: 560px;
-    background: #ffffff;
-    border: 1px solid #d9d1bf;
+    background: var(--color-paper);
+    border: 1px solid var(--color-rule);
+    border-radius: var(--radius-card);
     position: relative;
-    padding: 44px 36px 32px;
+    padding: 2rem 1.75rem 1.5rem;
     text-align: left;
-    box-shadow: 12px 12px 0 var(--ink);
+    box-shadow: var(--shadow-lift);
   }
-  .v2-lobby-card::before, .v2-lobby-card::after {
-    content: "";
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    background: var(--accent);
-  }
-  .v2-lobby-card::before { top: -1px; left: -1px; }
-  .v2-lobby-card::after { bottom: -1px; right: -1px; }
 
   .v2-lobby-title {
-    font-family: 'Instrument Serif', serif;
-    font-size: 38px;
-    line-height: 1.05;
-    margin: 0 0 10px;
-    color: #14110d;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.6rem, 4vw + 0.8rem, 2.35rem);
+    line-height: 1.08;
+    letter-spacing: -0.03em;
+    margin: 0 0 0.6rem;
+    color: var(--color-ink);
   }
-  .v2-lobby-title em { font-style: italic; color: var(--accent); }
+  .v2-lobby-title .hl { font-style: normal; }
 
   .v2-lobby-desc {
-    font-size: 14px;
+    font-size: 0.95rem;
     line-height: 1.6;
-    color: #6b6358;
-    margin: 0 0 22px;
+    color: var(--color-ink-2);
+    margin: 0 0 1.25rem;
   }
   .v2-cta-num {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.16em;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: #d9a300;
-    margin-bottom: 14px;
+    color: var(--color-muted);
+    margin-bottom: 0.85rem;
   }
 
   .v2-instr {
     list-style: none;
-    margin: 0 0 22px;
-    padding: 18px 18px 18px 40px;
-    border: 1px solid #d9d1bf;
-    background: #f0ece4;
-    font-size: 13.5px;
-    line-height: 1.7;
-    color: #6b6358;
+    counter-reset: step;
+    margin: 0 0 1.25rem;
+    padding: 1.1rem;
+    border: 1px solid var(--color-rule);
+    border-radius: var(--radius-input);
+    background: var(--color-paper-2);
+    font-size: 0.85rem;
+    line-height: 1.65;
+    color: var(--color-ink-2);
   }
-  .v2-instr li { position: relative; margin-bottom: 8px; }
+  .v2-instr li { position: relative; margin-bottom: 0.5rem; padding-left: 2rem; counter-increment: step; }
   .v2-instr li:last-child { margin-bottom: 0; }
   .v2-instr li::before {
-    content: "§";
+    content: counter(step, decimal-leading-zero);
     position: absolute;
-    left: -22px;
-    color: var(--accent);
-    font-family: 'JetBrains Mono', monospace;
+    left: 0;
+    top: 0.1em;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-accent-2-deep);
   }
-  .v2-instr strong { color: #14110d; }
+  .v2-instr strong { color: var(--color-ink); }
 
   .v2-check {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    font-size: 13.5px;
-    color: #6b6358;
-    margin-bottom: 20px;
+    gap: 0.7rem;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: var(--color-ink-2);
+    margin-bottom: 1.1rem;
     cursor: pointer;
   }
   .v2-check input {
-    margin-top: 2px;
+    margin-top: 0.15em;
     width: 18px;
     height: 18px;
-    accent-color: oklch(0.52 0.20 25);
+    accent-color: var(--color-accent);
     flex-shrink: 0;
+    cursor: pointer;
   }
 
-  .v2-field { margin-bottom: 22px; }
+  .v2-field { margin-bottom: 1.25rem; }
   .v2-flabel {
     display: block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.16em;
-    color: #d9a300;
-    margin-bottom: 8px;
+    letter-spacing: 0.18em;
+    color: var(--color-muted);
+    margin-bottom: 0.4rem;
   }
   .v2-name {
     width: 100%;
-    background: #f0ece4;
-    border: 1px solid #d9d1bf;
-    border-radius: 0;
-    padding: 14px 16px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 16px;
-    color: #14110d;
+    background: var(--color-paper-2);
+    border: 1.5px solid transparent;
+    border-radius: var(--radius-input);
+    padding: 0.75rem 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    color: var(--color-ink);
     outline: none;
+    transition: border-color var(--dur-micro), background var(--dur-micro);
   }
-  .v2-name::placeholder { color: #b8ad96; }
-  .v2-name:focus { background: #ffffff; border-color: var(--accent); }
+  .v2-name::placeholder { color: var(--color-faint); }
+  .v2-name:focus { background: var(--color-paper); border-color: var(--color-accent-2); }
 
-  .v2-join {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    background: var(--accent);
-    color: #fff;
-    border: 1px solid var(--accent);
-    padding: 14px 26px;
-    font-family: 'Inter', sans-serif;
-    font-weight: 600;
-    font-size: 14px;
-    letter-spacing: 0.02em;
-    cursor: pointer;
-    text-transform: uppercase;
-    text-decoration: none;
-    min-height: 44px;
-  }
-  .v2-join:hover { background: var(--accent-2); border-color: var(--accent-2); }
-  .v2-join:disabled { opacity: 0.4; cursor: not-allowed; }
+  .v2-join { width: 100%; }
+  .v2-join:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  /* ================== CBT EXAM WINDOW (NTA / JEE style) ================== */
-  .cbt-app {
+  .v2-root {
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    position: relative;
+    isolation: isolate;
+    overflow-x: clip;
+    /* NTA palette — hoisted here so modals outside .cbt-app can use it too */
     --cbt-navy: #1d3d8f;
     --cbt-navy-2: #16306e;
     --cbt-blue: #2563eb;
@@ -1272,10 +1368,14 @@ const CSS = `
     --cbt-gray-bg: #e9edf4;
     --cbt-line: #d5dcea;
     --cbt-ink: #1f2937;
-    --cbt-un: #98a2b3;   /* not visited  */
-    --cbt-no: #e04848;   /* not answered */
-    --cbt-ans: #2fa14e;  /* answered     */
-    --cbt-mk: #8a3fd1;   /* marked       */
+    --cbt-un: #98a2b3;
+    --cbt-no: #e04848;
+    --cbt-ans: #2fa14e;
+    --cbt-mk: #8a3fd1;
+  }
+
+  /* ================== CBT EXAM WINDOW (NTA / JEE style) ================== */
+  .cbt-app {
     height: 100vh;
     height: 100dvh;
     display: flex;
@@ -2037,182 +2137,42 @@ const CSS = `
     .cbt-qbody { overflow: visible; }
   }
 
-  /* ---------- RESULT ---------- */
-  .v2-score {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    margin-bottom: 22px;
-    padding-bottom: 18px;
-    border-bottom: 1px solid var(--rule);
-  }
-  .v2-score-num {
-    font-family: 'Instrument Serif', serif;
-    font-size: 72px;
-    line-height: 1;
-    color: var(--accent);
-  }
-  .v2-score-of {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    color: var(--dim);
-    letter-spacing: 0.06em;
-  }
-  .v2-res-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin-bottom: 26px;
-  }
-  .v2-res-cell {
-    border: 1px solid var(--rule);
-    background: var(--paper-2);
-    padding: 14px 10px;
-    text-align: center;
-  }
-  .v2-res-cell strong {
-    display: block;
-    font-family: 'Instrument Serif', serif;
-    font-size: 32px;
-    color: var(--ink);
-    line-height: 1;
-  }
-  .v2-res-cell span {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--dim);
-  }
-  .v2-res-cell.ok strong { color: oklch(0.45 0.13 150); }
-  .v2-res-cell.bad strong { color: var(--accent); }
-  .v2-res-cell.skip strong { color: #9a8f78; }
 
-  .v2-insight-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--paper);
-    border: 1px solid var(--paper);
-    color: var(--ink);
-    padding: 13px 20px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    cursor: pointer;
-    margin-bottom: 22px;
-    min-height: 44px;
-  }
-  .v2-insight-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-  .v2-review {
-    border-top: 1px solid var(--rule);
-    padding-top: 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    margin-bottom: 24px;
-  }
-  .v2-rev-item {
-    border: 1px solid var(--rule);
-    background: var(--paper-2);
-    padding: 16px 16px 14px;
-  }
-  .v2-rev-item.correct { border-left: 3px solid oklch(0.45 0.13 150); }
-  .v2-rev-item.wrong { border-left: 3px solid var(--accent); }
-  .v2-rev-item.unattempted { border-left: 3px solid #b8ad96; }
 
-  .v2-rev-head {
+
+
+  .v2-actions {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    margin-top: 1.1rem;
     flex-wrap: wrap;
   }
-  .v2-rev-num {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--ink);
+  @media (max-width: 640px) {
+    .v2-actions { flex-direction: column-reverse; align-items: stretch; }
+    .v2-actions .btn { width: 100%; }
   }
-  .v2-rev-tag {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    padding: 3px 7px;
-    color: #fff;
-  }
-  .v2-rev-tag.correct { background: oklch(0.45 0.13 150); }
-  .v2-rev-tag.wrong { background: var(--accent); }
-  .v2-rev-tag.unattempted { background: #b8ad96; color: #14110d; }
-  .v2-rev-marks {
-    margin-left: auto;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ink);
-  }
-
-  .v2-rev-q {
-    font-family: 'Instrument Serif', serif;
-    font-size: 17px;
-    line-height: 1.4;
-    color: var(--ink);
-    margin: 0 0 12px;
-    word-break: break-word;
-  }
-  .v2-rev-img { max-width: 100%; max-height: 220px; object-fit: contain; border: 1px solid var(--rule); margin: 0 auto 12px; display: block; }
-  .v2-rev-opts { display: flex; flex-direction: column; gap: 6px; }
-  .v2-rev-opt {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 11px;
-    border: 1px solid var(--rule);
-    background: var(--paper);
-  }
-  .v2-rev-opt.answer {
-    border-color: oklch(0.45 0.13 150);
-    background: oklch(0.96 0.04 150);
-  }
-  .v2-rev-opt.chosen {
-    border-color: var(--accent);
-    background: rgba(200,50,30,0.07);
-  }
-  .v2-rev-k {
-    width: 22px;
-    height: 22px;
-    border: 1px solid var(--rule);
-    display: grid;
-    place-items: center;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--ink-2);
-    flex-shrink: 0;
-  }
-  .v2-rev-opt.answer .v2-rev-k { background: oklch(0.45 0.13 150); border-color: oklch(0.45 0.13 150); color: #fff; }
-  .v2-rev-opt.chosen .v2-rev-k { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .v2-rev-t { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink-2); word-break: break-word; }
-
-  .v2-done { margin-top: 4px; }
 
   .v2-submitted-note {
-    border: 1px solid #d9d1bf;
-    background: #f0ece4;
-    padding: 14px 16px;
-    font-size: 13px;
+    border: 1px solid var(--color-rule);
+    background: var(--color-paper-2);
+    border-radius: var(--radius-input);
+    padding: 0.85rem 1rem;
+    font-size: 0.85rem;
     line-height: 1.6;
-    color: #6b6358;
-    margin-bottom: 18px;
+    color: var(--color-ink-2);
+    margin-bottom: 1.1rem;
   }
   .v2-pdf-err {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.04em;
-    color: #ff8a80;
-    margin: -10px 0 16px;
+    font-size: 0.85rem;
+    color: var(--color-danger);
+    background: var(--color-danger-soft);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+    margin: 0.6rem 0 0;
+    line-height: 1.5;
   }
 
   /* ---------- MATH PREVIEW ---------- */
@@ -2259,28 +2219,24 @@ const CSS = `
   /* ---------- RESPONSIVE (lobby / result screens) ---------- */
   @media (max-width: 640px) {
     .v2-center { padding: 16px 12px; padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom)); }
-    .v2-lobby-card { padding: 22px 16px 18px; box-shadow: 6px 6px 0 var(--ink); max-width: 100%; }
-    .v2-lobby-title { font-size: 28px; }
+    .v2-lobby-card { padding: 1.5rem 1.1rem 1.25rem; max-width: 100%; }
+    .v2-lobby-title { font-size: 1.5rem; }
     .v2-lobby-desc { font-size: 13px; }
-    .v2-instr { padding: 14px 12px 14px 28px; font-size: 12.5px; }
-    .v2-instr li::before { left: -18px; }
-    .v2-check { font-size: 12.5px; }
+    .v2-instr { padding: 0.9rem 0.75rem; font-size: 0.8rem; }
+        .v2-check { font-size: 12.5px; }
     .v2-field { margin-bottom: 18px; }
     .v2-name { font-size: 16px; padding: 12px 14px; } /* 16px prevents iOS zoom */
-    .v2-join { width: 100%; justify-content: center; padding: 14px 18px; }
-    .v2-res-grid { grid-template-columns: 1fr; }
-    .v2-score-num { font-size: 56px; }
-  }
+      }
 
   @media (max-width: 380px) {
-    .v2-lobby-title { font-size: 24px; }
+    .v2-lobby-title { font-size: 1.35rem; }
   }
 `;
 
 export default function ExamPage() {
   return (
     <Suspense
-      fallback={<div style={{ minHeight: "100vh", background: "#f4f0e8" }} />}
+      fallback={<div style={{ minHeight: "100vh", background: "var(--color-paper)" }} />}
     >
       <ExamContent />
     </Suspense>

@@ -1,0 +1,37 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Anyone may read images — question/notice media is public exam content.
+    // (Download URLs with tokens bypass rules entirely anyway.)
+    match /questions/{allPaths=**} {
+      allow read: if true;
+      // Admins are the only authed users. Uploads must be images ≤ 5 MB.
+      allow create, update: if request.auth != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      // Deletes happen when a question is removed — request.resource is null here.
+      allow delete: if request.auth != null;
+    }
+    match /notices/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+    // Public read (course page sells sheets). Admin-authored writes only:
+    // PDFs up to 20 MB, no other types, deletes only when signed in.
+    match /formula-sheets/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.resource.size < 20 * 1024 * 1024
+        && request.resource.contentType == 'application/pdf';
+      allow delete: if request.auth != null;
+    }
+    // Nothing else in this bucket is usable by clients.
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

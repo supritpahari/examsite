@@ -1,13 +1,15 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { uploadImage } from "@/lib/storage";
 import { useRouter } from "next/navigation";
 import type { Question, QuestionOption as Option, QuestionType } from "@/lib/questions";
 import { MathPreview } from "../shared";
+import ConfirmDialog from "../../_components/ConfirmDialog";
 
 const PLACEHOLDER = "Type using LaTeX-style syntax: $x^2$, $\\frac{a}{b}$, $\\vec{v}$, $\\sqrt{x}$";
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB — ImgBB free tier allows up to 32 MB but 5 MB is plenty for question images
-const IMBB_ENDPOINT = "https://api.imgbb.com/1/upload?key=4125525efeb9a21fe49db324919cdeaf";
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB is plenty for question images
 
 interface ToolItem {
   label: string;
@@ -154,7 +156,7 @@ export default function QuestionEditor({
         ]
   );
 
-  // Main image state — stored url may be a blob: preview or the remote ImgBB URL.
+  // Main image state — stored url may be a blob: preview or the remote Storage URL.
   // `removed` flag tracks explicit removal in edit mode so we know to deleteField on save.
   const [imageUrl, setImageUrl] = useState<string | undefined>(initial?.imageUrl);
   const [mainImgRemoved, setMainImgRemoved] = useState(false);
@@ -170,7 +172,6 @@ export default function QuestionEditor({
 
   const [chapter, setChapter] = useState(initial?.chapter ?? "");
   const [chapterOpen, setChapterOpen] = useState(false);
-  const [chapterQuery, setChapterQuery] = useState("");
   const [chapterHighlight, setChapterHighlight] = useState(0);
   const [typeOpen, setTypeOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -219,7 +220,6 @@ export default function QuestionEditor({
 
   useEffect(() => {
     if (chapterOpen) {
-      setChapterQuery("");
       setChapterHighlight(0);
       requestAnimationFrame(() => chapterInputRef.current?.focus());
     }
@@ -339,18 +339,8 @@ export default function QuestionEditor({
     return null;
   }
 
-  async function uploadToImgBB(f: File): Promise<string> {
-    const form = new FormData();
-    form.append("image", f);
-    const res = await fetch(IMBB_ENDPOINT, { method: "POST", body: form });
-    if (!res.ok) throw new Error(`ImgBB responded ${res.status}`);
-    const data = (await res.json()) as {
-      success?: boolean;
-      data?: { url?: string; display_url?: string };
-    };
-    const url = data.data?.display_url || data.data?.url;
-    if (!data.success || !url) throw new Error("Upload failed");
-    return url;
+  async function uploadQuestionImage(f: File): Promise<string> {
+    return uploadImage(f, "questions");
   }
 
   const setOptText = (id: string, text: string) => {
@@ -400,7 +390,7 @@ export default function QuestionEditor({
     setImageUrl(previewUrl);
 
     try {
-      const url = await uploadToImgBB(f);
+      const url = await uploadQuestionImage(f);
       setImageUrl(url);
       setMainUploadStatus("idle");
       setMainUploadError("");
@@ -458,7 +448,7 @@ export default function QuestionEditor({
     setOptImage(id, previewUrl);
 
     try {
-      const url = await uploadToImgBB(f);
+      const url = await uploadQuestionImage(f);
       setOptImage(id, url);
       setOptionUploadStatus((p) => ({ ...p, [id]: "idle" }));
       setOptionUploadError((p) => ({ ...p, [id]: "" }));
@@ -525,6 +515,10 @@ export default function QuestionEditor({
       showErr("Please fill in the question text.", "nq-prompt");
       return;
     }
+    if (!chapter.trim()) {
+      showErr("Chapter is required — pick one from the dropdown or type a new one.", "chapter");
+      return;
+    }
     if (filled.length !== 4) {
       showErr("Please fill all 4 options (each needs text or an image).", "options");
       return;
@@ -547,7 +541,7 @@ export default function QuestionEditor({
         options: finalOptions,
         marks: 0,
         negative: 0,
-        chapter: chapter.trim() || undefined,
+        chapter: chapter.trim(),
         imageUrl: finalImageUrl,
       });
       setSaved(true);
@@ -561,18 +555,16 @@ export default function QuestionEditor({
     }
   };
 
+  const [leaveConfirm, setLeaveConfirm] = useState<null | "upload" | "dirty">(null);
   const onBack = () => {
     if (saving) return;
     if (uploadsInFlight > 0) {
-      const ok = window.confirm(
-        "An image is still uploading. Leaving now will cancel the upload and discard this question. Leave anyway?"
-      );
-      if (!ok) return;
-    } else if (computeIsDirty() && !saved) {
-      const ok = window.confirm(
-        "You have unsaved changes. Leave this page without saving?"
-      );
-      if (!ok) return;
+      setLeaveConfirm("upload");
+      return;
+    }
+    if (computeIsDirty() && !saved) {
+      setLeaveConfirm("dirty");
+      return;
     }
     router.push(backHref);
   };
@@ -583,249 +575,283 @@ export default function QuestionEditor({
     setChapter(v.replace(/\s+/g, " "));
   };
 
+  const chapterTerm = chapter.trim().toLowerCase();
+  const chapterMatches = existingChapters.filter(
+    (c) => !chapterTerm || c.toLowerCase().includes(chapterTerm)
+  );
+  const chapterExactMatch = existingChapters.some((c) => c.toLowerCase() === chapterTerm);
+  const createRowVisible = Boolean(chapterTerm) && !chapterExactMatch;
+  const chapterMaxIndex = createRowVisible ? chapterMatches.length : Math.max(0, chapterMatches.length - 1);
+  const pickChapter = (c: string) => {
+    setChapter(c);
+    setChapterOpen(false);
+    markDirty();
+    chapterInputRef.current?.focus();
+  };
+  const onChapterKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!chapterOpen) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setChapterOpen(true);
+      }
+      return;
+    }
+    switch (e.key) {
+      case "Escape":
+        e.preventDefault();
+        setChapterOpen(false);
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        setChapterHighlight((i) => Math.min(chapterMaxIndex, i + 1));
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        setChapterHighlight((i) => Math.max(0, i - 1));
+        break;
+      case "Home":
+        e.preventDefault();
+        setChapterHighlight(0);
+        break;
+      case "End":
+        e.preventDefault();
+        setChapterHighlight(chapterMaxIndex);
+        break;
+      case "Enter":
+        e.preventDefault();
+        if (chapterHighlight < chapterMatches.length) {
+          pickChapter(chapterMatches[chapterHighlight]);
+        } else if (createRowVisible && chapterHighlight === chapterMatches.length) {
+          setChapterOpen(false); // keep the typed chapter; created on save
+        } else {
+          setChapterOpen(false);
+        }
+        break;
+      case "Tab":
+        setChapterOpen(false);
+        break;
+    }
+  };
+
   const filled = options.filter((o) => o.text.trim().length > 0 || Boolean(o.imageUrl));
   const isDirty = computeIsDirty();
 
   return (
-    <div
-      className="nq-root"
-      style={
-        {
-          "--paper": "#f4f0e8",
-          "--paper-2": "#ebe6da",
-          "--ink": "#14110d",
-          "--ink-2": "#3a352c",
-          "--dim": "#8a8275",
-          "--rule": "#d9d1bf",
-          "--accent": "oklch(0.52 0.20 25)",
-          "--accent-2": "oklch(0.42 0.22 25)",
-          "--ok": "#0f7a3d",
-          "--err": "#b3261e",
-        } as React.CSSProperties
-      }
-    >
+    <div className="nq-root">
       <style>{`
         .nq-root {
           min-height: 100vh;
-          background: var(--paper);
-          color: var(--ink);
-          font-family: 'Inter', sans-serif;
+          background: var(--color-paper);
+          color: var(--color-ink);
+          font-family: var(--font-body);
         }
 
         .nq-header {
-          display: flex; align-items: center; justify-content: space-between; gap: 16px;
-          padding: 22px 34px; border-bottom: 1px solid var(--rule); flex-wrap: wrap;
+          display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+          padding: 0.9rem var(--page-gutter); border-bottom: 1px solid var(--color-rule); flex-wrap: wrap;
+          max-width: var(--page-max); margin-inline: auto; width: 100%;
         }
-        .nq-header-title { font-family: 'Instrument Serif', serif; font-size: 28px; margin: 0; color: var(--ink); }
-        .nq-header-title em { font-style: italic; color: var(--accent); }
-        .nq-header-sub { font-size: 13px; color: var(--dim); margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+        .nq-header-title { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; letter-spacing: -0.03em; margin: 0; color: var(--color-ink); }
+        .nq-header-sub { font-size: 0.66rem; color: var(--color-muted); margin-top: 0.25rem; font-family: var(--font-mono); font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; }
         .nq-back {
-          background: transparent; border: 1px solid var(--ink); color: var(--ink);
-          padding: 10px 16px; cursor: pointer; font-family: 'JetBrains Mono', monospace;
-          font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+          background: var(--color-paper-2); border: 0; color: var(--color-ink-2);
+          padding: 0.55rem 1rem; border-radius: var(--radius-pill); cursor: pointer; font-family: var(--font-body);
+          font-size: 0.78rem; font-weight: 600; text-decoration: none;
+          transition: background var(--dur-micro), color var(--dur-micro);
         }
-        .nq-back:hover { background: var(--ink); color: var(--paper); }
+        .nq-back:hover { background: var(--color-paper-3); color: var(--color-ink); }
         .nq-back:disabled { opacity: 0.5; cursor: not-allowed; }
 
         .nq-main {
           display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-          gap: 0; max-width: 1280px; margin: 0 auto;
+          gap: 0; max-width: var(--page-max); margin: 0 auto; width: 100%;
         }
         @media (max-width: 960px) {
-          .nq-main { grid-template-columns: 1fr; }
-          .nq-pane { border-bottom: 1px solid var(--rule); }
+          .nq-main { grid-template-columns: minmax(0, 1fr); }
+          .nq-pane { border-bottom: 1px solid var(--color-rule); }
         }
 
-        .nq-pane { padding: 30px 34px; min-width: 0; }
+        .nq-pane { padding: 1.5rem 2rem; min-width: 0; }
         .nq-pane-label {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.2em; color: var(--dim); margin: 0 0 18px; display: flex; align-items: center; gap: 10px;
+          font-family: var(--font-mono); font-size: 0.6rem; font-weight: 500; text-transform: uppercase;
+          letter-spacing: 0.2em; color: var(--color-muted); margin: 0 0 1.1rem; display: flex; align-items: center; gap: 0.65rem;
         }
-        .nq-pane-label::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
-        .nq-form { border-right: 1px solid var(--rule); }
+        .nq-pane-label::after { content: ""; flex: 1; height: 1px; background: var(--color-rule); }
+        .nq-form { border-right: 1px solid var(--color-rule); }
 
-        .nq-field { margin-bottom: 18px; }
+        .nq-field { margin-bottom: 1rem; }
         .nq-field label {
-          display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px;
-          text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-2); margin-bottom: 8px;
+          display: block; font-family: var(--font-mono); font-size: 0.58rem; font-weight: 500;
+          text-transform: uppercase; letter-spacing: 0.18em; color: var(--color-muted); margin-bottom: 0.4rem;
         }
         .nq-field input, .nq-field textarea {
-          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink); outline: none;
+          width: 100%; background: var(--color-paper-2); border: 1.5px solid transparent; border-radius: var(--radius-input);
+          padding: 0.7rem 0.85rem; font-family: var(--font-mono); font-size: 0.9rem; color: var(--color-ink); outline: none;
+          transition: border-color var(--dur-micro), background var(--dur-micro);
         }
-        .nq-field input:focus, .nq-field textarea:focus { background: #fff; }
-        .nq-row { display: flex; gap: 14px; margin-bottom: 18px; }
-        .nq-row > * { flex: 1; }
+        .nq-field input:focus, .nq-field textarea:focus { border-color: var(--color-accent-2); background: var(--color-paper); }
+        .nq-row { display: flex; gap: 0.9rem; margin-bottom: 1rem; }
+        .nq-row > * { flex: 1; min-width: 0; }
         .nq-row .nq-field { margin-bottom: 0; }
 
         .nq-select { position: relative; }
         .nq-select-trigger {
-          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink);
-          outline: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+          width: 100%; background: var(--color-paper-2); border: 1.5px solid transparent; border-radius: var(--radius-input);
+          padding: 0.7rem 0.85rem; font-family: var(--font-mono); font-size: 0.88rem; color: var(--color-ink);
+          outline: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+          transition: border-color var(--dur-micro), background var(--dur-micro);
         }
-        .nq-select-trigger:focus { background: #fff; }
-        .nq-caret { transition: transform 0.18s ease; font-size: 12px; color: var(--dim); }
+        .nq-select-trigger:focus { border-color: var(--color-accent-2); background: var(--color-paper); }
+        .nq-caret { transition: transform 0.18s var(--ease-out); font-size: 0.75rem; color: var(--color-muted); }
         .nq-caret.open { transform: rotate(180deg); }
         .nq-select-menu {
-          position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
-          list-style: none; margin: 0; padding: 4px; background: var(--paper);
-          border: 1px solid var(--ink); box-shadow: 6px 6px 0 rgba(20,17,13,0.12);
+          position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: var(--z-dropdown);
+          list-style: none; margin: 0; padding: 0.3rem; background: var(--color-paper);
+          border: 1px solid var(--color-rule-2); border-radius: var(--radius-input); box-shadow: var(--shadow-lift);
         }
         .nq-select-opt {
-          padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
-          color: var(--ink-2); cursor: pointer; border: 1px solid transparent;
+          padding: 0.55rem 0.65rem; font-family: var(--font-mono); font-size: 0.82rem;
+          color: var(--color-ink-2); cursor: pointer; border: 0; border-radius: var(--radius-sm);
         }
-        .nq-select-opt:hover { background: var(--paper-2); color: var(--ink); }
-        .nq-select-opt.sel { color: var(--accent); border-color: var(--rule); background: var(--paper-2); }
-        .nq-select-opt.hi { background: var(--paper-2); color: var(--ink); }
-        .nq-select-placeholder { color: var(--dim); }
-        .nq-chapter-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-        .nq-chapter-clear {
-          width: 22px; height: 22px; display: grid; place-items: center;
-          border: 1px solid var(--rule); color: var(--dim); font-size: 16px; line-height: 1;
+        .nq-select-opt:hover, .nq-select-opt.hi { background: var(--color-paper-2); color: var(--color-ink); }
+        .nq-select-opt.sel { background: var(--color-tint-cyan); color: var(--color-ink); font-weight: 600; }
+        .nq-select-placeholder { color: var(--color-faint); }
+        .nq-caret-btn {
+          position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+          width: 30px; height: 30px; display: grid; place-items: center;
+          background: transparent; border: 0; border-radius: var(--radius-sm);
+          color: var(--color-muted); cursor: pointer; transition: color var(--dur-micro), background var(--dur-micro);
         }
-        .nq-chapter-clear:hover { border-color: var(--accent); color: var(--accent); }
-        .nq-chapter-menu {
-          position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 24;
-          background: var(--paper); border: 1px solid var(--ink);
-          box-shadow: 6px 6px 0 rgba(20,17,13,0.12);
-        }
-        .nq-chapter-search {
-          width: 100% !important; border: 0 !important; border-bottom: 1px solid var(--rule) !important;
-          background: #fff !important; font-size: 13px !important; padding: 10px 12px !important;
-        }
-        .nq-chapter-list {
-          position: static !important; top: auto !important; box-shadow: none !important;
-          border: 0 !important; max-height: 220px; overflow-y: auto;
-        }
-        .nq-chapter-create { color: var(--accent) !important; }
-        .nq-chapter-empty { color: var(--dim); cursor: default; }
+        .nq-caret-btn:hover { color: var(--color-accent-2-deep); background: var(--color-tint-cyan); }
+        .nq-chapter-create { color: var(--color-accent-2-deep) !important; font-weight: 600; }
+        .nq-chapter-empty { color: var(--color-muted); padding: 0.55rem 0.65rem; font-size: 0.78rem; line-height: 1.5; list-style: none; }
+        .nq-req { color: var(--color-danger); margin-left: 0.2em; }
+        .nq-select input[aria-expanded="true"] { border-color: var(--color-accent-2); background: var(--color-paper); }
 
-        .nq-hint { font-size: 11px; color: var(--dim); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
-        .nq-hint.err { color: var(--err); }
-        .nq-hint.ok { color: var(--ok); }
+        .nq-hint { font-size: 0.66rem; color: var(--color-muted); margin-top: 0.35rem; font-family: var(--font-mono); }
+        .nq-hint.err { color: var(--color-danger); }
+        .nq-hint.ok { color: var(--color-mint-deep); }
 
         .nq-toolbar {
-          display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 0;
-          border: 1px solid var(--rule); border-bottom: 0; padding: 8px; background: var(--paper-2);
+          display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0;
+          border: 1px solid var(--color-rule); border-bottom: 0; border-radius: var(--radius-input) var(--radius-input) 0 0;
+          padding: 0.4rem; background: var(--color-paper-2);
         }
         .nq-tool {
-          min-width: 34px; height: 32px; padding: 0 8px; background: var(--paper);
-          border: 1px solid var(--rule); cursor: pointer; font-family: 'JetBrains Mono', monospace;
-          font-size: 13px; color: var(--ink-2); line-height: 1;
+          min-width: 34px; height: 32px; padding: 0 0.5rem; background: var(--color-paper);
+          border: 1px solid var(--color-rule); border-radius: 6px; cursor: pointer; font-family: var(--font-mono);
+          font-size: 0.78rem; color: var(--color-ink-2); line-height: 1; transition: border-color var(--dur-micro), color var(--dur-micro);
         }
-        .nq-tool:hover { color: var(--accent); border-color: var(--accent); }
+        .nq-tool:hover { color: var(--color-accent-2-deep); border-color: var(--color-accent-2); }
         .nq-tool:active { transform: translateY(1px); }
-        .nq-math-input { border-top: 0 !important; }
+        .nq-math-input { border-top: 0 !important; border-radius: 0 0 var(--radius-input) var(--radius-input) !important; }
         .nq-field > .nq-toolbar + textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 
-        .nq-opt-edit { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; transition: background 0.15s ease; }
-        .nq-opt-edit.correct-row { background: rgba(220, 60, 40, 0.08); border: 1px solid var(--accent); padding: 6px; }
+        .nq-opt-edit { display: flex; align-items: flex-start; gap: 0.6rem; margin-bottom: 0.45rem; transition: background var(--dur-micro); }
+        .nq-opt-edit.correct-row { background: var(--color-tint-mint); border-radius: var(--radius-sm); padding: 0.35rem; }
         .nq-opt-key {
-          flex: 0 0 auto; width: 32px; height: 32px; border: 1px solid var(--rule);
-          background: var(--paper); color: var(--ink-2); cursor: pointer;
-          font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600;
-          display: grid; place-items: center; transition: all 0.15s ease;
+          flex: 0 0 auto; width: 32px; height: 32px; border: 1.5px solid var(--color-rule-2); border-radius: var(--radius-sm);
+          background: var(--color-paper); color: var(--color-ink-2); cursor: pointer;
+          font-family: var(--font-mono); font-size: 0.78rem; font-weight: 600;
+          display: grid; place-items: center; transition: all var(--dur-micro);
         }
-        .nq-opt-key:hover { border-color: var(--accent); color: var(--accent); }
-        .nq-opt-key.correct { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .nq-opt-key:hover { border-color: var(--color-accent-2); color: var(--color-accent-2-deep); }
+        .nq-opt-key.correct { background: var(--color-mint); border-color: var(--color-mint); color: var(--color-ink); }
         .nq-opt-body { flex: 1; min-width: 0; }
-        .nq-opt-img-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
-        .nq-opt-img-preview { max-height: 48px; max-width: 120px; border: 1px solid var(--rule); object-fit: contain; }
+        .nq-opt-img-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; flex-wrap: wrap; }
+        .nq-opt-img-preview { max-height: 48px; max-width: 120px; border: 1px solid var(--color-rule); border-radius: var(--radius-sm); object-fit: contain; }
         .nq-file {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-2);
-          border: 1px solid var(--rule); padding: 10px 12px; display: inline-block; cursor: pointer;
-          background: var(--paper);
+          font-family: var(--font-body); font-size: 0.74rem; font-weight: 600; color: var(--color-ink-2);
+          background: var(--color-paper-2); border: 0; padding: 0.55rem 0.9rem; display: inline-flex; align-items: center; gap: 0.4rem;
+          cursor: pointer; border-radius: var(--radius-pill); transition: background var(--dur-micro), color var(--dur-micro);
         }
         .nq-file input { display: none; }
-        .nq-file-sm { display: inline-block; padding: 6px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+        .nq-file:hover { background: var(--color-paper-3); color: var(--color-ink); }
+        .nq-file-sm { display: inline-block; padding: 0.32rem 0.65rem; font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.08em; }
         .nq-file-sm-remove {
-          background: transparent; border: 1px solid var(--rule); color: var(--ink-2);
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.08em; padding: 6px 10px; cursor: pointer;
+          background: transparent; border: 1px solid var(--color-rule-2); color: var(--color-muted);
+          border-radius: var(--radius-pill); font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase;
+          letter-spacing: 0.08em; padding: 0.32rem 0.65rem; cursor: pointer; transition: border-color var(--dur-micro), color var(--dur-micro);
         }
-        .nq-file-sm-remove:hover { color: var(--accent); border-color: var(--accent); }
+        .nq-file-sm-remove:hover { color: var(--color-danger); border-color: var(--color-danger); }
         .nq-file-retry {
-          background: transparent; border: 1px solid var(--err); color: var(--err);
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.08em; padding: 6px 10px; cursor: pointer;
+          background: transparent; border: 1px solid var(--color-danger); color: var(--color-danger);
+          border-radius: var(--radius-pill); font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase;
+          letter-spacing: 0.08em; padding: 0.32rem 0.65rem; cursor: pointer;
         }
-        .nq-file-retry:hover { background: var(--err); color: #fff; }
+        .nq-file-retry:hover { background: var(--color-danger); color: var(--color-on-panel); }
 
         .nq-file.nq-uploading {
-          color: var(--accent); border-color: var(--accent);
-          background: rgba(220, 60, 40, 0.04);
+          color: var(--color-accent-2-deep); background: var(--color-tint-cyan);
           cursor: progress;
         }
         .nq-file.nq-uploading .nq-spinner {
-          display: inline-block; width: 10px; height: 10px; margin-right: 6px;
+          display: inline-block; width: 10px; height: 10px; margin-right: 0.3rem;
           border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%;
           vertical-align: -1px;
           animation: nq-spin 0.7s linear infinite;
         }
         .nq-file.nq-error {
-          color: var(--err); border-color: var(--err);
-          background: rgba(179, 38, 30, 0.04);
+          color: var(--color-danger); background: var(--color-danger-soft);
         }
         @keyframes nq-spin { to { transform: rotate(360deg); } }
 
-        .nq-img-preview { max-height: 90px; margin-top: 10px; border: 1px solid var(--rule); display: block; }
+        .nq-img-preview { max-height: 90px; margin-top: 0.6rem; border: 1px solid var(--color-rule); border-radius: var(--radius-sm); display: block; }
 
-        .nq-footer { padding: 0 34px 34px; max-width: 1280px; margin: 0 auto; position: relative; }
+        .nq-footer { padding: 0 2rem 2rem; max-width: var(--page-max); margin: 0 auto; position: relative; width: 100%; }
         .nq-error {
-          font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--err);
-          margin-bottom: 12px; line-height: 1.5; padding: 10px 12px;
-          border: 1px solid var(--err); background: rgba(179,38,30,0.05);
+          font-size: 0.85rem; color: var(--color-danger);
+          margin-bottom: 0.75rem; line-height: 1.5; padding: 0.55rem 0.75rem;
+          border-radius: var(--radius-sm); background: var(--color-danger-soft);
         }
         .nq-toast {
-          font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ok);
-          margin-bottom: 12px; line-height: 1.5; padding: 10px 12px;
-          border: 1px solid var(--ok); background: rgba(15,122,61,0.07);
+          font-size: 0.85rem; color: var(--color-mint-deep);
+          margin-bottom: 0.75rem; line-height: 1.5; padding: 0.55rem 0.75rem;
+          border-radius: var(--radius-sm); background: var(--color-tint-mint);
         }
         .nq-submit {
-          width: 100%; background: var(--accent); color: #fff; border: 1px solid var(--accent);
-          padding: 14px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14px;
-          letter-spacing: 0.04em; cursor: pointer; text-transform: uppercase;
+          width: 100%; background: var(--color-accent); color: var(--color-on-accent); border: 0;
+          border-radius: var(--radius-pill); padding: 0.8rem; font-family: var(--font-display); font-weight: 600; font-size: 0.88rem;
+          letter-spacing: -0.01em; cursor: pointer; text-transform: none;
+          box-shadow: 0 4px 0 0 var(--color-accent-deep), 0 6px 12px -3px var(--color-accent-cast);
+          transition: transform var(--dur-micro) var(--ease-press), box-shadow var(--dur-micro) var(--ease-press);
         }
-        .nq-submit:hover { background: var(--accent-2); border-color: var(--accent-2); }
+        .nq-submit:hover { transform: translateY(-2px); box-shadow: 0 6px 0 0 var(--color-accent-deep), 0 12px 20px -4px var(--color-accent-cast); }
+        .nq-submit:active { transform: translateY(2px); box-shadow: 0 1px 0 0 var(--color-accent-deep); }
         .nq-submit:disabled { opacity: 0.6; cursor: not-allowed; }
         .nq-waiting {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
-          margin-bottom: 10px; letter-spacing: 0.04em;
+          font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; color: var(--color-muted);
+          margin-bottom: 0.5rem; letter-spacing: 0.06em;
         }
 
         /* ---- Live preview pane ---- */
         .nq-preview-card {
-          border: 1px solid var(--ink); background: #fffdf8; position: relative; padding: 26px 26px 30px;
+          border: 1px solid var(--color-rule); background: var(--color-paper); position: relative; border-radius: var(--radius-card);
+          box-shadow: var(--shadow-card); padding: 1.5rem 1.5rem 1.75rem;
         }
-        .nq-preview-card::before, .nq-preview-card::after {
-          content: ""; position: absolute; width: 12px; height: 12px; background: var(--ink);
-        }
-        .nq-preview-card::before { top: -1px; left: -1px; }
-        .nq-preview-card::after { bottom: -1px; right: -1px; }
-        .nq-preview-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+        .nq-preview-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.9rem; }
         .nq-badge {
-          font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase;
-          letter-spacing: 0.12em; padding: 4px 9px; border: 1px solid var(--rule); color: var(--ink-2);
+          font-family: var(--font-body); font-size: 0.6rem; font-weight: 600;
+          letter-spacing: 0.06em; padding: 0.2rem 0.55rem; border-radius: var(--radius-pill); border: 0;
+          background: var(--color-paper-2); color: var(--color-ink-2);
         }
-        .nq-badge.accent { border-color: var(--accent); color: var(--accent); }
-        .nq-preview-img { max-height: 140px; max-width: 100%; margin-bottom: 14px; border: 1px solid var(--rule); }
+        .nq-badge.accent { background: var(--color-tint-cyan); color: var(--color-accent-2-deep); }
+        .nq-preview-img { max-height: 140px; max-width: 100%; margin-bottom: 0.9rem; border: 1px solid var(--color-rule); border-radius: var(--radius-sm); }
         .nq-preview-prompt {
-          font-family: 'Georgia', 'Times New Roman', serif; font-size: 18px; color: var(--ink);
-          line-height: 1.7; word-break: break-word; margin-bottom: 20px;
+          font-family: var(--font-body); font-size: 1.05rem; color: var(--color-ink);
+          line-height: 1.65; word-break: break-word; margin-bottom: 1.1rem;
         }
         .nq-preview-inline {
-          font-family: 'Georgia', 'Times New Roman', serif; font-size: 17px;
-          color: var(--ink); line-height: 1.6; word-break: break-word;
+          font-family: var(--font-body); font-size: 1rem;
+          color: var(--color-ink); line-height: 1.6; word-break: break-word;
         }
         .nq-preview-body {
-          font-family: 'Georgia', 'Times New Roman', serif; font-size: 18px;
-          color: var(--ink); line-height: 1.7; word-break: break-word;
+          font-family: var(--font-body); font-size: 1.05rem;
+          color: var(--color-ink); line-height: 1.65; word-break: break-word;
         }
         .nq-prev-math { padding: 0 1px; }
         .nq-frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 2px; font-size: 0.78em; }
-        .nq-frac-num { border-bottom: 1px solid var(--ink); padding: 0 5px; }
+        .nq-frac-num { border-bottom: 1px solid var(--color-ink); padding: 0 5px; }
         .nq-frac-den { padding: 0 5px; }
         .nq-vec { position: relative; display: inline-block; }
         .nq-vec-arrow { position: absolute; top: -0.55em; left: 50%; transform: translateX(-50%); font-size: 0.8em; line-height: 1; letter-spacing: -0.05em; pointer-events: none; }
@@ -833,36 +859,38 @@ export default function QuestionEditor({
         .nq-hat { position: relative; display: inline-block; }
         .nq-hat-cap { position: absolute; top: -0.55em; left: 50%; transform: translateX(-55%) scaleX(1.1); font-size: 0.85em; line-height: 1; pointer-events: none; }
         .nq-hat-body { padding: 0 1px; }
-        .nq-sqrt { border-top: 1px solid var(--ink); padding: 0 2px; }
-        .nq-sqrt-body { border-top: 1px solid var(--ink); padding: 0 2px; }
+        .nq-sqrt { border-top: 1px solid var(--color-ink); padding: 0 2px; }
+        .nq-sqrt-body { border-top: 1px solid var(--color-ink); padding: 0 2px; }
 
-        .nq-options { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+        .nq-options { display: flex; flex-direction: column; gap: 0.45rem; margin-top: 0.2rem; }
         .nq-option {
-          display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--rule);
-          padding: 12px 14px; background: var(--paper); transition: all 0.15s ease;
+          display: flex; align-items: flex-start; gap: 0.65rem; border: 1.5px solid var(--color-rule); border-radius: var(--radius-input);
+          padding: 0.65rem 0.75rem; background: var(--color-paper); transition: border-color var(--dur-micro), background var(--dur-micro);
         }
-        .nq-option.correct { border-color: var(--accent); background: rgba(220, 60, 40, 0.07); }
+        .nq-option.correct { border-color: var(--color-mint-deep); background: var(--color-tint-mint); }
         .nq-opt-key-badge {
-          flex: 0 0 auto; width: 28px; height: 28px; border: 1px solid var(--rule);
-          display: grid; place-items: center; font-family: 'JetBrains Mono', monospace;
-          font-size: 12px; font-weight: 600; color: var(--ink-2); background: var(--paper-2);
+          flex: 0 0 auto; width: 28px; height: 28px; border: 1.5px solid var(--color-rule-2); border-radius: var(--radius-sm);
+          display: grid; place-items: center; font-family: var(--font-mono);
+          font-size: 0.72rem; font-weight: 600; color: var(--color-ink-2); background: var(--color-paper-2);
         }
-        .nq-option.correct .nq-opt-key-badge { background: var(--accent); color: #fff; border-color: var(--accent); }
-        .nq-opt-text { flex: 1; min-width: 0; }
-        .nq-opt-img { max-height: 60px; max-width: 160px; margin-top: 8px; border: 1px solid var(--rule); object-fit: contain; }
+        .nq-option.correct .nq-opt-key-badge { background: var(--color-mint); border-color: var(--color-mint); color: var(--color-ink); }
+        .nq-opt-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        .nq-opt-img { max-height: 60px; max-width: 160px; margin-top: 0.5rem; border: 1px solid var(--color-rule); border-radius: var(--radius-sm); object-fit: contain; }
         .nq-correct-tag {
-          flex: 0 0 auto; font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase;
-          letter-spacing: 0.12em; color: var(--accent); border: 1px solid var(--accent); padding: 3px 8px;
+          flex: 0 0 auto; font-family: var(--font-body); font-size: 0.55rem; font-weight: 600; text-transform: uppercase;
+          letter-spacing: 0.1em; color: var(--color-mint-deep); border-radius: var(--radius-pill); padding: 0.15rem 0.5rem;
+          background: var(--color-tint-mint); align-self: center;
         }
-        .nq-placeholder { color: var(--dim); font-family: 'Georgia', serif; font-style: italic; }
-        .nq-empty-hint { color: var(--dim); font-size: 13px; line-height: 1.6; }
+        .nq-placeholder { color: var(--color-muted); font-style: normal; }
+        .nq-empty-hint { color: var(--color-muted); font-size: 0.85rem; line-height: 1.6; }
+
       `}</style>
 
       <header className="nq-header">
         <div>
-          <h1 className="nq-header-title">{title.indexOf(" ") === -1 ? <em>{title}</em> : (
+          <h1 className="nq-header-title">{title.indexOf(" ") === -1 ? <span className="hl">{title}</span> : (
             <>
-              {title.split(" ")[0]} <em>{title.split(" ").slice(1).join(" ")}</em>
+              {title.split(" ")[0]} <span className="hl">{title.split(" ").slice(1).join(" ")}</span>
             </>
           )}</h1>
           <div className="nq-header-sub">{subtitle}</div>
@@ -926,21 +954,86 @@ export default function QuestionEditor({
           </div>
 
           <div className="nq-field">
-            <label>Chapter (optional)</label>
-            <input
-              type="text"
-              value={chapter}
-              placeholder="e.g. Kinematics, Thermodynamics"
-              list="nq-chapter-suggestions"
-              autoComplete="off"
-              onChange={(e) => onChapterChange(e.target.value)}
-            />
-            <datalist id="nq-chapter-suggestions">
-              {existingChapters.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-            <div className="nq-hint">Used to group questions when adding them to an exam by chapter.</div>
+            <label htmlFor="chapter">Chapter <span className="nq-req" aria-hidden="true">*</span></label>
+            <div className="nq-select" ref={chapterRef}>
+              <input
+                ref={chapterInputRef}
+                id="chapter"
+                type="text"
+                role="combobox"
+                aria-expanded={chapterOpen}
+                aria-haspopup="listbox"
+                aria-autocomplete="list"
+                aria-controls="nq-chapter-listbox"
+                aria-activedescendant={
+                  chapterOpen && chapterHighlight < chapterMatches.length
+                    ? `nq-chapter-opt-${chapterHighlight}`
+                    : chapterOpen && createRowVisible
+                      ? "nq-chapter-create"
+                      : undefined
+                }
+                value={chapter}
+                placeholder="e.g. Kinematics, Thermodynamics"
+                autoComplete="off"
+                required
+                onFocus={() => setChapterOpen(true)}
+                onClick={() => setChapterOpen(true)}
+                onChange={(e) => {
+                  onChapterChange(e.target.value);
+                  setChapterOpen(true);
+                  setChapterHighlight(0);
+                }}
+                onKeyDown={onChapterKeyDown}
+              />
+              <button
+                type="button"
+                className="nq-caret-btn"
+                tabIndex={-1}
+                aria-hidden="true"
+                onClick={() => setChapterOpen((o) => !o)}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+              {chapterOpen && (
+                <ul className="nq-select-menu" role="listbox" id="nq-chapter-listbox" aria-label="Chapters">
+                  {chapterMatches.map((c, i) => (
+                    <li
+                      key={c}
+                      role="option"
+                      id={`nq-chapter-opt-${i}`}
+                      aria-selected={c === chapter}
+                      className={`nq-select-opt${c === chapter ? " sel" : ""}${i === chapterHighlight ? " hi" : ""}`}
+                      onMouseEnter={() => setChapterHighlight(i)}
+                      onClick={() => pickChapter(c)}
+                    >
+                      {c}
+                    </li>
+                  ))}
+                  {chapterMatches.length === 0 && (
+                    <li className="nq-chapter-empty">
+                      {existingChapters.length === 0
+                        ? "No chapters yet — type one, it will be created on save."
+                        : "No matches — keep typing to create a new one."}
+                    </li>
+                  )}
+                  {chapterTerm && !chapterExactMatch && (
+                    <li
+                      role="option"
+                      aria-selected={false}
+                      id="nq-chapter-create"
+                      className="nq-select-opt nq-chapter-create"
+                      onMouseEnter={() => setChapterHighlight(chapterMatches.length)}
+                      onClick={() => setChapterOpen(false)}
+                    >
+                      Create chapter “{chapter.trim()}”
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
+            <div className="nq-hint">Required — used to group questions when adding them to an exam by chapter.</div>
           </div>
 
           <div className="nq-field">
@@ -967,7 +1060,7 @@ export default function QuestionEditor({
                 ) : mainUploadStatus === "error" ? (
                   <>Upload failed</>
                 ) : imageUrl ? (
-                  <>Image attached ✓ (change)</>
+                  <>Image attached (change)</>
                 ) : (
                   <>Choose image…</>
                 )}
@@ -1133,7 +1226,7 @@ export default function QuestionEditor({
 
       <div className="nq-footer" ref={footerRef}>
         {error && <div className="nq-error">{error.msg}</div>}
-        {saved && <div className="nq-toast">Question saved ✓ — returning to list…</div>}
+        {saved && <div className="nq-toast">Question saved — returning to list…</div>}
         {!saved && !error && uploadsInFlight > 0 && (
           <div className="nq-waiting">
             Waiting for {uploadsInFlight} image upload{uploadsInFlight === 1 ? "" : "s"} to finish before saving…
@@ -1156,7 +1249,7 @@ export default function QuestionEditor({
             : saving
               ? "Saving…"
               : saved
-                ? "Saved ✓"
+                ? "Saved"
                 : "Save Question"}
         </button>
         {isDirty && !saving && !saved && !error && (
@@ -1165,6 +1258,23 @@ export default function QuestionEditor({
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={leaveConfirm !== null}
+        title={leaveConfirm === "upload" ? "Leave with an image still uploading?" : "Leave without saving?"}
+        description={
+          leaveConfirm === "upload"
+            ? "An image is still uploading. Leaving now will cancel the upload and discard this question."
+            : "You have unsaved changes. Leaving this page will discard them."
+        }
+        confirmLabel={leaveConfirm === "upload" ? "Leave anyway" : "Discard changes"}
+        danger
+        onCancel={() => setLeaveConfirm(null)}
+        onConfirm={() => {
+          setLeaveConfirm(null);
+          router.push(backHref);
+        }}
+      />
     </div>
   );
 }

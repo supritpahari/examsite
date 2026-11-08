@@ -1,0 +1,110 @@
+/* Hallmark · design.md tokens — Hum (playful) · World of Physics
+ * Locked 2026-11-08. Pages reference these by name; never inline raw values. */
+
+:root {
+  /* Paper / surfaces (warm cream — never pure white) */
+  --color-paper:      oklch(97% 0.012 95);
+  --color-paper-2:    oklch(94% 0.016 95);
+  --color-paper-3:    oklch(91% 0.020 95);
+  --color-tint-pear:  oklch(94.5% 0.055 95);
+  --color-tint-cyan:  oklch(94.5% 0.045 235);
+  --color-tint-coral: oklch(93.5% 0.045 18);
+  --color-tint-mint:  oklch(94.5% 0.045 150);
+
+  /* Ink (cool near-black — never pure black) */
+  --color-ink:        oklch(20% 0.012 250);
+  --color-ink-2:      oklch(38% 0.010 250);
+  --color-muted:      oklch(52% 0.010 250);
+  --color-faint:      oklch(72% 0.012 95);
+  --color-rule:       oklch(88% 0.012 95);
+  --color-rule-2:     oklch(80% 0.016 95);
+
+  /* Accents — each owns its own surface; never blended in gradients */
+  --color-accent:      oklch(86% 0.18 95);   /* pear — primary action */
+  --color-accent-deep: oklch(74% 0.19 85);   /* pear button edge */
+  --color-accent-cast: oklch(76% 0.20 95 / 0.45); /* pear cast shadow */
+  --color-accent-2:    oklch(66% 0.18 235);  /* sky-cyan — links, secondary */
+  --color-accent-2-deep: oklch(44% 0.16 235);
+  --color-accent-3:    oklch(68% 0.24 18);   /* coral — ONE pop moment per page */
+  --color-accent-3-deep: oklch(42% 0.19 18);
+  --color-mint:        oklch(80% 0.16 150);
+  --color-mint-deep:   oklch(43% 0.12 150);
+  --color-lavender:    oklch(74% 0.16 305);  /* rare tag chips */
+  --color-focus:       oklch(66% 0.18 235);
+
+  --color-on-accent:   oklch(20% 0.012 250); /* ink on pear */
+  --color-on-accent-2: oklch(20% 0.012 250); /* ink on cyan */
+  --color-on-accent-3: oklch(97% 0.012 95);  /* cream on coral */
+  --color-on-panel:    oklch(94% 0.008 95);  /* cream on dark panel */
+  --color-panel-dim:   oklch(72% 0.010 95);
+
+  /* Dark panel (admin sidebar) */
+  --color-panel:      oklch(24% 0.015 250);
+  --color-panel-2:    oklch(29% 0.015 250);
+  --color-panel-rule: oklch(36% 0.015 250);
+
+  /* Status */
+  --color-success:      oklch(46% 0.12 150);
+  --color-danger:       oklch(47% 0.20 18);
+  --color-danger-soft:  oklch(93.5% 0.045 18);
+
+  /* Typography */
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-body:    "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Type scale — 1.25 major third, 16px base */
+  --text-xs:   0.64rem;
+  --text-sm:   0.8rem;
+  --text-base: 1rem;
+  --text-md:   1.25rem;
+  --text-lg:   1.5625rem;
+  --text-xl:   1.9531rem;
+  --text-2xl:  2.4414rem;
+  --text-3xl:  3.0518rem;
+  --text-4xl:  3.8147rem;
+  --text-display: clamp(2.75rem, 5vw + 1rem, 5.25rem);
+  --text-display-s: clamp(2.1rem, 4vw + 0.9rem, 3.6rem);
+
+  /* Spacing — 4pt named scale */
+  --space-3xs: 0.125rem;
+  --space-2xs: 0.25rem;
+  --space-xs:  0.5rem;
+  --space-sm:  0.75rem;
+  --space-md:  1rem;
+  --space-lg:  1.5rem;
+  --space-xl:  2.5rem;
+  --space-2xl: 4rem;
+  --space-3xl: 6rem;
+  --space-4xl: 9rem;
+
+  /* Shell — one width model for plain and banded sections alike */
+  --page-max:    72rem;
+  --page-gutter: clamp(1.25rem, 4vw, 2.5rem);
+
+  /* Radii — Hum is the rounded theme; no square corners anywhere */
+  --radius-card:  20px;
+  --radius-input: 12px;
+  --radius-pill:  999px;
+  --radius-sm:    8px;
+
+  /* Motion */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:     cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-snap:   cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-press:  cubic-bezier(0.2, 0.7, 0.3, 1);
+  --dur-micro: 140ms;
+  --dur-short: 220ms;
+  --dur-long:  420ms;
+
+  /* Shadows — soft, low, warm */
+  --shadow-card: 0 12px 32px -16px oklch(20% 0.012 250 / 0.18);
+  --shadow-lift: 0 18px 44px -18px oklch(20% 0.012 250 / 0.28);
+  --shadow-chip: 0 4px 0 0 var(--color-accent-deep), 0 6px 12px -3px var(--color-accent-cast);
+
+  /* Z — named scale */
+  --z-base: 1; --z-raised: 10; --z-dropdown: 100; --z-sticky: 200;
+  --z-modal: 400; --z-toast: 500; --z-tooltip: 600;
+}

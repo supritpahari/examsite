@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -16,43 +17,44 @@ import {
   NOTICE_TAB_TARGETS,
 } from "@/lib/notices";
 import { NoticeBlocksView } from "@/app/notice-view";
+import ConfirmDialog from "../../_components/ConfirmDialog";
+import { uploadImage } from "@/lib/storage";
 
-const IMBB_ENDPOINT = "https://api.imgbb.com/1/upload?key=4125525efeb9a21fe49db324919cdeaf";
 const MAX_IMG_BYTES = 5 * 1024 * 1024;
 
 // --- Color palette ---
 const COLOR_SWATCHES = [
-  { label: "Ink", value: "#14110d" },
-  { label: "Accent", value: "oklch(0.52 0.20 25)" },
-  { label: "Dim", value: "#8a8275" },
+  { label: "Ink", value: "var(--color-ink)" },
+  { label: "Accent", value: "var(--color-accent)" },
+  { label: "Dim", value: "var(--color-muted)" },
   { label: "White", value: "#ffffff" },
-  { label: "Cream", value: "#f4f0e8" },
+  { label: "Cream", value: "var(--color-paper)" },
   { label: "Blue", value: "#1d4ed8" },
-  { label: "Green", value: "#0f7a3d" },
-  { label: "Red", value: "#b3261e" },
+  { label: "Green", value: "var(--color-mint-deep)" },
+  { label: "Red", value: "var(--color-danger)" },
   { label: "Gold", value: "#b8860b" },
 ];
 
 const BG_SWATCHES = [
   { label: "None", value: "" },
-  { label: "Paper", value: "#f4f0e8" },
-  { label: "Cream-2", value: "#ebe6da" },
+  { label: "Paper", value: "var(--color-paper)" },
+  { label: "Cream-2", value: "var(--color-paper-2)" },
   { label: "Accent tint", value: "rgba(220,60,40,0.08)" },
   { label: "Yellow", value: "#fff7cc" },
-  { label: "Blue", value: "#cfe2f3" },
-  { label: "Green", value: "#d9ead3" },
+  { label: "Blue", value: "var(--color-tint-cyan)" },
+  { label: "Green", value: "var(--color-tint-mint)" },
   { label: "Red", value: "#fce8e6" },
 ];
 
 // Colors that need a dark (ink) checkmark for contrast
 const LIGHT_COLORS = new Set([
   "#ffffff",
-  "#f4f0e8",
-  "#ebe6da",
+  "var(--color-paper)",
+  "var(--color-paper-2)",
   "rgba(220,60,40,0.08)",
   "#fff7cc",
-  "#cfe2f3",
-  "#d9ead3",
+  "var(--color-tint-cyan)",
+  "var(--color-tint-mint)",
   "#fce8e6",
   "",
 ]);
@@ -91,9 +93,9 @@ export default function NoticeEditor({ publishedBy }: Props) {
       <div
         style={{
           padding: 24,
-          fontFamily: "'JetBrains Mono', monospace",
+          fontFamily: "var(--font-mono)",
           fontSize: 12,
-          color: "#8a8275",
+          color: "var(--color-muted)",
           textTransform: "uppercase",
           letterSpacing: "0.1em",
         }}
@@ -222,15 +224,7 @@ export default function NoticeEditor({ publishedBy }: Props) {
     setUploadsInFlight((n) => n + 1);
     const existingAlt = notice?.blocks.find((b) => b.id === blockId)?.imageAlt;
     try {
-      const form = new FormData();
-      form.append("image", f);
-      const res = await fetch(IMBB_ENDPOINT, { method: "POST", body: form });
-      const data = (await res.json()) as {
-        success?: boolean;
-        data?: { url?: string; display_url?: string };
-      };
-      const url = data.data?.display_url || data.data?.url;
-      if (!data.success || !url) throw new Error("ImgBB upload failed");
+      const url = await uploadImage(f, "notices");
       setBlock(blockId, { imageUrl: url, imageAlt: existingAlt && existingAlt !== "" ? existingAlt : f.name });
     } catch (err) {
       setError(
@@ -255,7 +249,7 @@ export default function NoticeEditor({ publishedBy }: Props) {
       };
       await saveNotice({ ...toSave, publishedBy });
       setNotice(toSave);
-      setSavedMsg("Notice published ✓ — all admins will see it on their next visit.");
+      setSavedMsg("Notice published — all admins will see it on their next visit.");
       setTimeout(() => setSavedMsg(""), 3500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to publish notice.");
@@ -264,8 +258,8 @@ export default function NoticeEditor({ publishedBy }: Props) {
     }
   }
 
-  async function remove() {
-    if (!window.confirm("Remove the currently published notice? This cannot be undone.")) return;
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  async function doRemove() {
     setSaving(true);
     setError("");
     try {
@@ -286,50 +280,45 @@ export default function NoticeEditor({ publishedBy }: Props) {
   return (
     <div className="ne-root">
       <style>{`
-        .ne-root { color: #14110d; font-family: 'Inter', sans-serif; }
+        .ne-root { color: var(--color-ink); font-family: var(--font-body); }
         .ne-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; }
         @media (max-width: 1000px) { .ne-grid { grid-template-columns: 1fr; } }
         .ne-title-row { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
         .ne-title {
-          flex: 1; background: transparent; border: 1px solid #14110d; padding: 14px 16px;
-          font-family: 'Instrument Serif', serif; font-size: 22px; color: #14110d; outline: none;
+          flex: 1; background: transparent; border: 1px solid var(--color-ink); padding: 14px 16px;
+          font-family: var(--font-display); font-size: 22px; color: var(--color-ink); outline: none;
         }
-        .ne-title:focus { background: #fff; }
+        .ne-title:focus { background: var(--color-paper); }
         .ne-add-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
         .ne-add {
-          background: transparent; border: 1px solid #d9d1bf; color: #3a352c;
-          padding: 8px 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+          background: transparent; border: 1px solid var(--color-rule); color: var(--color-ink-2);
+          padding: 8px 14px; font-family: var(--font-mono); font-size: 11px;
           text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer;
         }
-        .ne-add:hover { border-color: #14110d; color: #14110d; }
+        .ne-add:hover { border-color: var(--color-ink); color: var(--color-ink); }
 
         .ne-canvas {
-          background: #fffdf8; border: 1px solid #14110d; padding: 28px 30px; position: relative;
+          background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: 1.5rem 1.75rem; position: relative;
           min-height: 240px;
         }
-        .ne-canvas::before, .ne-canvas::after {
-          content: ""; position: absolute; width: 12px; height: 12px; background: #14110d;
-        }
-        .ne-canvas::before { top: -1px; left: -1px; }
-        .ne-canvas::after { bottom: -1px; right: -1px; }
         .ne-empty {
-          padding: 40px 20px; text-align: center; font-family: 'JetBrains Mono', monospace;
-          font-size: 11px; color: #8a8275; text-transform: uppercase; letter-spacing: 0.1em;
-          border: 1px dashed #d9d1bf;
+          padding: 40px 20px; text-align: center; font-family: var(--font-mono);
+          font-size: 11px; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.1em;
+          border: 1px dashed var(--color-rule);
         }
 
         .ne-block {
           position: relative; padding: 6px 8px 6px 40px; border: 2px solid transparent;
-          border-radius: 2px; margin-bottom: 4px; cursor: text; transition: border-color 0.12s ease;
+          border-radius: var(--radius-sm); margin-bottom: 4px; cursor: text; transition: border-color 0.12s ease;
         }
         .ne-block:hover { border-color: rgba(20,17,13,0.15); }
-        .ne-block.selected { border-color: oklch(0.52 0.20 25); background: rgba(220,60,40,0.04); }
-        .ne-block.drag-over { border-top: 2px solid oklch(0.52 0.20 25) !important; }
+        .ne-block.selected { border-color: var(--color-accent); background: rgba(220,60,40,0.04); }
+        .ne-block.drag-over { border-top: 2px solid var(--color-accent) !important; }
         .ne-block.dragging { opacity: 0.4; }
         .ne-handle {
           position: absolute; left: 6px; top: 8px; width: 24px; height: 24px; cursor: grab;
-          display: grid; place-items: center; color: #8a8275; font-size: 14px;
-          font-family: 'JetBrains Mono', monospace; user-select: none;
+          display: grid; place-items: center; color: var(--color-muted); font-size: 14px;
+          font-family: var(--font-mono); user-select: none;
         }
         .ne-handle:active { cursor: grabbing; }
         .ne-block-actions {
@@ -337,94 +326,95 @@ export default function NoticeEditor({ publishedBy }: Props) {
         }
         .ne-block.selected .ne-block-actions, .ne-block:hover .ne-block-actions { display: flex; }
         .ne-ba {
-          background: transparent; border: 1px solid #d9d1bf; color: #3a352c;
+          background: transparent; border: 1px solid var(--color-rule); color: var(--color-ink-2);
           width: 24px; height: 24px; cursor: pointer; font-size: 11px; padding: 0;
-          font-family: 'JetBrains Mono', monospace; display: grid; place-items: center;
+          font-family: var(--font-mono); display: grid; place-items: center;
         }
-        .ne-ba:hover { border-color: #14110d; color: #14110d; }
-        .ne-ba.danger:hover { color: #b3261e; border-color: #b3261e; }
+        .ne-ba:hover { border-color: var(--color-ink); color: var(--color-ink); }
+        .ne-ba.danger:hover { color: var(--color-danger); border-color: var(--color-danger); }
         .ne-textarea {
           width: 100%; border: none; background: transparent; outline: none; resize: vertical;
           font-family: inherit; color: inherit; padding: 4px 2px; min-height: 1.5em;
         }
         .ne-img-slot {
-          display: inline-block; padding: 14px; border: 1px dashed #d9d1bf; color: #8a8275;
-          cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+          display: inline-block; padding: 14px; border: 1px dashed var(--color-rule); color: var(--color-muted);
+          cursor: pointer; font-family: var(--font-mono); font-size: 11px;
           text-transform: uppercase; letter-spacing: 0.08em;
         }
-        .ne-img-slot:hover { border-color: #14110d; color: #14110d; }
+        .ne-img-slot:hover { border-color: var(--color-ink); color: var(--color-ink); }
         .ne-btn-preview {
-          display: inline-block; padding: 10px 20px; font-family: 'Inter', sans-serif;
+          display: inline-block; padding: 10px 20px; font-family: var(--font-body);
           font-weight: 600; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;
           cursor: default; border-style: solid; border-width: 1px;
         }
 
         .ne-panel {
-          background: #f4f0e8; border: 1px solid #14110d; padding: 18px; height: fit-content;
+          background: var(--color-paper); border: 1px solid var(--color-ink); padding: 18px; height: fit-content;
           position: sticky; top: 24px;
         }
         .ne-panel h4 {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.16em; color: #14110d; margin: 0 0 10px;
+          font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+          letter-spacing: 0.16em; color: var(--color-ink); margin: 0 0 10px;
         }
         .ne-panel h4:not(:first-child) { margin-top: 18px; }
         .ne-tb { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
         .ne-tb button {
-          background: #fffdf8; border: 1px solid #d9d1bf; color: #14110d;
+          border-radius: 6px;
+          background: var(--color-paper); border: 1px solid var(--color-rule); color: var(--color-ink);
           min-width: 30px; height: 28px; padding: 0 8px; cursor: pointer; font-size: 13px;
-          font-family: 'JetBrains Mono', monospace;
+          font-family: var(--font-mono);
         }
-        .ne-tb button.on { background: oklch(0.52 0.20 25); color: #fff; border-color: oklch(0.52 0.20 25); }
-        .ne-tb button:hover { border-color: #14110d; }
+        .ne-tb button.on { background: var(--color-accent); color: var(--color-on-accent); border-color: var(--color-accent); }
+        .ne-tb button:hover { border-color: var(--color-ink); }
         .ne-tb button:disabled { opacity: 0.4; cursor: not-allowed; }
         .ne-swatches { display: flex; flex-wrap: wrap; gap: 4px; }
         .ne-sw {
-          width: 24px; height: 24px; border: 1px solid #14110d; cursor: pointer; padding: 0;
+          width: 24px; height: 24px; border: 1px solid var(--color-ink); border-radius: 6px; cursor: pointer; padding: 0;
           position: relative;
         }
         .ne-sw.on::after {
-          content: "✓"; position: absolute; inset: 0; display: grid; place-items: center;
-          color: #fff; font-size: 12px; text-shadow: 0 0 2px #000;
+          content: ""; position: absolute; inset: 0; background: center / 12px no-repeat url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>');
+          color: var(--color-on-accent); font-size: 12px; text-shadow: 0 0 2px var(--color-panel);
         }
-        .ne-sw.on[data-light="true"]::after { color: #14110d; text-shadow: none; }
+        .ne-sw.on[data-light="true"]::after { color: var(--color-ink); text-shadow: none; }
         .ne-field { margin-bottom: 10px; }
         .ne-field label {
-          display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px;
-          text-transform: uppercase; letter-spacing: 0.14em; color: #3a352c; margin-bottom: 5px;
+          display: block; font-family: var(--font-mono); font-size: 9px;
+          text-transform: uppercase; letter-spacing: 0.14em; color: var(--color-ink-2); margin-bottom: 5px;
         }
         .ne-field input, .ne-field select {
-          width: 100%; background: #fffdf8; border: 1px solid #14110d; padding: 8px 10px;
-          font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #14110d; outline: none;
+          width: 100%; background: var(--color-paper); border: 1px solid var(--color-ink); padding: 8px 10px;
+          font-family: var(--font-mono); font-size: 12px; color: var(--color-ink); outline: none;
         }
-        .ne-seg { display: flex; border: 1px solid #14110d; }
+        .ne-seg { display: flex; border: 1px solid var(--color-ink); }
         .ne-seg button {
-          flex: 1; background: transparent; border: 0; border-right: 1px solid #d9d1bf;
-          padding: 6px 4px; font-family: 'JetBrains Mono', monospace; font-size: 10px;
-          text-transform: uppercase; letter-spacing: 0.08em; color: #3a352c; cursor: pointer;
+          flex: 1; background: transparent; border: 0; border-right: 1px solid var(--color-rule);
+          padding: 6px 4px; font-family: var(--font-mono); font-size: 10px;
+          text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-ink-2); cursor: pointer;
         }
         .ne-seg button:last-child { border-right: 0; }
-        .ne-seg button.on { background: oklch(0.52 0.20 25); color: #fff; }
+        .ne-seg button.on { background: var(--color-accent); color: var(--color-on-accent); }
 
         .ne-footer { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; align-items: center; }
         .ne-pub {
-          background: oklch(0.52 0.20 25); color: #fff; border: 1px solid oklch(0.52 0.20 25);
-          padding: 12px 24px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px;
+          background: var(--color-accent); color: var(--color-on-accent); border: 1px solid var(--color-accent);
+          padding: 12px 24px; font-family: var(--font-body); font-weight: 600; font-size: 13px;
           letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer;
         }
-        .ne-pub:hover { background: oklch(0.42 0.22 25); border-color: oklch(0.42 0.22 25); }
+        .ne-pub:hover { background: var(--color-accent-deep); border-color: var(--color-accent-deep); }
         .ne-pub:disabled { opacity: 0.6; cursor: not-allowed; }
         .ne-clear {
-          background: transparent; color: #b3261e; border: 1px solid #f0c2bb; padding: 12px 20px;
-          font-family: 'Inter', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.04em;
+          background: transparent; color: var(--color-danger); border: 1px solid oklch(86% 0.06 18); padding: 12px 20px;
+          font-family: var(--font-body); font-weight: 600; font-size: 12px; letter-spacing: 0.04em;
           text-transform: uppercase; cursor: pointer;
         }
         .ne-clear:hover { background: #fce8e6; }
         .ne-status {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px;
+          font-family: var(--font-mono); font-size: 11px;
           letter-spacing: 0.04em;
         }
-        .ne-status.ok { color: #0f7a3d; }
-        .ne-status.err { color: #b3261e; padding: 10px 12px; border: 1px solid #f0c2bb; background: #fce8e6; }
+        .ne-status.ok { color: var(--color-mint-deep); }
+        .ne-status.err { color: var(--color-danger); padding: 10px 12px; border: 1px solid oklch(86% 0.06 18); background: #fce8e6; }
       `}</style>
 
       <div className="ne-title-row">
@@ -499,7 +489,7 @@ export default function NoticeEditor({ publishedBy }: Props) {
                 : "Add content to publish"}
             </button>
             {hasAny && (
-              <button className="ne-clear" onClick={remove} disabled={saving || uploadsInFlight > 0}>
+              <button className="ne-clear" onClick={() => setClearConfirmOpen(true)} disabled={saving || uploadsInFlight > 0}>
                 Remove notice
               </button>
             )}
@@ -510,11 +500,11 @@ export default function NoticeEditor({ publishedBy }: Props) {
           <div style={{ marginTop: 28 }}>
             <h3
               style={{
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "var(--font-mono)",
                 fontSize: 10,
                 textTransform: "uppercase",
                 letterSpacing: "0.2em",
-                color: "#8a8275",
+                color: "var(--color-muted)",
                 margin: "0 0 10px",
                 display: "flex",
                 alignItems: "center",
@@ -527,7 +517,7 @@ export default function NoticeEditor({ publishedBy }: Props) {
               {notice.title.trim() && (
                 <h2
                   style={{
-                    fontFamily: "'Instrument Serif', serif",
+                    fontFamily: "var(--font-display)",
                     fontSize: 28,
                     margin: "0 0 14px",
                     lineHeight: 1.2,
@@ -555,7 +545,7 @@ export default function NoticeEditor({ publishedBy }: Props) {
                 style={{
                   fontSize: 12,
                   lineHeight: 1.6,
-                  color: "#3a352c",
+                  color: "var(--color-ink-2)",
                   margin: "0 0 12px",
                 }}
               >
@@ -565,8 +555,8 @@ export default function NoticeEditor({ publishedBy }: Props) {
               <p
                 style={{
                   fontSize: 11,
-                  color: "#8a8275",
-                  fontFamily: "'JetBrains Mono', monospace",
+                  color: "var(--color-muted)",
+                  fontFamily: "var(--font-mono)",
                   letterSpacing: "0.04em",
                   lineHeight: 1.7,
                 }}
@@ -579,6 +569,19 @@ export default function NoticeEditor({ publishedBy }: Props) {
           )}
         </aside>
       </div>
+
+      <ConfirmDialog
+        open={clearConfirmOpen}
+        title="Remove the published notice?"
+        description="Students and admins will stop seeing it. This cannot be undone."
+        confirmLabel="Remove"
+        danger
+        onCancel={() => setClearConfirmOpen(false)}
+        onConfirm={() => {
+          setClearConfirmOpen(false);
+          void doRemove();
+        }}
+      />
     </div>
   );
 }
@@ -674,7 +677,7 @@ function BlockInEditor({
                 style={{
                   maxHeight: s.imgMaxH ?? 240,
                   maxWidth: "100%",
-                  border: "1px solid #d9d1bf",
+                  border: "1px solid var(--color-rule)",
                   objectFit: "contain",
                   display: "block",
                 }}
@@ -737,9 +740,9 @@ function BlockInEditor({
             placeholder="Button label"
             className="ne-btn-preview"
             style={{
-              background: s.btnBg || "oklch(0.52 0.20 25)",
+              background: s.btnBg || "var(--color-accent)",
               color: s.btnColor || "#fff",
-              borderColor: s.btnBg || "oklch(0.52 0.20 25)",
+              borderColor: s.btnBg || "var(--color-accent)",
               border: "1px solid",
               padding: "8px 16px",
             }}
@@ -748,10 +751,10 @@ function BlockInEditor({
       )}
 
       {block.type === "divider" && (
-        <hr style={{ border: "none", borderTop: "1px solid #d9d1bf", margin: "10px 0" }} />
+        <hr style={{ border: "none", borderTop: "1px solid var(--color-rule)", margin: "10px 0" }} />
       )}
       {block.type === "spacer" && (
-        <div style={{ height: s.spacerH ?? 24, background: "repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(20,17,13,0.04) 6px, rgba(20,17,13,0.04) 12px)" }} />
+        <div style={{ height: s.spacerH ?? 24, background: "repeating-linear-gradient(45deg, transparent, transparent 6px, oklch(20% 0.012 250 / 0.04) 6px, oklch(20% 0.012 250 / 0.04) 12px)" }} />
       )}
     </div>
   );
@@ -763,7 +766,7 @@ function textCss(s: NoticeBlockStyle, isHeading: boolean): React.CSSProperties {
   out.fontStyle = s.italic ? "italic" : "normal";
   out.textDecoration = s.underline ? "underline" : "none";
   out.textAlign = s.align ?? "left";
-  out.color = s.color || "#14110d";
+  out.color = s.color || "var(--color-ink)";
   if (s.bgColor) {
     out.background = s.bgColor;
     out.padding = "6px 10px";
@@ -777,7 +780,7 @@ function textCss(s: NoticeBlockStyle, isHeading: boolean): React.CSSProperties {
     "3xl": "36px",
   };
   out.fontSize = sizeMap[s.fontSize ?? (isHeading ? "2xl" : "base")];
-  out.fontFamily = isHeading ? "'Instrument Serif', serif" : "'Inter', 'Georgia', serif";
+  out.fontFamily = isHeading ? "var(--font-display)" : "var(--font-body)";
   out.lineHeight = isHeading ? 1.2 : 1.55;
   return out;
 }
@@ -883,7 +886,7 @@ function BlockInspector({
             {COLOR_SWATCHES.map((c) => (
               <button
                 key={c.value}
-                className={"ne-sw" + ((s.color || "#14110d") === c.value ? " on" : "")}
+                className={"ne-sw" + ((s.color || "var(--color-ink)") === c.value ? " on" : "")}
                 data-light={LIGHT_COLORS.has(c.value) ? "true" : "false"}
                 style={{ background: c.value }}
                 title={c.label}
@@ -900,7 +903,7 @@ function BlockInspector({
                 data-light={c.value === "" || LIGHT_COLORS.has(c.value) ? "true" : "false"}
                 style={{
                   background: c.value ||
-                    "repeating-linear-gradient(45deg,#fff,#fff 4px,#ebe6da 4px,#ebe6da 8px)",
+                    "repeating-linear-gradient(45deg,#fff,#fff 4px,var(--color-paper-2) 4px,var(--color-paper-2) 8px)",
                 }}
                 title={c.label}
                 onClick={() => onStyle({ bgColor: c.value || undefined })}
@@ -1066,7 +1069,7 @@ function BlockInspector({
             {COLOR_SWATCHES.map((c) => (
               <button
                 key={c.value + "bg"}
-                className={"ne-sw" + ((s.btnBg || "oklch(0.52 0.20 25)") === c.value ? " on" : "")}
+                className={"ne-sw" + ((s.btnBg || "var(--color-accent)") === c.value ? " on" : "")}
                 data-light={LIGHT_COLORS.has(c.value) ? "true" : "false"}
                 style={{ background: c.value }}
                 title={c.label}

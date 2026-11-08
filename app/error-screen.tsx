@@ -1,7 +1,10 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import FormulaMarks from "./_components/FormulaMarks";
+import { copyText as copyTextValue } from "@/lib/clipboard";
 
 interface ErrorScreenProps {
   code: string;
@@ -27,6 +30,7 @@ export default function ErrorScreen({
   retryLabel = "Try again",
 }: ErrorScreenProps) {
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [url, setUrl] = useState<string>("");
 
   useEffect(() => {
@@ -38,12 +42,13 @@ export default function ErrorScreen({
   const copy = async () => {
     const text = detail ?? url;
     if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyTextValue(text);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* clipboard unavailable */
+    } else {
+      setFailed(true);
+      setTimeout(() => setFailed(false), 1600);
     }
   };
 
@@ -52,41 +57,43 @@ export default function ErrorScreen({
   return (
     <div
       style={{
-        position: "fixed",
+isolation: "isolate",
+                  position: "fixed",
         inset: 0,
-        zIndex: 9999,
-        background: "#f4f0e8",
-        color: "#14110d",
+        zIndex: "var(--z-modal)",
+        background: "var(--color-paper)",
+        color: "var(--color-ink)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: 18,
+        gap: 20,
         padding: 24,
         textAlign: "center",
-        fontFamily: "'Inter', system-ui, sans-serif",
+        fontFamily: "var(--font-body)",
       }}
     >
-      <div
+      <FormulaMarks />
+      <span
+        className="mono-label"
         style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 11,
-          letterSpacing: "0.22em",
-          textTransform: "uppercase",
-          color: "oklch(0.52 0.20 25)",
-          border: "1px solid #d9d1bf",
-          padding: "6px 14px",
+          border: "1px solid var(--color-rule-2)",
+          borderRadius: "var(--radius-pill)",
+          padding: "6px 16px",
+          color: "var(--color-accent-3-deep)",
         }}
       >
         {code}
-      </div>
+      </span>
 
       <div
         style={{
-          fontFamily: "'Instrument Serif', Georgia, serif",
-          fontSize: 34,
-          lineHeight: 1.1,
-          maxWidth: 620,
+          fontFamily: "var(--font-display)",
+          fontWeight: 600,
+          fontSize: "clamp(1.75rem, 4vw + 0.9rem, 3rem)",
+          lineHeight: 1.08,
+          letterSpacing: "-0.03em",
+          maxWidth: 640,
         }}
       >
         {title}
@@ -94,13 +101,10 @@ export default function ErrorScreen({
 
       <p
         style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 12,
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          color: "#8a8275",
-          maxWidth: 460,
-          lineHeight: 1.8,
+          color: "var(--color-ink-2)",
+          fontSize: "1rem",
+          lineHeight: 1.6,
+          maxWidth: "46ch",
           margin: 0,
         }}
       >
@@ -112,25 +116,28 @@ export default function ErrorScreen({
           style={{
             width: "100%",
             maxWidth: 560,
-            border: "1px solid #14110d",
-            background: "#fffdf8",
+            border: "1px solid var(--color-rule-2)",
+            background: "var(--color-paper-2)",
+            borderRadius: "var(--radius-input)",
             textAlign: "left",
-            margin: "6px 0 0",
+            margin: "4px 0 0",
+            overflow: "hidden",
           }}
         >
           <div
             style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 10,
-              letterSpacing: "0.16em",
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.62rem",
+              fontWeight: 500,
+              letterSpacing: "0.14em",
               textTransform: "uppercase",
-              color: "#8a8275",
-              background: "#ebe6da",
-              padding: "10px 14px",
+              color: "var(--color-muted)",
+              padding: "0.65rem 0.9rem",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               gap: 12,
+              borderBottom: "1px dashed var(--color-rule-2)",
             }}
           >
             <span>{captureUrl ? "Requested URL" : "Error details"}</span>
@@ -138,26 +145,29 @@ export default function ErrorScreen({
               onClick={copy}
               style={{
                 background: "transparent",
-                border: "1px solid #d9d1bf",
-                color: "#3a352c",
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 10,
+                border: "1px solid var(--color-rule-2)",
+                color: "var(--color-ink-2)",
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.62rem",
+                fontWeight: 500,
                 textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                padding: "6px 12px",
+                letterSpacing: "0.1em",
+                padding: "0.4rem 0.75rem",
+                borderRadius: "var(--radius-sm)",
                 cursor: "pointer",
+                whiteSpace: "nowrap",
               }}
             >
-              {copied ? "Copied ✓" : "Copy"}
+              {copied ? "Copied" : failed ? "Copy failed" : "Copy"}
             </button>
           </div>
           <pre
             style={{
               margin: 0,
-              padding: "14px",
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 12,
-              color: "#3a352c",
+              padding: "0.9rem",
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.75rem",
+              color: "var(--color-ink-2)",
               whiteSpace: "pre-wrap",
               wordBreak: "break-word",
               lineHeight: 1.6,
@@ -173,9 +183,9 @@ export default function ErrorScreen({
       {digest && (
         <p
           style={{
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 11,
-            color: "#b8ad96",
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.66rem",
+            color: "var(--color-muted)",
             margin: 0,
           }}
         >
@@ -189,45 +199,15 @@ export default function ErrorScreen({
           gap: 12,
           flexWrap: "wrap",
           justifyContent: "center",
-          marginTop: 6,
+          marginTop: 8,
         }}
       >
         {onRetry && (
-          <button
-            onClick={onRetry}
-            style={{
-              background: "oklch(0.52 0.20 25)",
-              color: "#fff",
-              border: "1px solid oklch(0.52 0.20 25)",
-              padding: "13px 26px",
-              fontFamily: "'Inter', sans-serif",
-              fontWeight: 600,
-              fontSize: 13,
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-              cursor: "pointer",
-            }}
-          >
+          <button onClick={onRetry} className="btn">
             {retryLabel}
           </button>
         )}
-        <Link
-          href="/"
-          style={{
-            background: "transparent",
-            color: "#3a352c",
-            border: "1px solid #d9d1bf",
-            padding: "13px 26px",
-            fontFamily: "'Inter', sans-serif",
-            fontWeight: 600,
-            fontSize: 13,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-            textDecoration: "none",
-            display: "inline-flex",
-            alignItems: "center",
-          }}
-        >
+        <Link href="/" className="btn btn--soft">
           Back to site
         </Link>
       </div>

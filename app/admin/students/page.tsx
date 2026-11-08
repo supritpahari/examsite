@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -144,7 +145,7 @@ function AdminStudentAnalysis() {
 
         {!checking && !loading && error && (
           <div className="ads-card">
-            <h1 className="ads-title">No <em>data</em></h1>
+            <h1 className="ads-title">No <span className="hl">data</span></h1>
             <p className="ads-sub">{error}</p>
             <Link href="/admin" className="ads-btn">Back to admin panel →</Link>
           </div>
@@ -152,7 +153,7 @@ function AdminStudentAnalysis() {
 
         {!checking && !loading && !error && matches.length === 0 && (
           <div className="ads-card">
-            <h1 className="ads-title">No <em>attempts</em></h1>
+            <h1 className="ads-title">No <span className="hl">attempts</span></h1>
             <p className="ads-sub">
               No exam attempts found for “{name.trim()}”. The match is case-insensitive but the
               spelling must be exactly what the student entered.
@@ -165,7 +166,7 @@ function AdminStudentAnalysis() {
           <>
             <div className="ads-head">
               <h1 className="ads-title">
-                <em>{displayName}</em>
+                <span className="hl">{displayName}</span>
               </h1>
               <div className="ads-meta">
                 <span>{totals.n} exam{totals.n === 1 ? "" : "s"} attempted</span>
@@ -179,7 +180,7 @@ function AdminStudentAnalysis() {
                 <div className="ads-mono">Combined performance</div>
                 <div className="ads-total">
                   {totals.score}
-                  <em> / {totals.max} marks</em>
+                  <span className="hl"> / {totals.max} marks</span>
                 </div>
               </div>
               <div className="ads-grid">
@@ -230,7 +231,7 @@ function AdminStudentAnalysis() {
                       <span className="ads-pct">{pct}%</span>
                       <span className="ads-exam-chips">
                         <span className="ads-chip"><strong>{attempt.score}</strong> / {attempt.total} marks</span>
-                        <span className="ads-chip"><strong>{attempt.correct}</strong>✓</span>
+                        <span className="ads-chip" style={{display:"inline-flex",alignItems:"center",gap:"0.3em"}}><strong>{attempt.correct}</strong><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg></span>
                         <span className="ads-chip"><strong>{attempt.wrong}</strong>✗</span>
                         <span className="ads-chip"><strong>{attempt.unattempted}</strong>–</span>
                         <span className="ads-chip ads-chip-mono">{exam?.code ?? attempt.examCode}</span>
@@ -333,162 +334,150 @@ function AdminStudentAnalysis() {
 const CSS = `
   .ads-root {
     min-height: 100vh;
-    background: #f4f0e8;
-    color: #14110d;
-    font-family: 'Inter', sans-serif;
-    --paper: #f4f0e8;
-    --paper-2: #ebe6da;
-    --ink: #14110d;
-    --ink-2: #3a352c;
-    --dim: #8a8275;
-    --rule: #d9d1bf;
-    --accent: oklch(0.52 0.20 25);
-    --accent-2: oklch(0.42 0.22 25);
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-body);
   }
   .ads-center {
     min-height: 60vh; display: grid; place-items: center;
-    font-family: 'JetBrains Mono', monospace; font-size: 12px;
-    text-transform: uppercase; letter-spacing: 0.16em; color: var(--dim);
+    font-family: var(--font-mono); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.16em; color: var(--color-muted);
   }
   .ads-main { max-width: 980px; margin: 0 auto; padding: 30px 24px 64px; }
   .ads-topbar {
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 30px; gap: 12px; flex-wrap: wrap;
   }
-  .ads-back {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  .ads-back { border-radius: var(--radius-pill);
+    font-family: var(--font-mono); font-size: 11px;
     text-transform: uppercase; letter-spacing: 0.1em;
-    color: var(--ink-2); text-decoration: none;
-    border: 1px solid var(--rule); padding: 8px 12px; background: var(--paper);
+    color: var(--color-ink-2); text-decoration: none;
+    border: 1px solid var(--color-rule); padding: 8px 12px; background: var(--color-paper);
   }
-  .ads-back:hover { color: var(--accent); border-color: var(--accent); }
+  .ads-back:hover { color: var(--color-accent); border-color: var(--color-accent); }
   .ads-mono {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px;
-    text-transform: uppercase; letter-spacing: 0.16em; color: var(--dim);
+    font-family: var(--font-mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.16em; color: var(--color-muted);
   }
   .ads-title {
-    font-family: 'Instrument Serif', serif; font-size: 46px; line-height: 1;
-    letter-spacing: -0.02em; color: var(--ink); margin: 0 0 10px;
+    font-family: var(--font-display); font-size: 46px; line-height: 1;
+    letter-spacing: -0.02em; color: var(--color-ink); margin: 0 0 10px;
   }
-  .ads-title em { font-style: italic; color: var(--accent); }
   .ads-meta {
     display: flex; gap: 8px; flex-wrap: wrap;
-    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
+    font-family: var(--font-mono); font-size: 11px; color: var(--color-muted);
     letter-spacing: 0.04em;
   }
   .ads-head { margin-bottom: 22px; }
-  .ads-card {
-    border: 1px solid var(--rule); background: var(--paper); padding: 24px 26px;
+  .ads-card { border-radius: var(--radius-card); box-shadow: var(--shadow-card);
+    border: 1px solid var(--color-rule); background: var(--color-paper); padding: 24px 26px;
   }
   .ads-card .ads-title { font-size: 32px; }
-  .ads-sub { font-size: 13.5px; color: var(--ink-2); line-height: 1.7; margin: 0 0 20px; }
-  .ads-btn {
-    display: inline-block; background: var(--accent); color: #fff;
-    border: 1px solid var(--accent); padding: 12px 22px; text-decoration: none;
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  .ads-sub { font-size: 13.5px; color: var(--color-ink-2); line-height: 1.7; margin: 0 0 20px; }
+  .ads-btn { border-radius: var(--radius-pill); box-shadow: 0 3px 0 0 var(--color-accent-deep);
+    display: inline-block; background: var(--color-accent); color: var(--color-on-accent);
+    border: 1px solid var(--color-accent); padding: 12px 22px; text-decoration: none;
+    font-family: var(--font-mono); font-size: 11px;
     text-transform: uppercase; letter-spacing: 0.08em;
   }
-  .ads-btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
+  .ads-btn:hover { background: var(--color-accent-deep); border-color: var(--color-accent-deep); }
   .ads-summary { margin-bottom: 28px; }
   .ads-summary-head {
     display: flex; justify-content: space-between; align-items: baseline;
     gap: 14px; flex-wrap: wrap; margin-bottom: 16px;
-    border-bottom: 1px solid var(--rule); padding-bottom: 14px;
+    border-bottom: 1px solid var(--color-rule); padding-bottom: 14px;
   }
   .ads-total {
-    font-family: 'Instrument Serif', serif; font-size: 44px; line-height: 1; color: var(--accent);
-  }
-  .ads-total em {
-    font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--dim);
+    font-family: var(--font-display); font-size: 44px; line-height: 1; color: var(--color-accent);
   }
   .ads-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .ads-cell {
-    border: 1px solid var(--rule); background: var(--paper-2);
+    border: 1px solid var(--color-rule); background: var(--color-paper-2);
     padding: 13px 12px; text-align: center;
   }
   .ads-cell strong {
-    display: block; font-family: 'Instrument Serif', serif; font-size: 28px;
-    color: var(--ink); line-height: 1.05;
+    display: block; font-family: var(--font-display); font-size: 28px;
+    color: var(--color-ink); line-height: 1.05;
   }
   .ads-cell span {
-    font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
-    text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim);
+    font-family: var(--font-mono); font-size: 9.5px;
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--color-muted);
   }
-  .ads-cell.ok strong { color: #0f7a3d; }
-  .ads-cell.bad strong { color: var(--accent); }
+  .ads-cell.ok strong { color: var(--color-mint-deep); }
+  .ads-cell.bad strong { color: var(--color-accent); }
   .ads-cell.skip strong { color: #9a8f78; }
   .ads-cell.best strong { font-size: 24px; }
   .ads-cell.best span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ads-list-head { margin-bottom: 10px; }
   .ads-list { display: flex; flex-direction: column; gap: 12px; }
-  .ads-exam { border: 1px solid var(--rule); background: var(--paper); }
-  .ads-exam.open { border-color: var(--accent); }
+  .ads-exam { border: 1px solid var(--color-rule); background: var(--color-paper); }
+  .ads-exam.open { border-color: var(--color-accent); }
   .ads-exam-row {
     width: 100%; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
     text-align: left; background: transparent; border: 0; cursor: pointer;
     padding: 16px 18px; font-family: inherit; color: inherit;
   }
-  .ads-caret { color: var(--accent); font-size: 14px; flex: 0 0 auto; }
-  .ads-exam-title { font-family: 'Instrument Serif', serif; font-size: 21px; color: var(--ink); }
+  .ads-caret { color: var(--color-accent); font-size: 14px; flex: 0 0 auto; }
+  .ads-exam-title { font-family: var(--font-display); font-size: 21px; color: var(--color-ink); }
   .ads-pct {
-    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600;
-    color: var(--accent); border: 1px solid var(--rule); padding: 3px 9px;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+    color: var(--color-accent); border: 1px solid var(--color-rule); padding: 3px 9px;
   }
   .ads-exam-chips { display: flex; gap: 8px; flex-wrap: wrap; }
   .ads-chip {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.04em;
-    background: var(--paper-2); border: 1px solid var(--rule); color: var(--ink-2);
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em;
+    background: var(--color-paper-2); border: 1px solid var(--color-rule); color: var(--color-ink-2);
     padding: 4px 9px; text-transform: uppercase;
   }
-  .ads-chip strong { color: var(--ink); }
-  .ads-chip-mono { text-transform: none; letter-spacing: 0.08em; color: var(--accent); }
+  .ads-chip strong { color: var(--color-ink); }
+  .ads-chip-mono { text-transform: none; letter-spacing: 0.08em; color: var(--color-accent); }
   .ads-qlist {
     list-style: none; margin: 0; padding: 16px 18px;
-    border-top: 1px dashed var(--rule);
+    border-top: 1px dashed var(--color-rule);
     display: flex; flex-direction: column; gap: 12px;
   }
-  .ads-q { border-left: 3px solid var(--rule); padding: 6px 0 6px 14px; }
-  .ads-q.ok { border-left-color: #0f7a3d; }
-  .ads-q.bad { border-left-color: var(--accent); }
-  .ads-q.skip { border-left-color: #b8ad96; }
+  .ads-q { border-left: 3px solid var(--color-rule); padding: 6px 0 6px 14px; }
+  .ads-q.ok { border-left-color: var(--color-mint-deep); }
+  .ads-q.bad { border-left-color: var(--color-accent); }
+  .ads-q.skip { border-left-color: var(--color-faint); }
   .ads-q-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
   .ads-q-num {
-    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--ink);
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--color-ink);
   }
   .ads-q-chapter {
-    font-family: 'JetBrains Mono', monospace; font-size: 9.5px; text-transform: uppercase;
-    letter-spacing: 0.1em; color: var(--dim); border: 1px solid var(--rule); padding: 2px 7px;
+    font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--color-muted); border: 1px solid var(--color-rule); padding: 2px 7px;
   }
   .ads-q-tag {
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase;
-    letter-spacing: 0.1em; padding: 3px 7px; color: #fff;
+    font-family: var(--font-mono); font-size: 9px; text-transform: uppercase;
+    letter-spacing: 0.1em; padding: 3px 7px; color: var(--color-on-accent);
   }
-  .ads-q-tag.ok { background: #0f7a3d; }
-  .ads-q-tag.bad { background: var(--accent); }
-  .ads-q-tag.skip { background: #b8ad96; color: #14110d; }
+  .ads-q-tag.ok { background: var(--color-mint-deep); }
+  .ads-q-tag.bad { background: var(--color-accent); }
+  .ads-q-tag.skip { background: var(--color-faint); color: var(--color-ink); }
   .ads-q-marks {
-    margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600;
+    margin-left: auto; font-family: var(--font-mono); font-size: 13px; font-weight: 600;
   }
   .ads-q-prompt {
-    font-family: 'Instrument Serif', serif; font-size: 17px; line-height: 1.5;
-    color: var(--ink); margin: 0 0 10px;
+    font-family: var(--font-display); font-size: 17px; line-height: 1.5;
+    color: var(--color-ink); margin: 0 0 10px;
   }
-  .ads-q-img { max-width: 100%; max-height: 220px; border: 1px solid var(--rule); margin: 0 0 10px; display: block; }
+  .ads-q-img { max-width: 100%; max-height: 220px; border: 1px solid var(--color-rule); margin: 0 0 10px; display: block; }
   .ads-q-opts { display: flex; flex-direction: column; gap: 5px; }
   .ads-q-opt {
     display: flex; align-items: center; gap: 10px;
-    padding: 7px 10px; border: 1px solid var(--rule); background: var(--paper-2);
+    padding: 7px 10px; border: 1px solid var(--color-rule); background: var(--color-paper-2);
   }
-  .ads-q-opt.answer { border-color: #0f7a3d; background: #eef7ee; }
-  .ads-q-opt.chosen { border-color: var(--accent); background: rgba(200, 50, 30, 0.07); }
+  .ads-q-opt.answer { border-color: var(--color-mint-deep); background: #eef7ee; }
+  .ads-q-opt.chosen { border-color: var(--color-accent); background: rgba(200, 50, 30, 0.07); }
   .ads-q-k {
-    width: 20px; height: 20px; border: 1px solid var(--rule); display: grid; place-items: center;
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--dim); flex-shrink: 0;
+    width: 20px; height: 20px; border: 1px solid var(--color-rule); display: grid; place-items: center;
+    font-family: var(--font-mono); font-size: 10px; color: var(--color-muted); flex-shrink: 0;
   }
-  .ads-q-opt.answer .ads-q-k { background: #0f7a3d; border-color: #0f7a3d; color: #fff; }
-  .ads-q-opt.chosen .ads-q-k { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .ads-q-t { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink-2); }
-  .ads-q-opt-img { display: block; max-width: 150px; max-height: 100px; margin-top: 6px; object-fit: contain; border: 1px solid var(--rule); }
+  .ads-q-opt.answer .ads-q-k { background: var(--color-mint-deep); border-color: var(--color-mint-deep); color: var(--color-on-accent); }
+  .ads-q-opt.chosen .ads-q-k { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); }
+  .ads-q-t { font-family: var(--font-mono); font-size: 12.5px; color: var(--color-ink-2); }
+  .ads-q-opt-img { display: block; max-width: 150px; max-height: 100px; margin-top: 6px; object-fit: contain; border: 1px solid var(--color-rule); }
 
   /* math rendering (lib/render-math output) */
   .frac { display: inline-flex; flex-direction: column; text-align: center; vertical-align: middle; margin: 0 3px; line-height: 1.1; }
@@ -514,14 +503,14 @@ export default function AdminStudentsPage() {
         <div
           style={{
             minHeight: "100vh",
-            background: "#f4f0e8",
+            background: "var(--color-paper)",
             display: "grid",
             placeItems: "center",
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "var(--font-mono)",
             fontSize: 12,
             letterSpacing: "0.16em",
             textTransform: "uppercase",
-            color: "#8a8275",
+            color: "var(--color-muted)",
           }}
         >
           Loading…

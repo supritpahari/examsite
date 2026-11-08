@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import { useMemo, useState } from "react";
@@ -5,6 +6,8 @@ import { useRouter } from "next/navigation";
 import type { Question } from "@/lib/questions";
 import { addExam, setExamQuestions, type Exam, type ExamStatus } from "@/lib/exams";
 import { MathPreview, Stepper } from "../shared";
+import { copyText } from "@/lib/clipboard";
+import { todayIsoLocal } from "@/lib/exams";
 
 const STEPS = [
   { label: "Details", desc: "Give your exam a name, duration and status." },
@@ -16,7 +19,7 @@ const STEPS = [
 const STATUS_META: Record<ExamStatus, { label: string; cls: string }> = {
   completed: { label: "Completed", cls: "ec-badge green" },
   scheduled: { label: "Scheduled", cls: "ec-badge blue" },
-  draft: { label: "Draft", cls: "ec-badge gray" },
+  draft: { label: "Live", cls: "ec-badge green" },
   stopped: { label: "Stopped", cls: "ec-badge gray" },
 };
 
@@ -50,7 +53,7 @@ export default function ExamCreator({
     day: "2-digit",
     year: "numeric",
   });
-  const resolvedDate = status === "draft" ? "—" : takenOn.trim() || today;
+  const resolvedDate = status === "draft" ? "—" : takenOn || todayIsoLocal();
 
   const chapters = useMemo(
     () =>
@@ -195,12 +198,10 @@ export default function ExamCreator({
   };
 
   const copy = async (value: string, which: "code" | "link") => {
-    try {
-      await navigator.clipboard.writeText(value);
+    const ok = await copyText(value);
+    if (ok) {
       setCopied(which);
       setTimeout(() => setCopied(null), 1800);
-    } catch {
-      /* clipboard unavailable */
     }
   };
 
@@ -215,254 +216,237 @@ export default function ExamCreator({
   const stepOrder = ["Details", "Questions", "Review", "Created"];
 
   return (
-    <div
-      className="ec-root"
-      style={
-        {
-          "--paper": "#f4f0e8",
-          "--paper-2": "#ebe6da",
-          "--ink": "#14110d",
-          "--ink-2": "#3a352c",
-          "--dim": "#8a8275",
-          "--rule": "#d9d1bf",
-          "--accent": "oklch(0.52 0.20 25)",
-          "--accent-2": "oklch(0.42 0.22 25)",
-        } as React.CSSProperties
-      }
-    >
+    <div className="ec-root">
       <style>{`
         .ec-root {
-          min-height: 100vh; background: var(--paper); color: var(--ink);
-          font-family: 'Inter', sans-serif;
+          min-height: 100vh; background: var(--color-paper); color: var(--color-ink);
+          font-family: var(--font-body);
           display: flex; flex-direction: column;
         }
 
         .ec-header {
-          display: flex; align-items: center; justify-content: space-between; gap: 16px;
-          padding: 22px 34px; border-bottom: 1px solid var(--rule); flex-wrap: wrap;
+          display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+          padding: 0.9rem var(--page-gutter); border-bottom: 1px solid var(--color-rule); flex-wrap: wrap;
+          max-width: var(--page-max); margin-inline: auto; width: 100%;
         }
-        .ec-header-title { font-family: 'Instrument Serif', serif; font-size: 28px; margin: 0; color: var(--ink); }
-        .ec-header-title em { font-style: italic; color: var(--accent); }
-        .ec-header-sub { font-size: 13px; color: var(--dim); margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+        .ec-header-title { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; letter-spacing: -0.03em; margin: 0; color: var(--color-ink); }
+        .ec-header-sub { font-size: 0.66rem; color: var(--color-muted); margin-top: 0.25rem; font-family: var(--font-mono); font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; }
         .ec-back {
-          background: transparent; border: 1px solid var(--ink); color: var(--ink);
-          padding: 10px 16px; cursor: pointer; font-family: 'JetBrains Mono', monospace;
-          font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+          background: var(--color-paper-2); border: 0; color: var(--color-ink-2);
+          padding: 0.55rem 1rem; border-radius: var(--radius-pill); cursor: pointer; font-family: var(--font-body);
+          font-size: 0.78rem; font-weight: 600; text-decoration: none;
         }
-        .ec-back:hover { background: var(--ink); color: var(--paper); }
+        .ec-back:hover { background: var(--color-paper-3); color: var(--color-ink); }
 
         /* ---- Progress rail ---- */
         .ec-progress {
-          border-bottom: 1px solid var(--rule); background: var(--paper-2);
-          padding: 18px 34px 16px;
+          border-bottom: 1px solid var(--color-rule); background: var(--color-paper-2);
+          padding: 1.1rem var(--page-gutter) 1rem;
         }
-        .ec-progress-inner { max-width: 720px; margin: 0 auto; }
+        .ec-progress-inner { max-width: 44rem; margin: 0 auto; }
         .ec-steps { display: flex; align-items: center; justify-content: space-between; }
-        .ec-node { display: flex; align-items: center; gap: 10px; }
+        .ec-node { display: flex; align-items: center; gap: 0.6rem; }
         .ec-node-dot {
-          width: 30px; height: 30px; border: 1px solid var(--rule); border-radius: 999px;
-          display: grid; place-items: center; font-family: 'JetBrains Mono', monospace;
-          font-size: 12px; color: var(--dim); background: var(--paper); flex: 0 0 auto;
-          transition: all 0.15s ease;
+          width: 30px; height: 30px; border: 1.5px solid var(--color-rule-2); border-radius: 999px;
+          display: grid; place-items: center; font-family: var(--font-mono);
+          font-size: 0.7rem; font-weight: 600; color: var(--color-muted); background: var(--color-paper); flex: 0 0 auto;
+          transition: all var(--dur-short) var(--ease-out);
         }
-        .ec-node.active .ec-node-dot { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 3px rgba(220,60,40,0.12); }
-        .ec-node.done .ec-node-dot { background: var(--accent); color: #fff; border-color: var(--accent); }
-        .ec-node-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
-        .ec-node.active .ec-node-label { color: var(--accent); }
-        .ec-node.done .ec-node-label { color: var(--ink); }
+        .ec-node.active .ec-node-dot { border-color: var(--color-accent-2); background: var(--color-tint-cyan); color: var(--color-accent-2-deep); box-shadow: 0 0 0 3px oklch(66% 0.18 235 / 0.18); }
+        .ec-node.done .ec-node-dot { background: var(--color-accent); color: var(--color-on-accent); border-color: var(--color-accent); }
+        .ec-node-label { font-family: var(--font-body); font-size: 0.75rem; font-weight: 600; color: var(--color-muted); }
+        .ec-node.active .ec-node-label { color: var(--color-accent-2-deep); }
+        .ec-node.done .ec-node-label { color: var(--color-ink); }
         .ec-node.clickable { cursor: pointer; }
         .ec-track {
-          position: relative; height: 3px; background: var(--rule); margin: 14px 2px 12px;
+          position: relative; height: 4px; background: var(--color-rule); border-radius: 999px; margin: 0.85rem 2px 0.75rem; overflow: hidden;
         }
-        .ec-track-fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); transition: width 0.25s ease; }
+        .ec-track-fill { position: absolute; inset: 0 auto 0 0; background: var(--color-accent); border-radius: 999px; transition: width 0.25s var(--ease-out); }
         .ec-progress-caption {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
-          text-transform: uppercase; letter-spacing: 0.1em; display: flex; justify-content: space-between;
+          font-family: var(--font-mono); font-size: 0.6rem; font-weight: 500; color: var(--color-muted);
+          text-transform: uppercase; letter-spacing: 0.14em; display: flex; justify-content: space-between;
         }
-        .ec-progress-caption b { color: var(--ink-2); font-weight: 500; }
+        .ec-progress-caption b { color: var(--color-ink-2); font-weight: 600; }
 
         /* ---- Body / panel ---- */
-        .ec-body { flex: 1; padding: 30px 20px 90px; }
+        .ec-body { flex: 1; padding: 1.5rem 1.25rem 6rem; }
         .ec-panel {
-          max-width: 720px; margin: 0 auto; background: var(--paper);
-          border: 1px solid var(--rule); padding: 30px 34px 26px;
+          max-width: 44rem; margin: 0 auto; background: var(--color-paper);
+          border: 1px solid var(--color-rule); border-radius: var(--radius-card); box-shadow: var(--shadow-lift);
+          padding: 1.5rem 1.75rem 1.35rem;
         }
-        .ec-panel-head { margin-bottom: 24px; border-bottom: 1px solid var(--rule); padding-bottom: 18px; }
+        .ec-panel-head { margin-bottom: 1.25rem; border-bottom: 1px solid var(--color-rule); padding-bottom: 1rem; }
         .ec-kicker {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent);
-          text-transform: uppercase; letter-spacing: 0.2em; margin: 0 0 8px;
+          font-family: var(--font-mono); font-size: 0.6rem; font-weight: 600; color: var(--color-muted);
+          text-transform: uppercase; letter-spacing: 0.2em; margin: 0 0 0.4rem;
         }
-        .ec-panel-title { font-family: 'Instrument Serif', serif; font-size: 24px; margin: 0 0 6px; color: var(--ink); }
-        .ec-panel-desc { font-size: 13px; line-height: 1.6; color: var(--dim); margin: 0; }
+        .ec-panel-title { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; letter-spacing: -0.03em; margin: 0 0 0.3rem; color: var(--color-ink); }
+        .ec-panel-desc { font-size: 0.88rem; line-height: 1.6; color: var(--color-ink-2); margin: 0; }
 
         /* ---- Fields ---- */
-        .ec-field { margin-bottom: 20px; }
+        .ec-field { margin-bottom: 1rem; }
         .ec-field label {
-          display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px;
-          text-transform: uppercase; letter-spacing: 0.16em; color: var(--ink-2); margin-bottom: 8px;
+          display: block; font-family: var(--font-mono); font-size: 0.58rem; font-weight: 500;
+          text-transform: uppercase; letter-spacing: 0.18em; color: var(--color-muted); margin-bottom: 0.4rem;
         }
         .ec-field input {
-          width: 100%; background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink); outline: none;
-          transition: background 0.15s ease;
+          width: 100%; background: var(--color-paper-2); border: 1.5px solid transparent; border-radius: var(--radius-input);
+          padding: 0.7rem 0.85rem; font-family: var(--font-mono); font-size: 0.9rem; color: var(--color-ink); outline: none;
+          transition: border-color var(--dur-micro), background var(--dur-micro);
         }
-        .ec-field input:focus { background: #fff; }
-        .ec-row { display: flex; gap: 16px; }
+        .ec-field input:focus { border-color: var(--color-accent-2); background: var(--color-paper); }
+        .ec-row { display: flex; gap: 1rem; }
         .ec-row > * { flex: 1; }
-        .ec-hint { font-size: 11px; color: var(--dim); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
+        .ec-hint { font-size: 0.66rem; color: var(--color-muted); margin-top: 0.35rem; font-family: var(--font-mono); }
 
-        .ec-seg { display: flex; border: 1px solid var(--ink); overflow: hidden; }
+        .ec-seg { display: flex; background: var(--color-paper-2); overflow: hidden; border-radius: var(--radius-input); padding: 0.2rem; gap: 0.2rem; }
         .ec-seg-btn {
-          flex: 1; background: transparent; border: 0; border-right: 1px solid var(--rule);
-          padding: 11px 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
-          text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); cursor: pointer;
-          transition: all 0.15s ease;
+          flex: 1; background: transparent; border: 0; border-radius: var(--radius-sm);
+          padding: 0.55rem 0.5rem; font-family: var(--font-body); font-size: 0.75rem; font-weight: 600;
+          color: var(--color-muted); cursor: pointer;
+          transition: background var(--dur-micro), color var(--dur-micro), box-shadow var(--dur-micro);
         }
-        .ec-seg-btn:last-child { border-right: 0; }
-        .ec-seg-btn:hover { background: var(--paper-2); color: var(--ink); }
-        .ec-seg-btn.active { background: var(--accent); color: #fff; }
+        .ec-seg-btn:hover { color: var(--color-ink); }
+        .ec-seg-btn.active { background: var(--color-paper); color: var(--color-ink); box-shadow: var(--shadow-card); }
 
         .ec-badge {
-          display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 9px;
-          text-transform: uppercase; letter-spacing: 0.14em; padding: 3px 9px; border: 1px solid var(--rule);
+          display: inline-block; font-family: var(--font-body); font-size: 0.62rem; font-weight: 600;
+          letter-spacing: 0.06em; padding: 0.2rem 0.55rem; border-radius: var(--radius-pill); border: 0;
         }
-        .ec-badge.green { background: #d9ead3; color: #274e13; }
-        .ec-badge.blue { background: #cfe2f3; color: #0b3d66; }
-        .ec-badge.gray { background: var(--paper); color: var(--dim); }
+        .ec-badge.green { background: var(--color-tint-mint); color: var(--color-mint-deep); }
+        .ec-badge.blue { background: var(--color-tint-cyan); color: var(--color-accent-2-deep); }
+        .ec-badge.gray { background: var(--color-paper-2); color: var(--color-muted); }
 
         /* ---- Question picking ---- */
-        .ec-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+        .ec-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
         .ec-count-chip {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-2);
-          border: 1px solid var(--rule); background: var(--paper-2); padding: 6px 10px;
+          font-family: var(--font-body); font-size: 0.72rem; font-weight: 500; color: var(--color-ink-2);
+          border-radius: var(--radius-pill); background: var(--color-tint-cyan); padding: 0.3rem 0.7rem;
         }
-        .ec-count-chip b { color: var(--accent); }
+        .ec-count-chip b { color: var(--color-accent-2-deep); font-weight: 700; }
         .ec-clear {
-          background: transparent; border: 1px solid var(--rule); color: var(--dim);
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.08em; padding: 6px 10px; cursor: pointer;
+          background: transparent; border: 1px solid var(--color-rule-2); color: var(--color-muted);
+          border-radius: var(--radius-pill); font-family: var(--font-body); font-size: 0.68rem; font-weight: 600;
+          padding: 0.35rem 0.7rem; cursor: pointer;
         }
-        .ec-clear:hover { color: var(--accent); border-color: var(--accent); }
-        .ec-seg-wide { display: flex; border: 1px solid var(--ink); overflow: hidden; margin-bottom: 20px; }
+        .ec-clear:hover { color: var(--color-ink); border-color: var(--color-ink); }
+        .ec-seg-wide { display: flex; background: var(--color-paper-2); border-radius: var(--radius-input); overflow: hidden; padding: 0.2rem; gap: 0.2rem; margin-bottom: 1rem; }
 
-        .ec-chapter-list { display: flex; flex-direction: column; gap: 8px; }
+        .ec-chapter-list { display: flex; flex-direction: column; gap: 0.45rem; }
         .ec-chapter-item {
-          display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
-          background: var(--paper); border: 1px solid var(--rule); padding: 13px 16px;
-          cursor: pointer; transition: all 0.15s ease; font-family: 'Inter', sans-serif;
-          color: var(--ink-2); font-size: 14px;
+          display: flex; align-items: center; gap: 0.75rem; width: 100%; text-align: left;
+          background: var(--color-paper); border: 1.5px solid var(--color-rule); border-radius: var(--radius-input); padding: 0.75rem 0.9rem;
+          cursor: pointer; transition: border-color var(--dur-micro), background var(--dur-micro); font-family: var(--font-body);
+          color: var(--color-ink-2); font-size: 0.88rem;
         }
-        .ec-chapter-item:hover { border-color: var(--accent); color: var(--ink); }
-        .ec-chapter-item.on { border-color: var(--accent); background: rgba(220,60,40,0.06); color: var(--ink); }
+        .ec-chapter-item:hover { border-color: var(--color-accent-2); }
+        .ec-chapter-item.on { border-color: var(--color-accent-2); background: var(--color-tint-cyan); color: var(--color-ink); }
         .ec-chapter-check {
-          flex: 0 0 auto; width: 22px; height: 22px; border: 1px solid var(--rule);
-          display: grid; place-items: center; font-size: 13px; color: #fff;
+          flex: 0 0 auto; width: 22px; height: 22px; border: 1.5px solid var(--color-rule-2); border-radius: 6px;
+          display: grid; place-items: center; font-size: 0.8rem; color: transparent;
         }
-        .ec-chapter-item.on .ec-chapter-check { background: var(--accent); border-color: var(--accent); }
+        .ec-chapter-item.on .ec-chapter-check { background: var(--color-accent-2); border-color: var(--color-accent-2); color: var(--color-on-accent-2); }
         .ec-chapter-name { flex: 1; }
         .ec-chapter-count {
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim);
-          border: 1px solid var(--rule); padding: 2px 8px;
+          font-family: var(--font-mono); font-size: 0.66rem; color: var(--color-muted);
+          border: 1px solid var(--color-rule); border-radius: var(--radius-pill); padding: 0.15rem 0.5rem;
         }
-        .ec-choose-scroll { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-        .ec-choose-prompt { font-family: 'Instrument Serif', serif; font-size: 15px; color: var(--ink); line-height: 1.4; }
-        .ec-empty { color: var(--dim); font-size: 13px; font-family: 'JetBrains Mono', monospace; padding: 12px 0; }
+        .ec-choose-scroll { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 0.45rem; }
+        .ec-choose-prompt { font-family: var(--font-body); font-weight: 500; font-size: 0.88rem; color: var(--color-ink); line-height: 1.5; }
+        .ec-empty { color: var(--color-muted); font-size: 0.85rem; padding: 0.75rem 0; }
 
         /* ---- Review ---- */
-        .ec-card { border: 1px solid var(--ink); background: #fffdf8; position: relative; padding: 22px 24px; margin-bottom: 24px; }
-        .ec-card::before, .ec-card::after {
-          content: ""; position: absolute; width: 12px; height: 12px; background: var(--ink);
-        }
-        .ec-card::before { top: -1px; left: -1px; }
-        .ec-card::after { bottom: -1px; right: -1px; }
-        .ec-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-        .ec-card-title { font-family: 'Instrument Serif', serif; font-size: 21px; color: var(--ink); margin: 12px 0 4px; line-height: 1.2; }
-        .ec-card-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--dim); letter-spacing: 0.04em; }
+        .ec-card { border-radius: var(--radius-card); box-shadow: var(--shadow-card); border: 1px solid var(--color-rule); background: var(--color-paper); padding: 1.35rem 1.5rem; margin-bottom: 1.25rem; }
+        .ec-card-top { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+        .ec-card-title { font-family: var(--font-display); font-weight: 600; font-size: 1.3rem; letter-spacing: -0.03em; color: var(--color-ink); margin: 0.75rem 0 0.15rem; line-height: 1.2; }
+        .ec-card-meta { font-family: var(--font-mono); font-size: 0.64rem; color: var(--color-muted); letter-spacing: 0.03em; }
 
-        .ec-group { margin-bottom: 20px; }
+        .ec-group { margin-bottom: 1.25rem; }
         .ec-group-head {
-          display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase;
-          letter-spacing: 0.12em; color: var(--ink-2); margin-bottom: 8px; border-bottom: 1px dashed var(--rule); padding-bottom: 6px;
+          display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem;
+          font-family: var(--font-body); font-size: 0.75rem; font-weight: 600;
+          color: var(--color-ink-2); margin-bottom: 0.5rem; border-bottom: 1.5px dashed var(--color-rule-2); padding-bottom: 0.4rem;
         }
-        .ec-group-count { color: var(--dim); }
-        .ec-qlist { display: flex; flex-direction: column; gap: 8px; }
-        .ec-qrow { border: 1px solid var(--rule); background: var(--paper); padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+        .ec-group-count { color: var(--color-muted); font-weight: 400; }
+        .ec-qlist { display: flex; flex-direction: column; gap: 0.45rem; }
+        .ec-qrow { border: 1px solid var(--color-rule); background: var(--color-paper); border-radius: var(--radius-input); padding: 0.7rem 0.85rem; display: flex; align-items: center; gap: 0.7rem; }
         .ec-qnum {
-          flex: 0 0 auto; width: 26px; height: 26px; border: 1px solid var(--rule);
-          display: grid; place-items: center; font-family: 'JetBrains Mono', monospace;
-          font-size: 11px; color: var(--ink-2); background: var(--paper-2);
+          flex: 0 0 auto; width: 26px; height: 26px; border: 1px solid var(--color-rule); border-radius: 6px;
+          display: grid; place-items: center; font-family: var(--font-mono);
+          font-size: 0.68rem; color: var(--color-ink-2); background: var(--color-paper-2);
         }
-        .ec-qprompt { flex: 1; min-width: 0; }
-        .ec-qchapter { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; }
-        .ec-qmarks { flex: 0 0 auto; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
-        .ec-qmarks span { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.12em; }
+        .ec-qprompt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        .ec-qchapter { font-family: var(--font-mono); font-size: 0.54rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.12em; }
+        .ec-qmarks { flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-end; }
+        .ec-qmarks span { font-family: var(--font-mono); font-size: 0.52rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.14em; }
         .ec-qmarks input {
-          width: 68px; background: transparent; border: 1px solid var(--ink); border-radius: 0;
-          padding: 7px 9px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink);
-          outline: none; text-align: center;
+          width: 68px; background: var(--color-paper-2); border: 1.5px solid transparent; border-radius: var(--radius-sm);
+          padding: 0.4rem 0.5rem; font-family: var(--font-mono); font-size: 0.82rem; color: var(--color-ink);
+          outline: none; text-align: center; transition: border-color var(--dur-micro);
         }
-        .ec-qmarks input:focus { background: #fff; }
+        .ec-qmarks input:focus { border-color: var(--color-accent-2); background: var(--color-paper); }
 
         /* ---- Created ---- */
         .ec-success {
-          border: 1px solid var(--ink); background: #fffdf8; position: relative; padding: 28px 26px; margin-bottom: 24px; text-align: center;
+          border: 1px solid var(--color-rule); background: var(--color-paper); padding: 1.5rem 1.5rem; margin-bottom: 1.5rem; text-align: center;
+          border-radius: var(--radius-card); box-shadow: var(--shadow-card);
         }
-        .ec-success::before, .ec-success::after { content: ""; position: absolute; width: 12px; height: 12px; background: var(--ink); }
-        .ec-success::before { top: -1px; left: -1px; }
-        .ec-success::after { bottom: -1px; right: -1px; }
         .ec-success-ico {
-          width: 46px; height: 46px; border-radius: 999px; background: #d9ead3; color: #274e13;
-          display: grid; place-items: center; font-size: 22px; margin: 0 auto 14px;
+          width: 54px; height: 54px; border-radius: 999px; background: var(--color-mint); color: var(--color-ink);
+          display: grid; place-items: center; font-size: 1.5rem; margin: 0 auto 0.85rem;
         }
-        .ec-success-title { font-family: 'Instrument Serif', serif; font-size: 22px; margin: 0 0 6px; color: var(--ink); }
-        .ec-success-sub { font-size: 13px; color: var(--dim); margin: 0 0 20px; line-height: 1.6; }
-        .ec-code-block { border: 1px solid var(--rule); background: var(--paper-2); padding: 16px 18px; margin-bottom: 14px; text-align: left; }
-        .ec-code-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--dim); margin-bottom: 10px; }
-        .ec-code-row { display: flex; align-items: center; gap: 12px; }
+        .ec-success-title { font-family: var(--font-display); font-weight: 600; font-size: 1.4rem; letter-spacing: -0.03em; margin: 0 0 0.35rem; color: var(--color-ink); }
+        .ec-success-sub { font-size: 0.86rem; color: var(--color-ink-2); margin: 0 auto 1.25rem; line-height: 1.6; max-width: 44ch; }
+        .ec-code-block { border: 1px solid var(--color-rule); background: var(--color-paper-2); border-radius: var(--radius-input); padding: 0.9rem 1rem; margin-bottom: 0.85rem; text-align: left; }
+        .ec-code-label { font-family: var(--font-mono); font-size: 0.58rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.18em; color: var(--color-muted); margin-bottom: 0.5rem; }
+        .ec-code-row { display: flex; align-items: center; gap: 0.65rem; }
         .ec-code-value {
-          flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--ink);
-          background: var(--paper); border: 1px solid var(--rule); padding: 10px 12px;
+          flex: 1; font-family: var(--font-mono); font-size: 0.85rem; color: var(--color-ink);
+          background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: var(--radius-sm); padding: 0.55rem 0.75rem;
           overflow-x: auto; white-space: nowrap;
         }
-        .ec-code-link { font-size: 12px; color: var(--accent); }
+        .ec-code-link { font-size: 0.75rem; font-weight: 600; color: var(--color-accent-2-deep); text-decoration: underline; text-underline-offset: 2px; }
         .ec-share-btn {
-          font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
-          letter-spacing: 0.08em; border: 1px solid var(--rule); background: transparent;
-          color: var(--ink-2); padding: 8px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+          font-family: var(--font-body); font-size: 0.66rem; font-weight: 600; letter-spacing: 0.02em; border: 1px solid var(--color-rule-2); background: transparent;
+          border-radius: var(--radius-pill); color: var(--color-ink-2); padding: 0.4rem 0.7rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;
         }
-        .ec-share-btn:hover { color: var(--accent); border-color: var(--accent); }
-        .ec-share-btn.done { color: #274e13; border-color: #d9ead3; background: #d9ead3; }
+        .ec-share-btn:hover { color: var(--color-ink); border-color: var(--color-ink); }
+        .ec-share-btn.done { color: var(--color-mint-deep); border-color: var(--color-mint); background: var(--color-tint-mint); }
 
         /* ---- Sticky footer nav ---- */
         .ec-footer {
-          position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-          background: var(--paper); border-top: 1px solid var(--rule);
-          padding: 14px 34px;
+          position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-sticky);
+          background: color-mix(in oklch, var(--color-paper) 88%, transparent); backdrop-filter: blur(10px);
+          border-top: 1px solid var(--color-rule);
+          padding: 0.7rem var(--page-gutter);
         }
-        .ec-footer-inner { max-width: 720px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+        .ec-footer-inner { max-width: 44rem; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
         .ec-btn {
-          background: transparent; border: 1px solid var(--ink); color: var(--ink);
-          padding: 12px 20px; cursor: pointer; font-family: 'JetBrains Mono', monospace;
-          font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+          background: var(--color-paper-2); border: 0; color: var(--color-ink-2);
+          padding: 0.75rem 1.25rem; border-radius: var(--radius-pill); cursor: pointer; font-family: var(--font-body);
+          font-size: 0.82rem; font-weight: 600; text-decoration: none;
         }
-        .ec-btn:hover { background: var(--ink); color: var(--paper); }
+        .ec-btn:hover { background: var(--color-paper-3); color: var(--color-ink); }
         .ec-btn.primary {
-          background: var(--accent); color: #fff; border-color: var(--accent);
-          font-family: 'Inter', sans-serif; font-weight: 600; letter-spacing: 0.04em;
+          background: var(--color-accent); color: var(--color-on-accent); border: 0;
+          font-family: var(--font-display); font-weight: 600; font-size: 0.88rem; letter-spacing: -0.01em; text-transform: none;
+          box-shadow: 0 4px 0 0 var(--color-accent-deep), 0 6px 12px -3px var(--color-accent-cast);
+          transition: transform var(--dur-micro) var(--ease-press), box-shadow var(--dur-micro) var(--ease-press);
         }
-        .ec-btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+        .ec-btn.primary:hover { transform: translateY(-2px); box-shadow: 0 6px 0 0 var(--color-accent-deep), 0 12px 20px -4px var(--color-accent-cast); }
+        .ec-btn.primary:active { transform: translateY(2px); box-shadow: 0 1px 0 0 var(--color-accent-deep); }
         .ec-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .ec-error { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent); margin-bottom: 12px; line-height: 1.5; }
+
+        .ec-error { font-size: 0.85rem; color: var(--color-danger); background: var(--color-danger-soft); border-radius: var(--radius-sm); padding: 0.55rem 0.75rem; margin-bottom: 0.75rem; line-height: 1.5; }
 
         /* math preview classes (shared with question editor) */
         .nq-preview-inline {
-          font-family: 'Georgia', 'Times New Roman', serif; font-size: 15px;
-          color: var(--ink); line-height: 1.6; word-break: break-word;
+          font-family: var(--font-body); font-size: 15px;
+          color: var(--color-ink); line-height: 1.6; word-break: break-word;
         }
         .nq-prev-math { padding: 0 1px; }
         .nq-frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 2px; font-size: 0.78em; }
-        .nq-frac-num { border-bottom: 1px solid var(--ink); padding: 0 5px; }
+        .nq-frac-num { border-bottom: 1px solid var(--color-ink); padding: 0 5px; }
         .nq-frac-den { padding: 0 5px; }
         .nq-vec { position: relative; display: inline-block; }
         .nq-vec-arrow { position: absolute; top: -0.55em; left: 50%; transform: translateX(-50%); font-size: 0.8em; line-height: 1; letter-spacing: -0.05em; pointer-events: none; }
@@ -470,34 +454,36 @@ export default function ExamCreator({
         .nq-hat { position: relative; display: inline-block; }
         .nq-hat-cap { position: absolute; top: -0.55em; left: 50%; transform: translateX(-55%) scaleX(1.1); font-size: 0.85em; line-height: 1; pointer-events: none; }
         .nq-hat-body { padding: 0 1px; }
-        .nq-sqrt { border-top: 1px solid var(--ink); padding: 0 2px; }
-        .nq-sqrt-body { border-top: 1px solid var(--ink); padding: 0 2px; }
+        .nq-sqrt { border-top: 1px solid var(--color-ink); padding: 0 2px; }
+        .nq-sqrt-body { border-top: 1px solid var(--color-ink); padding: 0 2px; }
 
         .ec-stepper { display: flex; align-items: stretch; }
         .ec-stepper input {
-          flex: 1; width: 100%; background: transparent; border: 1px solid var(--ink); border-right: 0;
-          border-radius: 0; padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 14px;
-          color: var(--ink); outline: none;
+          flex: 1; width: 100%; background: var(--color-paper-2); border: 1.5px solid transparent; border-right: 0;
+          border-radius: var(--radius-input) 0 0 var(--radius-input); padding: 0.7rem 0.8rem; font-family: var(--font-mono); font-size: 0.9rem;
+          color: var(--color-ink); outline: none;
         }
-        .ec-stepper input:focus { background: #fff; }
-        .ec-stepper-btns { display: flex; flex-direction: column; border: 1px solid var(--ink); border-left: 0; }
+        .ec-stepper input:focus { border-color: var(--color-accent-2); background: var(--color-paper); outline: none; }
+        .ec-stepper-btns { display: flex; flex-direction: column; background: var(--color-paper-2); border-radius: 0 var(--radius-input) var(--radius-input) 0; overflow: hidden; }
         .ec-stepper-btns button {
-          flex: 1; width: 34px; background: transparent; border: 0; border-bottom: 1px solid var(--ink);
-          cursor: pointer; color: var(--ink-2); font-size: 9px; line-height: 1; display: grid; place-items: center;
+          flex: 1; width: 34px; background: transparent; border: 0; border-bottom: 1px solid var(--color-rule);
+          cursor: pointer; color: var(--color-ink-2); font-size: 0.55rem; line-height: 1; display: grid; place-items: center;
         }
         .ec-stepper-btns button:last-child { border-bottom: 0; }
-        .ec-stepper-btns button:hover { background: var(--accent); color: #fff; }
+        .ec-stepper-btns button:hover { background: var(--color-tint-pear); color: var(--color-ink); }
 
         @media (max-width: 560px) {
           .ec-row { flex-direction: column; gap: 0; }
           .ec-node-label { display: none; }
-          .ec-panel { padding: 22px 20px; }
+          .ec-panel { padding: 1.25rem 1.1rem; }
+          .ec-footer { padding: 0.6rem 1rem; }
         }
+
       `}</style>
 
       <header className="ec-header">
         <div>
-          <h1 className="ec-header-title">New <em>Exam</em></h1>
+          <h1 className="ec-header-title">New <span className="hl">Exam</span></h1>
           <div className="ec-header-sub">Create your exam step by step.</div>
         </div>
         <button className="ec-back" onClick={() => router.push(backHref)} aria-label="Back to admin">
@@ -518,7 +504,7 @@ export default function ExamCreator({
                   onClick={i < step ? () => setStep(i) : undefined}
                   title={i < step ? `Go to ${s.label}` : undefined}
                 >
-                  <span className="ec-node-dot">{state === "done" ? "✓" : i + 1}</span>
+                  <span className="ec-node-dot">{state === "done" ? (<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg>) : i + 1}</span>
                   <span className="ec-node-label">{s.label}</span>
                 </div>
               );
@@ -567,7 +553,7 @@ export default function ExamCreator({
                 <div className="ec-field">
                   <label>Status</label>
                   <div className="ec-seg">
-                    {(["draft", "scheduled", "completed"] as ExamStatus[]).map((s) => (
+                    {(["draft", "scheduled"] as ExamStatus[]).map((s) => (
                       <button
                         key={s}
                         type="button"
@@ -585,12 +571,11 @@ export default function ExamCreator({
                 <div className="ec-field">
                   <label>Taken on</label>
                   <input
-                    type="text"
+                    type="datetime-local"
                     value={takenOn}
-                    placeholder={`e.g. ${today}`}
                     onChange={(e) => setTakenOn(e.target.value)}
                   />
-                  <div className="ec-hint">Leave blank to use today&apos;s date ({today}).</div>
+                  <div className="ec-hint">Pick a date and time. Leave blank to use today ({today}).</div>
                 </div>
               )}
             </>
@@ -646,7 +631,7 @@ export default function ExamCreator({
                         className={`ec-chapter-item${on ? " on" : ""}`}
                         onClick={() => toggleChapter(c)}
                       >
-                        <span className="ec-chapter-check">{on ? "✓" : ""}</span>
+                        <span className="ec-chapter-check">{on ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg> : null}</span>
                         <span className="ec-chapter-name">{c}</span>
                         <span className="ec-chapter-count">{count}</span>
                       </button>
@@ -676,7 +661,7 @@ export default function ExamCreator({
                           className={`ec-chapter-item${on ? " on" : ""}`}
                           onClick={() => toggleQuestion(q.id)}
                         >
-                          <span className="ec-chapter-check">{on ? "✓" : ""}</span>
+                          <span className="ec-chapter-check">{on ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg> : null}</span>
                           <span className="ec-chapter-name ec-choose-prompt">
                             <MathPreview text={q.prompt} compact />
                           </span>
@@ -768,7 +753,7 @@ export default function ExamCreator({
           {step === 3 && created && (
             <>
               <div className="ec-success">
-                <div className="ec-success-ico">✓</div>
+                <div className="ec-success-ico" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg></div>
                 <h2 className="ec-success-title">Exam created</h2>
                 <p className="ec-success-sub">
                   “{created.title}” is saved with {finalIds.length} question{finalIds.length === 1 ? "" : "s"}.
@@ -783,7 +768,7 @@ export default function ExamCreator({
                       className={`ec-share-btn${copied === "code" ? " done" : ""}`}
                       onClick={() => copy(created.code, "code")}
                     >
-                      <span>{copied === "code" ? "✓" : "⧉"}</span>
+                      <span style={{display:"inline-flex"}}>{copied === "code" ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>}</span>
                       {copied === "code" ? "Copied" : "Copy"}
                     </button>
                   </div>
@@ -797,7 +782,7 @@ export default function ExamCreator({
                       className={`ec-share-btn${copied === "link" ? " done" : ""}`}
                       onClick={() => copy(examLink, "link")}
                     >
-                      <span>{copied === "link" ? "✓" : "⧉"}</span>
+                      <span style={{display:"inline-flex"}}>{copied === "link" ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>}</span>
                       {copied === "link" ? "Copied" : "Copy"}
                     </button>
                   </div>

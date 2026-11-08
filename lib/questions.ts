@@ -144,5 +144,29 @@ export async function updateQuestion(
 
 export async function deleteQuestion(id: string): Promise<void> {
   const db = getFirestoreDb();
+  // Capture the image URLs before the document disappears.
+  const snap = await getDoc(doc(db, COLLECTION, id));
+  const data = snap.exists() ? (snap.data() as Record<string, unknown>) : undefined;
+  const urls: string[] = [];
+  if (typeof data?.imageUrl === "string") urls.push(data.imageUrl);
+  if (Array.isArray(data?.options)) {
+    for (const opt of data.options as Array<Record<string, unknown>>) {
+      if (typeof opt?.imageUrl === "string") urls.push(opt.imageUrl);
+    }
+  }
+
   await deleteDoc(doc(db, COLLECTION, id));
+
+  // Best-effort Storage cleanup — a failed image delete should NOT resurrect
+  // the question or crash the flow; orphans are cheaper than a broken UX.
+  if (urls.length > 0) {
+    const { deleteByUrl } = await import("./storage");
+    for (const url of urls) {
+      try {
+        await deleteByUrl(url);
+      } catch (err) {
+        console.warn("[questions] could not delete image from Storage:", url, err);
+      }
+    }
+  }
 }

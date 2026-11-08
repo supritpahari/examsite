@@ -589,7 +589,7 @@ async function fetchImageData(
     // Skip blob: and data: URLs — they cannot be fetched through the proxy.
     if (url.startsWith("blob:") || url.startsWith("data:")) return null;
 
-    // Admin-uploaded images live on ImgBB (cross-origin). Browsers refuse to
+    // Admin-uploaded images live in Firebase Storage (cross-origin). Browsers refuse to
     // read cross-origin image bytes unless the host emits CORS headers, so
     // route cross-origin URLs through our same-origin image proxy, which fetches
     // server-side and re-serves with Access-Control-Allow-Origin: *. Same-origin

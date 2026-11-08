@@ -27,6 +27,74 @@ export interface Exam {
   createdAt?: unknown;
 }
 
+
+/** Pad two digits. */
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Format a local Date as the value a <input type="datetime-local"> expects. */
+export function toLocalInputValue(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/** Current local date/time in datetime-local format. */
+export function todayIsoLocal(): string {
+  return toLocalInputValue(new Date());
+}
+
+/**
+ * Best-effort conversion of a stored takenOn value (ISO local string,
+ * legacy "Nov 08, 2026", etc.) into datetime-local input format.
+ */
+export function toIsoLocal(value: string): string {
+  if (!value || value === "—") return "";
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`;
+  const t = Date.parse(value);
+  if (Number.isNaN(t)) return "";
+  return toLocalInputValue(new Date(t));
+}
+
+/**
+ * Parse a stored takenOn value (ISO local "2026-11-08T18:30", or legacy
+ * free text like "Nov 08, 2026") into a Date. Returns null when missing/unparseable.
+ */
+export function parseTakenOn(value: string): Date | null {
+  if (!value || value === "—") return null;
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    const d = new Date(
+      Number(m[1]),
+      Number(m[2]) - 1,
+      Number(m[3]),
+      Number(m[4]),
+      Number(m[5]),
+      Number(m[6] ?? 0)
+    );
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const t = Date.parse(value);
+  return Number.isNaN(t) ? null : new Date(t);
+}
+
+/** Display format for a stored takenOn value — ISO input becomes "8 Nov 2026, 6:30 pm". */
+export function formatTakenOn(value: string): string {
+  if (!value || value === "—") return "—";
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return value; // legacy free-text — show as stored
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 const COLLECTION = "exams";
 
 const EXAM_STATUSES: ExamStatus[] = ["completed", "scheduled", "draft", "stopped"];

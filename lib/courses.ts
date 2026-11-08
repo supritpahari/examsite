@@ -13,7 +13,7 @@ import {
 export interface CourseTopic {
   id: string;
   name: string;
-  price: number; // in INR (minor units / paise)
+  price: number; // in INR (whole rupees — as stored by the admin panel)
   pdfUrl: string; // public PDF URL (Firebase Storage / direct link)
   pdfName: string;
 }
@@ -113,21 +113,21 @@ export const COURSE_GRADES: CourseGrade[] = [
       {
         id: "mechanics",
         name: "Mechanics — Kinematics & Laws of Motion",
-        price: 4900,
+        price: 49,
         pdfUrl: "/pdfs/class-11-mechanics.pdf",
         pdfName: "Class 11 - Mechanics Formula Sheet.pdf",
       },
       {
         id: "thermodynamics",
         name: "Thermodynamics & Kinetic Theory",
-        price: 4900,
+        price: 49,
         pdfUrl: "/pdfs/class-11-thermodynamics.pdf",
         pdfName: "Class 11 - Thermodynamics Formula Sheet.pdf",
       },
       {
         id: "waves",
         name: "Waves & Oscillations",
-        price: 3900,
+        price: 39,
         pdfUrl: "/pdfs/class-11-waves.pdf",
         pdfName: "Class 11 - Waves Formula Sheet.pdf",
       },
@@ -140,28 +140,28 @@ export const COURSE_GRADES: CourseGrade[] = [
       {
         id: "electrostatics",
         name: "Electrostatics & Current Electricity",
-        price: 5900,
+        price: 59,
         pdfUrl: "/pdfs/class-12-electrostatics.pdf",
         pdfName: "Class 12 - Electrostatics Formula Sheet.pdf",
       },
       {
         id: "magnetism",
         name: "Magnetism & Electromagnetic Induction",
-        price: 5900,
+        price: 59,
         pdfUrl: "/pdfs/class-12-magnetism.pdf",
         pdfName: "Class 12 - Magnetism Formula Sheet.pdf",
       },
       {
         id: "optics",
         name: "Ray & Wave Optics",
-        price: 4900,
+        price: 49,
         pdfUrl: "/pdfs/class-12-optics.pdf",
         pdfName: "Class 12 - Optics Formula Sheet.pdf",
       },
       {
         id: "modern-physics",
         name: "Modern Physics & Semiconductors",
-        price: 5900,
+        price: 59,
         pdfUrl: "/pdfs/class-12-modern-physics.pdf",
         pdfName: "Class 12 - Modern Physics Formula Sheet.pdf",
       },
@@ -174,7 +174,7 @@ export const COURSE_GRADES: CourseGrade[] = [
       {
         id: "jee-full",
         name: "JEE Complete Physics Formula Pack",
-        price: 9900,
+        price: 99,
         pdfUrl: "/pdfs/jee-full-physics.pdf",
         pdfName: "JEE Complete Physics Formula Pack.pdf",
       },
@@ -187,7 +187,7 @@ export const COURSE_GRADES: CourseGrade[] = [
       {
         id: "neet-full",
         name: "NEET Physics Formula Pack",
-        price: 7900,
+        price: 79,
         pdfUrl: "/pdfs/neet-full-physics.pdf",
         pdfName: "NEET Physics Formula Pack.pdf",
       },

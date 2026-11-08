@@ -1,3 +1,4 @@
+/* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -25,7 +26,10 @@ export default function Error({
   const title =
     customTitle || (
       <>
-        Something <em style={{ color: "oklch(0.52 0.20 25)" }}>went wrong</em>
+        Something{" "}
+        <span className="hl" style={{ "--hl": "oklch(68% 0.24 18 / 0.3)" } as React.CSSProperties}>
+          went wrong
+        </span>
       </>
     );
   const message =
