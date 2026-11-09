@@ -276,7 +276,7 @@ export default function Home() {
           <nav className="lp-nav-center" aria-label="Site">
           {auth === "loading" ? (
             <button className="lp-nav-btn" disabled>
-              og In
+              LOG IN
             </button>
           ) : auth === "in" ? (
             <Link href="/account" className="lp-nav-btn">
@@ -284,7 +284,7 @@ export default function Home() {
             </Link>
           ) : (
             <button className="lp-nav-btn" onClick={() => setAuthDialogOpen(true)}>
-              og In
+              LOG IN
             </button>
           )}
         </nav>
