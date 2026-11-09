@@ -201,10 +201,30 @@ export default function PhoneAuth({
 
         {/* Dialog mode overrides */}
         .lp-auth-dialog-container { min-height: auto; padding: 0; display: block; background: transparent; box-shadow: none; border: none; }
-        .lp-auth-dialog-card { max-width: 430px; width: 100%; background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: var(--radius-card); box-shadow: var(--shadow-lift); padding: 2rem; position: relative; }
-        .lp-auth-dialog-close { position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; font-size: 1.25rem; cursor: pointer; color: var(--color-ink-2); line-height: 1; }
-        .lp-auth-dialog-close:hover { color: var(--color-ink); background: var(--color-paper-2); border-radius: 999px; padding: 0.25rem; }
+        .lp-auth-dialog-card { max-width: 420px; width: 100%; background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: var(--radius-card); box-shadow: var(--shadow-lift); padding: 2.25rem 2rem 2rem; position: relative; isolation: isolate; }
+        .lp-auth-dialog-close { position: absolute; top: 1.1rem; right: 1.1rem; background: transparent; border: none; font-size: 1.25rem; cursor: pointer; color: var(--color-ink-2); line-height: 1; padding: 0.3rem; border-radius: 999px; }
+        .lp-auth-dialog-close:hover { color: var(--color-ink); background: var(--color-paper-2); }
         .lp-auth-overlay { position: fixed; inset: 0; background: oklch(20% 0.012 250 / 0.55); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 2rem; }
+
+        /* Dialog-specific refinements — single card, clear hierarchy */
+        .lp-auth-dialog-card .lp-auth-brand { margin-bottom: 0.35rem; padding-bottom: 1rem; border-bottom: 1px solid var(--color-rule-2); }
+        .lp-auth-dialog-card .lp-auth-kicker { font-size: 0.6rem; letter-spacing: 0.22em; margin-bottom: 0.6rem; color: var(--color-accent-2-deep); font-weight: 700; text-transform: uppercase; }
+        .lp-auth-dialog-card .lp-auth-title { font-size: 1.75rem; letter-spacing: -0.02em; margin: 0 0 0.5rem; line-height: 1.12; }
+        .lp-auth-dialog-card .lp-auth-sub { font-size: 0.88rem; line-height: 1.6; color: var(--color-ink-2); margin: 0 0 1.5rem; max-width: 34ch; }
+        .lp-auth-dialog-card .lp-note { font-size: 0.58rem; letter-spacing: 0.14em; margin-top: 1rem; color: var(--color-muted); }
+
+        .lp-auth-dialog-card .lp-cta { width: 100%; margin-top: 0; padding: 0.9rem 1rem; font-family: var(--font-display); font-weight: 600; font-size: 1rem; letter-spacing: -0.01em; background: var(--color-accent); color: var(--color-on-accent); border: none; border-radius: var(--radius-pill); cursor: pointer; transition: background var(--dur-micro), transform var(--dur-micro), box-shadow var(--dur-micro); box-shadow: 0 4px 0 var(--color-accent-deep); text-transform: none; }
+        .lp-auth-dialog-card .lp-cta:disabled { background: var(--color-muted); box-shadow: 0 4px 0 var(--color-faint); color: oklch(85% 0 0 / 0.6); cursor: not-allowed; }
+        .lp-auth-dialog-card .lp-cta:not(:disabled):hover { background: var(--color-accent-deep); transform: translateY(-1px); box-shadow: 0 8px 0 var(--color-accent-deep); }
+        .lp-auth-dialog-card .lp-cta:not(:disabled):active { transform: translateY(0); box-shadow: 0 2px 0 var(--color-accent-deep); }
+
+        .lp-auth-dialog-card .lp-phone-row { gap: 0.5rem; margin-bottom: 0; }
+        .lp-auth-dialog-card .lp-cc { padding: 0 0.85rem; background: var(--color-paper-2); border-color: var(--color-rule-2); border-width: 1.5px; font-size: 0.9rem; font-weight: 600; }
+        .lp-auth-dialog-card .lp-phone-row input { font-size: 1rem; padding: 0.85rem 1rem; }
+        .lp-auth-dialog-card .lp-error { font-size: 0.8rem; padding: 0.6rem 0.8rem; margin-bottom: 0.9rem; border-left: 3px solid var(--color-danger); }
+        .lp-auth-dialog-card .lp-row-links { margin-top: 1rem; gap: 0.9rem; }
+        .lp-auth-dialog-card .lp-link { font-size: 0.78rem; font-weight: 600; color: var(--color-accent-2-deep); padding: 0.2rem 0; }
+        .lp-auth-dialog-card .lp-auth-card { padding: 0; box-shadow: none; border: none; background: transparent; }
       `}</style>
   );
 
