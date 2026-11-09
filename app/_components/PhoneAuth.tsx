@@ -12,10 +12,11 @@ import {
   type ConfirmationResult,
 } from "firebase/auth";
 import { getAuthInstance } from "@/lib/firebase/client";
+import { saveProfile } from "@/lib/profile";
 import FormulaMarks from "./FormulaMarks";
 import Image from "next/image";
 
-type Phase = "phone" | "sending" | "code" | "verifying";
+type Phase = "phone" | "sending" | "code" | "verifying" | "name";
 
 function friendlyError(code: string): string {
   switch (code) {
@@ -57,8 +58,10 @@ export default function PhoneAuth({
   const [phase, setPhase] = useState<Phase>("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [resendIn, setResendIn] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   // Firebase is client-only here — never initialize it during render/SSR.
   const authRef = useRef<Auth | null>(null);
@@ -72,6 +75,7 @@ export default function PhoneAuth({
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
   const confirmationRef = useRef<ConfirmationResult | null>(null);
   const otpInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Tokens are single-use — tear down and recreate around every attempt
   // instead of reusing a stale verifier after a failed send.
@@ -99,6 +103,10 @@ export default function PhoneAuth({
 
   useEffect(() => {
     if (phase === "code") otpInputRef.current?.focus();
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase === "name") nameInputRef.current?.focus();
   }, [phase]);
 
   // WebOTP — auto-capture 6-digit OTP from incoming SMS (Chrome/Android).
@@ -186,7 +194,8 @@ export default function PhoneAuth({
     setPhase("verifying");
     try {
       await confirmationRef.current.confirm(code);
-      onClose?.();
+      // OTP verified — now collect the student's name and save it to profile.
+      setPhase("name");
     } catch (err) {
       const codeId = (err as { code?: string })?.code ?? "";
       setError(friendlyError(codeId));
@@ -199,6 +208,31 @@ export default function PhoneAuth({
     setOtp("");
     setError(null);
     confirmationRef.current = null;
+  };
+
+  const saveName = async () => {
+    setError(null);
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Enter your name.");
+      return;
+    }
+    const auth = getAuth();
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setError("Session lost — verify again.");
+      setPhase("phone");
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveProfile(uid, trimmed);
+      onClose?.();
+    } catch {
+      setError("Couldn't save your name — try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const styleTag = (
@@ -317,6 +351,31 @@ export default function PhoneAuth({
                   </form>
                   <p className="lp-note">India only · One number, one identity · Free to use</p>
                 </>
+              ) : phase === "name" ? (
+                <>
+                  <p className="lp-auth-kicker">Almost done</p>
+                  <h1 className="lp-auth-title">What&apos;s your name?</h1>
+                  <p className="lp-auth-sub">This pre-fills when you take a test — saved to your account.</p>
+                  <form onSubmit={(e) => { e.preventDefault(); void saveName(); }}>
+                    <label className="visually-hidden" htmlFor="profile-name">Name</label>
+                    <input
+                      ref={nameInputRef}
+                      id="profile-name"
+                      type="text"
+                      autoComplete="name"
+                      maxLength={80}
+                      placeholder="e.g. Riya Sharma"
+                      value={name}
+                      disabled={saving}
+                      onChange={(e) => { setName(e.target.value.slice(0, 80)); if (error) setError(null); }}
+                      aria-label="Your name"
+                    />
+                    <button type="submit" className="btn lp-cta" disabled={saving || !name.trim()}>
+                      {saving ? "Saving…" : "Save & continue"}
+                    </button>
+                  </form>
+                  {error && <div className="lp-error" role="alert">{error}</div>}
+                </>
               ) : (
                 <>
                   <p className="lp-auth-kicker">Check your phone</p>
@@ -395,6 +454,31 @@ export default function PhoneAuth({
                 </button>
               </form>
               <p className="lp-note">India only · One number, one identity · Free to use</p>
+            </>
+          ) : phase === "name" ? (
+            <>
+              <p className="lp-auth-kicker">Almost done</p>
+              <h1 className="lp-auth-title">What&apos;s your name?</h1>
+              <p className="lp-auth-sub">This pre-fills when you take a test — saved to your account.</p>
+              <form onSubmit={(e) => { e.preventDefault(); void saveName(); }}>
+                <label className="visually-hidden" htmlFor="profile-name">Name</label>
+                <input
+                  ref={nameInputRef}
+                  id="profile-name"
+                  type="text"
+                  autoComplete="name"
+                  maxLength={80}
+                  placeholder="e.g. Riya Sharma"
+                  value={name}
+                  disabled={saving}
+                  onChange={(e) => { setName(e.target.value.slice(0, 80)); if (error) setError(null); }}
+                  aria-label="Your name"
+                />
+                <button type="submit" className="btn lp-cta" disabled={saving || !name.trim()}>
+                  {saving ? "Saving…" : "Save & continue"}
+                </button>
+              </form>
+              {error && <div className="lp-error" role="alert">{error}</div>}
             </>
           ) : (
             <>
