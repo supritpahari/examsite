@@ -7,12 +7,16 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import FormulaMarks from "./_components/FormulaMarks";
+import { onAuthState } from "@/lib/firebase/client";
+import PhoneAuth from "./_components/PhoneAuth";
 
 export default function Home() {
   const [code, setCode] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [siteInfo, setSiteInfo] = useState<SiteInfo>(DEFAULT_SITE_INFO);
+  const [auth, setAuth] = useState<"loading" | "in" | "out">("loading");
 
   useEffect(() => {
     loadSiteInfo()
@@ -25,6 +29,14 @@ export default function Home() {
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const unsub = onAuthState((u) => {
+      const phoneOk = Boolean(u?.providerData?.some((p) => p.providerId === "phone"));
+      setAuth(phoneOk ? "in" : "out");
+    });
+    return unsub;
   }, []);
 
   const router = useRouter();
@@ -262,10 +274,20 @@ export default function Home() {
             World of Physics
           </a>
           <nav className="lp-nav-center" aria-label="Site">
+          {auth === "loading" ? (
+            <button className="lp-nav-btn" disabled>
+              og In
+            </button>
+          ) : auth === "in" ? (
             <Link href="/account" className="lp-nav-btn">
-              Login / Account
+              Account
             </Link>
-          </nav>
+          ) : (
+            <button className="lp-nav-btn" onClick={() => setAuthDialogOpen(true)}>
+              og In
+            </button>
+          )}
+        </nav>
         </div>
       </header>
 
@@ -446,6 +468,11 @@ export default function Home() {
             {codeForm}
           </div>
         </div>
+      )}
+
+      {/* Phone OTP sign-in dialog */}
+      {authDialogOpen && (
+        <PhoneAuth dialog onClose={() => setAuthDialogOpen(false)} />
       )}
     </div>
   );

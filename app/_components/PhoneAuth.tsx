@@ -50,7 +50,10 @@ function friendlyError(code: string): string {
   }
 }
 
-export default function PhoneAuth() {
+export default function PhoneAuth({
+  dialog,
+  onClose,
+}: { dialog?: boolean; onClose?: () => void } = {}) {
   const [phase, setPhase] = useState<Phase>("phone");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -153,7 +156,7 @@ export default function PhoneAuth() {
     setPhase("verifying");
     try {
       await confirmationRef.current.confirm(code);
-      // onAuthState listener upstream flips the page into the lobby.
+      onClose?.();
     } catch (err) {
       const codeId = (err as { code?: string })?.code ?? "";
       setError(friendlyError(codeId));
@@ -195,6 +198,13 @@ export default function PhoneAuth() {
         .lp-note { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-muted); margin-top: 1.1rem; text-align: center; line-height: 1.7; }
         .lp-code-hint { font-size: 0.84rem; color: var(--color-muted); margin: 0.1rem 0 0.9rem; line-height: 1.5; }
         .lp-code-hint strong { color: var(--color-ink); font-weight: 600; }
+
+        {/* Dialog mode overrides */}
+        .lp-auth-dialog-container { min-height: auto; padding: 0; display: block; background: transparent; box-shadow: none; border: none; }
+        .lp-auth-dialog-card { max-width: 430px; width: 100%; background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: var(--radius-card); box-shadow: var(--shadow-lift); padding: 2rem; position: relative; }
+        .lp-auth-dialog-close { position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; font-size: 1.25rem; cursor: pointer; color: var(--color-ink-2); line-height: 1; }
+        .lp-auth-dialog-close:hover { color: var(--color-ink); background: var(--color-paper-2); border-radius: 999px; padding: 0.25rem; }
+        .lp-auth-overlay { position: fixed; inset: 0; background: oklch(20% 0.012 250 / 0.55); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 2rem; }
       `}</style>
   );
 
@@ -212,81 +222,167 @@ export default function PhoneAuth() {
   }
 
   return (
-    <div className="lp-auth">
-      <FormulaMarks />
-      {styleTag}
-      <main className="lp-auth-card">
-        <a className="lp-auth-brand" href="/" aria-label="World of Physics — home">
-          <Image src="/logo.png" alt="" width={34} height={34} style={{ borderRadius: 8, border: "1px solid var(--color-rule-2)" }} priority />
-          <span className="lp-auth-wordmark"><span className="lp-auth-dot" aria-hidden="true" />World of Physics</span>
-        </a>
+    dialog ? (
+      <div className="lp-auth-overlay" onClick={() => onClose?.()}>
+        <div className="lp-auth-dialog-card" onClick={(e) => e.stopPropagation()}>
+          <button className="lp-auth-dialog-close" onClick={() => onClose?.()} aria-label="Close sign-in">
+            ✕
+          </button>
+          <div className="lp-auth-dialog-container">
+            <FormulaMarks />
+            {styleTag}
+            <main className="lp-auth-card">
+              <a className="lp-auth-brand" href="/" aria-label="World of Physics — home">
+                <Image src="/logo.png" alt="" width={34} height={34} style={{ borderRadius: 8, border: "1px solid var(--color-rule-2)" }} priority />
+                <span className="lp-auth-wordmark"><span className="lp-auth-dot" aria-hidden="true" />World of Physics</span>
+              </a>
 
-        {error && <div className="lp-error" role="alert">{error}</div>}
+              {error && <div className="lp-error" role="alert">{error}</div>}
 
-        {phase === "phone" || phase === "sending" ? (
-          <>
-            <p className="lp-auth-kicker">Student sign-in</p>
-            <h1 className="lp-auth-title">Enter your mobile number</h1>
-            <p className="lp-auth-sub">We&apos;ll send a one-time code — verify it, and your test starts.</p>
-            <form onSubmit={(e) => { e.preventDefault(); void sendCode(); }}>
-              <label className="visually-hidden" htmlFor="phone-number">Mobile number</label>
-              <div className="lp-phone-row">
-                <span className="lp-cc" aria-hidden="true">+91</span>
+              {phase === "phone" || phase === "sending" ? (
+                <>
+                  <p className="lp-auth-kicker">Student sign-in</p>
+                  <h1 className="lp-auth-title">Enter your mobile number</h1>
+                  <p className="lp-auth-sub">We&apos;ll send a one-time code — verify it, and your test starts.</p>
+                  <form onSubmit={(e) => { e.preventDefault(); void sendCode(); }}>
+                    <label className="visually-hidden" htmlFor="phone-number">Mobile number</label>
+                    <div className="lp-phone-row">
+                      <span className="lp-cc" aria-hidden="true">+91</span>
+                      <input
+                        id="phone-number"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel-national"
+                        maxLength={10}
+                        placeholder="98765 43210"
+                        value={phone}
+                        disabled={phase === "sending"}
+                        onChange={(e) => { setPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); if (error) setError(null); }}
+                        aria-label="10-digit mobile number"
+                      />
+                    </div>
+                    <button type="submit" className="btn lp-cta" disabled={phase === "sending" || phone.length !== 10}>
+                      {phase === "sending" ? "Sending…" : "Send OTP"}
+                    </button>
+                  </form>
+                  <p className="lp-note">India only · One number, one identity · Free to use</p>
+                </>
+              ) : (
+                <>
+                  <p className="lp-auth-kicker">Check your phone</p>
+                  <h1 className="lp-auth-title">Enter the 6-digit code</h1>
+                  <p className="lp-code-hint">Sent to <strong>+91 {phone}</strong></p>
+                  <form onSubmit={(e) => { e.preventDefault(); void verifyCode(); }}>
+                    <label className="visually-hidden" htmlFor="otp-code">6-digit code</label>
+                    <input
+                      ref={otpInputRef}
+                      id="otp-code"
+                      className="lp-otp"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      placeholder="——————"
+                      value={otp}
+                      disabled={phase === "verifying"}
+                      onChange={(e) => { setOtp(e.target.value.replace(/\D/g, "").slice(0, 6)); if (error) setError(null); }}
+                    />
+                    <button type="submit" className="btn lp-cta" disabled={phase === "verifying" || otp.length !== 6}>
+                      {phase === "verifying" ? "Verifying…" : "Verify & continue"}
+                    </button>
+                  </form>
+                  <div className="lp-row-links">
+                    <button className="lp-link" onClick={changeNumber}>Change number</button>
+                    <button className="lp-link" onClick={() => void sendCode()} disabled={resendIn > 0}>
+                      {resendIn > 0 ? `Resend code in ${resendIn}s` : "Resend code"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </main>
+          </div>
+
+          {/* invisible reCAPTCHA mount point */}
+          <div id="recaptcha-phone-login" />
+        </div>
+      </div>
+    ) : (
+      <div className="lp-auth">
+        <FormulaMarks />
+        {styleTag}
+        <main className="lp-auth-card">
+          <a className="lp-auth-brand" href="/" aria-label="World of Physics — home">
+            <Image src="/logo.png" alt="" width={34} height={34} style={{ borderRadius: 8, border: "1px solid var(--color-rule-2)" }} priority />
+            <span className="lp-auth-wordmark"><span className="lp-auth-dot" aria-hidden="true" />World of Physics</span>
+          </a>
+
+          {error && <div className="lp-error" role="alert">{error}</div>}
+
+          {phase === "phone" || phase === "sending" ? (
+            <>
+              <p className="lp-auth-kicker">Student sign-in</p>
+              <h1 className="lp-auth-title">Enter your mobile number</h1>
+              <p className="lp-auth-sub">We&apos;ll send a one-time code — verify it, and your test starts.</p>
+              <form onSubmit={(e) => { e.preventDefault(); void sendCode(); }}>
+                <label className="visually-hidden" htmlFor="phone-number">Mobile number</label>
+                <div className="lp-phone-row">
+                  <span className="lp-cc" aria-hidden="true">+91</span>
+                  <input
+                    id="phone-number"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    maxLength={10}
+                    placeholder="98765 43210"
+                    value={phone}
+                    disabled={phase === "sending"}
+                    onChange={(e) => { setPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); if (error) setError(null); }}
+                    aria-label="10-digit mobile number"
+                  />
+                </div>
+                <button type="submit" className="btn lp-cta" disabled={phase === "sending" || phone.length !== 10}>
+                  {phase === "sending" ? "Sending…" : "Send OTP"}
+                </button>
+              </form>
+              <p className="lp-note">India only · One number, one identity · Free to use</p>
+            </>
+          ) : (
+            <>
+              <p className="lp-auth-kicker">Check your phone</p>
+              <h1 className="lp-auth-title">Enter the 6-digit code</h1>
+              <p className="lp-code-hint">Sent to <strong>+91 {phone}</strong></p>
+              <form onSubmit={(e) => { e.preventDefault(); void verifyCode(); }}>
+                <label className="visually-hidden" htmlFor="otp-code">6-digit code</label>
                 <input
-                  id="phone-number"
-                  type="tel"
+                  ref={otpInputRef}
+                  id="otp-code"
+                  className="lp-otp"
+                  type="text"
                   inputMode="numeric"
-                  autoComplete="tel-national"
-                  maxLength={10}
-                  placeholder="98765 43210"
-                  value={phone}
-                  disabled={phase === "sending"}
-                  onChange={(e) => { setPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); if (error) setError(null); }}
-                  aria-label="10-digit mobile number"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="——————"
+                  value={otp}
+                  disabled={phase === "verifying"}
+                  onChange={(e) => { setOtp(e.target.value.replace(/\D/g, "").slice(0, 6)); if (error) setError(null); }}
                 />
+                <button type="submit" className="btn lp-cta" disabled={phase === "verifying" || otp.length !== 6}>
+                  {phase === "verifying" ? "Verifying…" : "Verify & continue"}
+                </button>
+              </form>
+              <div className="lp-row-links">
+                <button className="lp-link" onClick={changeNumber}>Change number</button>
+                <button className="lp-link" onClick={() => void sendCode()} disabled={resendIn > 0}>
+                  {resendIn > 0 ? `Resend code in ${resendIn}s` : "Resend code"}
+                </button>
               </div>
-              <button type="submit" className="btn lp-cta" disabled={phase === "sending" || phone.length !== 10}>
-                {phase === "sending" ? "Sending…" : "Send OTP"}
-              </button>
-            </form>
-            <p className="lp-note">India only · One number, one identity · Free to use</p>
-          </>
-        ) : (
-          <>
-            <p className="lp-auth-kicker">Check your phone</p>
-            <h1 className="lp-auth-title">Enter the 6-digit code</h1>
-            <p className="lp-code-hint">Sent to <strong>+91 {phone}</strong></p>
-            <form onSubmit={(e) => { e.preventDefault(); void verifyCode(); }}>
-              <label className="visually-hidden" htmlFor="otp-code">6-digit code</label>
-              <input
-                ref={otpInputRef}
-                id="otp-code"
-                className="lp-otp"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="——————"
-                value={otp}
-                disabled={phase === "verifying"}
-                onChange={(e) => { setOtp(e.target.value.replace(/\D/g, "").slice(0, 6)); if (error) setError(null); }}
-              />
-              <button type="submit" className="btn lp-cta" disabled={phase === "verifying" || otp.length !== 6}>
-                {phase === "verifying" ? "Verifying…" : "Verify & continue"}
-              </button>
-            </form>
-            <div className="lp-row-links">
-              <button className="lp-link" onClick={changeNumber}>Change number</button>
-              <button className="lp-link" onClick={() => void sendCode()} disabled={resendIn > 0}>
-                {resendIn > 0 ? `Resend code in ${resendIn}s` : "Resend code"}
-              </button>
-            </div>
-          </>
-        )}
-      </main>
+            </>
+          )}
+        </main>
 
-      {/* invisible reCAPTCHA mount point */}
-      <div id="recaptcha-phone-login" />
-    </div>
+        {/* invisible reCAPTCHA mount point */}
+        <div id="recaptcha-phone-login" />
+      </div>
+    )
   );
 }
