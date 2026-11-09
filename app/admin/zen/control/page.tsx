@@ -28,8 +28,13 @@ export default function ZenControl() {
   const [logs, setLogs] = useState<AppLog[]>([]);
 
   useEffect(() => {
-    if (user?.email?.toLowerCase() !== ALLOWED_EMAIL) return;
-    return subscribeToLogs(setLogs);
+    try {
+      if (!user?.email) return;
+      if (user.email.toLowerCase() !== ALLOWED_EMAIL) return;
+      return subscribeToLogs(setLogs);
+    } catch {
+      /* logging is optional — never block the control panel */
+    }
   }, [user]);
 
   useEffect(() => {
@@ -285,7 +290,7 @@ export default function ZenControl() {
         .zen-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 0 0 var(--color-accent-deep); }
         .zen-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 0 var(--color-accent-deep); }
         .zen-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .zen-warning { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-danger); margin-top: 8px; padding: 8px 12px; background: var(--color-paper)0ed; border: 1px solid #f5c6b8; }
+        .zen-warning { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-danger); margin-top: 8px; padding: 8px 12px; background: var(--color-paper); border: 1px solid #f5c6b8; }
         .zen-log-list { max-height: 520px; overflow-y: auto; border-top: 1px solid var(--color-rule); }
         .zen-log { padding: 14px 0; border-bottom: 1px solid var(--color-rule); }
         .zen-log-topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 7px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
