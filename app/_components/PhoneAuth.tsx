@@ -243,7 +243,7 @@ export default function PhoneAuth({
         .lp-auth-dialog-card .lp-auth-sub { font-size: 0.88rem; line-height: 1.6; color: var(--color-ink-2); margin: 0 0 1.5rem; max-width: 34ch; }
         .lp-auth-dialog-card .lp-note { font-size: 0.58rem; letter-spacing: 0.14em; margin-top: 1rem; color: var(--color-muted); }
 
-        .lp-auth-dialog-card .lp-cta { width: 100%; margin-top: 0; padding: 0.9rem 1rem; font-family: var(--font-display); font-weight: 600; font-size: 1rem; letter-spacing: -0.01em; background: var(--color-accent); color: var(--color-on-accent); border: none; border-radius: var(--radius-pill); cursor: pointer; transition: background var(--dur-micro), transform var(--dur-micro), box-shadow var(--dur-micro); box-shadow: 0 4px 0 var(--color-accent-deep); text-transform: none; }
+        .lp-auth-dialog-card .lp-cta { width: 100%; margin-top: 1.25rem; padding: 0.9rem 1rem; font-family: var(--font-display); font-weight: 600; font-size: 1rem; letter-spacing: -0.01em; background: var(--color-accent); color: var(--color-on-accent); border: none; border-radius: var(--radius-pill); cursor: pointer; transition: background var(--dur-micro), transform var(--dur-micro), box-shadow var(--dur-micro); box-shadow: 0 4px 0 var(--color-accent-deep); text-transform: none; }
         .lp-auth-dialog-card .lp-cta:disabled { background: var(--color-muted); box-shadow: 0 4px 0 var(--color-faint); color: oklch(85% 0 0 / 0.6); cursor: not-allowed; }
         .lp-auth-dialog-card .lp-cta:not(:disabled):hover { background: var(--color-accent-deep); transform: translateY(-1px); box-shadow: 0 8px 0 var(--color-accent-deep); }
         .lp-auth-dialog-card .lp-cta:not(:disabled):active { transform: translateY(0); box-shadow: 0 2px 0 var(--color-accent-deep); }
