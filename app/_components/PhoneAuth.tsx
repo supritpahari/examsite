@@ -12,7 +12,7 @@ import {
   type ConfirmationResult,
 } from "firebase/auth";
 import { getAuthInstance } from "@/lib/firebase/client";
-import { saveProfile } from "@/lib/profile";
+import { saveProfile, fetchProfile } from "@/lib/profile";
 import FormulaMarks from "./FormulaMarks";
 import Image from "next/image";
 
@@ -62,6 +62,7 @@ export default function PhoneAuth({
   const [error, setError] = useState<string | null>(null);
   const [resendIn, setResendIn] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [hasSavedName, setHasSavedName] = useState<boolean | null>(null);
 
   // Firebase is client-only here — never initialize it during render/SSR.
   const authRef = useRef<Auth | null>(null);
@@ -194,7 +195,21 @@ export default function PhoneAuth({
     setPhase("verifying");
     try {
       await confirmationRef.current.confirm(code);
-      // OTP verified — now collect the student's name and save it to profile.
+      // OTP verified — check if the user already has a saved name.
+      const auth = getAuth();
+      const uid = auth.currentUser?.uid;
+      if (uid) {
+        try {
+          const profile = await fetchProfile(uid);
+          if (profile?.name) {
+            // Name already saved — skip the name phase entirely.
+            onClose?.();
+            return;
+          }
+        } catch {
+          /* profile read failed — fall through to asking for the name */
+        }
+      }
       setPhase("name");
     } catch (err) {
       const codeId = (err as { code?: string })?.code ?? "";
@@ -208,6 +223,7 @@ export default function PhoneAuth({
     setOtp("");
     setError(null);
     confirmationRef.current = null;
+    setHasSavedName(null);
   };
 
   const saveName = async () => {
@@ -227,6 +243,7 @@ export default function PhoneAuth({
     setSaving(true);
     try {
       await saveProfile(uid, trimmed);
+      setHasSavedName(true);
       onClose?.();
     } catch {
       setError("Couldn't save your name — try again.");
