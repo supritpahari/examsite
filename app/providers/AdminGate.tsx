@@ -41,10 +41,12 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
 
   const isAllowedPath =
     pathname?.startsWith("/admin/zen/control") || pathname === "/admin";
+  const isZenControl = pathname?.startsWith("/admin/zen/control");
   const panelDisabled = Boolean(flags && !flags.adminPanelEnabled);
 
   // Redirects are side effects — never call router.* during render.
-  const sendToLogin = !isLoginPath && auth === "out";
+  // Zen control is a secret panel with its own auth — never bounce it to login.
+  const sendToLogin = !isLoginPath && !isZenControl && auth === "out";
   const sendHome =
     !isLoginPath && !sendToLogin && panelDisabled && !isAllowedPath;
 
