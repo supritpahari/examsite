@@ -1,7 +1,12 @@
 /* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 import LegalDoc from "../_components/LegalDoc";
+import { loadSiteInfo, DEFAULT_SITE_INFO } from "@/lib/settings";
 
-export default function TermsOfServicePage() {
+export default async function TermsOfServicePage() {
+  const siteInfo = await loadSiteInfo().catch(() => DEFAULT_SITE_INFO);
+  const contactEmail = siteInfo.email || DEFAULT_SITE_INFO.email;
+  const contactPhone = siteInfo.phone || DEFAULT_SITE_INFO.phone;
+
   return (
     <LegalDoc title="Terms of service" updated="November 9, 2026">
       <p>
@@ -29,6 +34,8 @@ export default function TermsOfServicePage() {
         code by SMS to sign in. On supported browsers, your device may auto-fill the code
         (WebOTP). You may enter the code manually instead. By signing in you consent to
         receiving SMS messages for authentication. Standard carrier message rates may apply.
+        Contact us at <a href={`mailto:${contactEmail}`}>{contactEmail}</a> or
+        <a href={`tel:${contactPhone}`}>{contactPhone}</a> for sign-in issues.
       </p>
 
       <h2>3 · One Attempt Per Device</h2>
@@ -105,8 +112,9 @@ export default function TermsOfServicePage() {
       <h2>13 · Contact</h2>
       <p>
         Questions about these Terms? Email{" "}
-        <a href="mailto:hello@examsite.in">hello@examsite.in</a> or write to Mr. Biman
-        Dhawa, Belda, India.
+        <a href={`mailto:${contactEmail}`}>{contactEmail}</a> or call
+        <a href={`tel:${contactPhone}`}>{contactPhone}</a>, or write to Mr. Biman Dhawa,
+        Belda, India.
       </p>
     </LegalDoc>
   );

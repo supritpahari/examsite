@@ -1,7 +1,12 @@
 /* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 import LegalDoc from "../_components/LegalDoc";
+import { loadSiteInfo, DEFAULT_SITE_INFO } from "@/lib/settings";
 
-export default function PrivacyPolicyPage() {
+export default async function PrivacyPolicyPage() {
+  const siteInfo = await loadSiteInfo().catch(() => DEFAULT_SITE_INFO);
+  const contactEmail = siteInfo.email || DEFAULT_SITE_INFO.email;
+  const contactPhone = siteInfo.phone || DEFAULT_SITE_INFO.phone;
+
   return (
     <LegalDoc title="Privacy policy" updated="November 9, 2026">
       <p>
@@ -90,7 +95,8 @@ export default function PrivacyPolicyPage() {
       <p>
         Depending on your location, you may have the right to access, correct, export, or
         delete your personal data, and to object to certain processing. To exercise these
-        rights, contact us at <a href="mailto:hello@examsite.in">hello@examsite.in</a>.
+        rights, contact us at <a href={`mailto:${contactEmail}`}>{contactEmail}</a> or
+        call <a href={`tel:${contactPhone}`}>{contactPhone}</a>.
       </p>
 
       <h2>8 · Children&apos;s Privacy</h2>
@@ -117,8 +123,8 @@ export default function PrivacyPolicyPage() {
       <h2>11 · Contact</h2>
       <p>
         Questions about this policy? Email{" "}
-        <a href="mailto:hello@examsite.in">hello@examsite.in</a> or write to Mr. Biman
-        Dhawa, Belda, India.
+        <a href={`mailto:${contactEmail}`}>{contactEmail}</a> or write to Mr. Biman
+        Dhawa, Belda, India. Phone: <a href={`tel:${contactPhone}`}>{contactPhone}</a>.
       </p>
     </LegalDoc>
   );
