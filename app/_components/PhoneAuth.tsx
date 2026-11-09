@@ -326,7 +326,15 @@ export default function PhoneAuth({
     dialog ? (
       <div className="lp-auth-overlay" onClick={() => onClose?.()}>
         <div className="lp-auth-dialog-card" onClick={(e) => e.stopPropagation()}>
-          <button className="lp-auth-dialog-close" onClick={() => onClose?.()} aria-label="Close sign-in">
+          <button
+            className="lp-auth-dialog-close"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose?.();
+            }}
+            aria-label="Close sign-in"
+            type="button"
+          >
             ✕
           </button>
           <div className="lp-auth-dialog-container">

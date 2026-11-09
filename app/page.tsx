@@ -443,7 +443,16 @@ export default function Home() {
           <span>© 2026 {siteInfo.contactName} · Not affiliated with NTA</span>
           <nav className="lp-foot-links" aria-label="Footer">
             <a href="/course">Formula Sheets</a>
-            <a href="/account">Account</a>
+            <a
+              href="/account"
+              onClick={(e) => {
+                e.preventDefault();
+                if (auth === "in") router.push("/account");
+                else setAuthDialogOpen(true);
+              }}
+            >
+              Account
+            </a>
             <a href="/admin">Admin</a>
             <a href="/privacy-policy">Privacy</a>
             <a href="/terms-of-service">Terms</a>
