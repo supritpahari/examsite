@@ -74,6 +74,7 @@ export default function CoursePage() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
   const [auth, setAuth] = useState<"loading" | "in" | "out">("loading");
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [grades, setGrades] = useState<CourseGrade[]>([]);
   const [step, setStep] = useState<Step>("grade");
   const [bucket, setBucket] = useState<BucketKey | null>(null);
@@ -164,7 +165,8 @@ export default function CoursePage() {
   const selectTopic = (topic: BucketedTopic) => {
     setSelectedTopic(topic);
     // Gate: buying requires a signed-in (phone-verified) account.
-    setStep(auth === "in" ? "payment" : "signin");
+    if (auth === "in") setStep("payment");
+    else setAuthDialogOpen(true);
   };
 
   const goBack = () => {
@@ -181,7 +183,7 @@ export default function CoursePage() {
   const handlePay = async () => {
     if (!selectedTopic) return;
     if (auth !== "in") {
-      setStep("signin");
+      setAuthDialogOpen(true);
       return;
     }
     setPayError(null);
@@ -355,7 +357,9 @@ export default function CoursePage() {
         }
       `}</style>
 
-      {step === "signin" && <PhoneAuth />}
+      {authDialogOpen && (
+        <PhoneAuth dialog onClose={() => setAuthDialogOpen(false)} />
+      )}
 
       {/* Header */}
       {step !== "signin" && (

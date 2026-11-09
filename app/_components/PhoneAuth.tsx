@@ -101,6 +101,36 @@ export default function PhoneAuth({
     if (phase === "code") otpInputRef.current?.focus();
   }, [phase]);
 
+  // WebOTP — auto-capture 6-digit OTP from incoming SMS (Chrome/Android).
+  // Falls back gracefully on browsers that don't support it.
+  useEffect(() => {
+    if (phase !== "code" || !confirmationRef.current) return;
+
+    const tryWebOTP = async () => {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.credentials &&
+        "OTPCredential" in window
+      ) {
+        try {
+          const credential: any = await (navigator.credentials as any).get({
+            otp: { transport: ["sms"] },
+          });
+          const code = credential?.code;
+          if (code) {
+            setOtp(code);
+            await verifyCode(); // auto-verify once captured
+          }
+        } catch {
+          // WebOTP not supported or no SMS received — user types manually.
+        }
+      }
+    };
+
+    void tryWebOTP();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
   useEffect(() => {
     return () => {
       void resetRecaptcha();

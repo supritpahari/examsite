@@ -127,6 +127,7 @@ function ExamContent() {
   const code = searchParams.get("id") ?? "";
 
   const [auth, setAuth] = useState<"loading" | "in" | "out">("loading");
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
   useEffect(() => {
     // Students must arrive via Phone OTP. A persisted admin (password) session
     // must NOT unlock the exam — admin sign-in is not student phone verification.
@@ -479,7 +480,11 @@ function ExamContent() {
   }
 
   if (auth === "out") {
-    return <PhoneAuth />;
+    return (
+      <div className="v2-center" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <PhoneAuth dialog onClose={() => setAuthDialogOpen(false)} />
+      </div>
+    );
   }
 
   return (

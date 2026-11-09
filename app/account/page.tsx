@@ -65,6 +65,7 @@ const MAX_NAME = 80;
 export default function AccountPage() {
   const router = useRouter();
   const [auth, setAuth] = useState<"loading" | "in" | "out">("loading");
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
 
   const [profileName, setProfileName] = useState("");
@@ -202,7 +203,11 @@ export default function AccountPage() {
     );
   }
   if (auth === "out") {
-    return <PhoneAuth />;
+    return (
+      <div className="ac-root" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <PhoneAuth dialog onClose={() => setAuthDialogOpen(false)} />
+      </div>
+    );
   }
 
   const phone = user?.phoneNumber ?? null;
