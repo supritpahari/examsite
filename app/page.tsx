@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { loadSiteInfo, DEFAULT_SITE_INFO, type SiteInfo } from "@/lib/settings";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import FormulaMarks from "./_components/FormulaMarks";
 
@@ -80,6 +81,8 @@ export default function Home() {
         .lp-nav-center { display: flex; align-items: center; gap: 0.25rem; margin-left: auto; }
         .lp-nav-link { font-family: var(--font-body); font-weight: 500; font-size: 0.9rem; color: var(--color-ink-2); text-decoration: none; padding: 0.5rem 0.8rem; border-radius: var(--radius-sm); transition: color var(--dur-micro), background var(--dur-micro); white-space: nowrap; }
         .lp-nav-link:hover { color: var(--color-ink); background: var(--color-paper-2); }
+        .lp-nav-btn { font-family: var(--font-body); font-weight: 600; font-size: 0.85rem; color: var(--color-accent-2-deep); text-decoration: none; background: var(--color-tint-cyan); border-radius: var(--radius-pill); padding: 0.45rem 1rem; transition: background var(--dur-micro), transform var(--dur-micro); white-space: nowrap; letter-spacing: 0.02em; text-transform: uppercase; }
+        .lp-nav-btn:hover { background: var(--color-accent-2); color: var(--color-on-accent-2); transform: translateY(-1px); }
 
         /* ---------- Hero · Stat-Led, off-centre, no centred stack ---------- */
         .lp-hero { max-width: var(--page-max); margin-inline: auto; padding: 104px var(--page-gutter) var(--space-2xl); display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--space-xl); align-items: center; }
@@ -112,7 +115,7 @@ export default function Home() {
         .lp-figure-sub { font-size: 0.85rem; color: var(--color-ink-2); margin-top: var(--space-xs); }
 
         /* Character moment · pear sticker */
-        .lp-sticker { position: absolute; top: -26px; right: -18px; width: 96px; height: 96px; border-radius: 999px; background: var(--color-accent); color: var(--color-on-accent); display: grid; place-items: center; transform: rotate(-8deg); box-shadow: 0 6px 0 0 var(--color-accent-deep); animation: sticker-pulse 4s var(--ease-in-out) infinite; }
+        .lp-sticker { position: absolute; top: -24px; right: 18px; width: 96px; height: 96px; border-radius: 999px; background: var(--color-accent); color: var(--color-on-accent); display: grid; place-items: center; transform: rotate(-8deg); box-shadow: 0 6px 0 0 var(--color-accent-deep); animation: sticker-pulse 4s var(--ease-in-out) infinite; }
         .lp-sticker span { font-family: var(--font-mono); font-size: 0.6rem; line-height: 1.45; letter-spacing: 0.1em; text-transform: uppercase; text-align: center; font-weight: 600; }
         @keyframes sticker-pulse { 0%,100% { transform: rotate(-8deg) scale(1); } 50% { transform: rotate(-8deg) scale(1.06); } }
 
@@ -235,7 +238,7 @@ export default function Home() {
           .lp-h1 { font-size: clamp(2.5rem, 13vw, 3.2rem); }
           .code-form { flex-direction: column; }
           .code-form .btn { width: 100%; }
-          .lp-sticker { width: 76px; height: 76px; top: -20px; right: -6px; }
+          .lp-sticker { width: 76px; height: 76px; top: -20px; right: 10px; }
           .lp-sticker span { font-size: 0.5rem; }
           .lp-figure { transform: none; }
           .lp-cbt { transform: none; }
@@ -259,10 +262,9 @@ export default function Home() {
             World of Physics
           </a>
           <nav className="lp-nav-center" aria-label="Site">
-            <a className="lp-nav-link" href="/course">Formula Sheets</a>
-            <a className="lp-nav-link" href="/account">Account</a>
-            <a className="lp-nav-link" href="#interface">The Interface</a>
-            <a className="lp-nav-link" href="/privacy-policy">Privacy</a>
+            <Link href="/account" className="lp-nav-btn">
+              Login / Account
+            </Link>
           </nav>
         </div>
       </header>
