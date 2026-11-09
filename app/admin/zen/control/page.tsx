@@ -1,7 +1,7 @@
 /* Hallmark · genre: playful · theme: Hum · design-system: design.md · designed-as-app */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getAuthInstance, onAuthState } from "@/lib/firebase/client";
 import { signInWithPopup, GoogleAuthProvider, signOut, type User } from "firebase/auth";
 import { loadControlFlags, saveControlFlags, type SiteControlFlags } from "@/lib/settings";
@@ -26,15 +26,26 @@ export default function ZenControl() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
   const [logs, setLogs] = useState<AppLog[]>([]);
+  const logsUnsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
+    if (logsUnsubscribeRef.current) {
+      logsUnsubscribeRef.current();
+      logsUnsubscribeRef.current = null;
+    }
     try {
       if (!user?.email) return;
       if (user.email.toLowerCase() !== ALLOWED_EMAIL) return;
-      return subscribeToLogs(setLogs);
+      logsUnsubscribeRef.current = subscribeToLogs(setLogs);
     } catch {
       /* logging is optional — never block the control panel */
     }
+    return () => {
+      if (logsUnsubscribeRef.current) {
+        logsUnsubscribeRef.current();
+        logsUnsubscribeRef.current = null;
+      }
+    };
   }, [user]);
 
   useEffect(() => {
