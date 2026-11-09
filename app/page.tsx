@@ -14,6 +14,7 @@ export default function Home() {
   const [code, setCode] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [siteInfo, setSiteInfo] = useState<SiteInfo>(DEFAULT_SITE_INFO);
   const [auth, setAuth] = useState<"loading" | "in" | "out">("loading");
@@ -456,6 +457,15 @@ export default function Home() {
             <a href="/admin">Admin</a>
             <a href="/privacy-policy">Privacy</a>
             <a href="/terms-of-service">Terms</a>
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setContactDialogOpen(true);
+              }}
+            >
+              Contact
+            </a>
             <a href="https://teamobliq.in" target="_blank" rel="noopener noreferrer">Team Obliq.</a>
           </nav>
         </div>
@@ -482,6 +492,101 @@ export default function Home() {
       {/* Phone OTP sign-in dialog */}
       {authDialogOpen && (
         <PhoneAuth dialog onClose={() => setAuthDialogOpen(false)} />
+      )}
+
+      {/* Contact dialog */}
+      {contactDialogOpen && (
+        <div
+          className="lp-overlay"
+          onClick={() => setContactDialogOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "oklch(20% 0.012 250 / 0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 60,
+            padding: "2rem",
+          }}
+        >
+          <div
+            className="lp-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="contact-dialog-title"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              background: "var(--color-paper)",
+              borderRadius: "var(--radius-card)",
+              padding: "2rem",
+              boxShadow: "var(--shadow-lift)",
+            }}
+          >
+            <button
+              onClick={() => setContactDialogOpen(false)}
+              aria-label="Close contact"
+              style={{
+                position: "absolute",
+                top: 1,
+                right: 1,
+                background: "transparent",
+                border: "none",
+                fontSize: "1.25rem",
+                cursor: "pointer",
+                color: "var(--color-ink-2)",
+                lineHeight: 1,
+                padding: "0.3rem",
+                borderRadius: "999px",
+              }}
+              type="button"
+            >
+              ✕
+            </button>
+            <h3 id="contact-dialog-title" style={{ margin: "0 0 0.5rem", fontFamily: "var(--font-display)", fontWeight: 600, letterSpacing: "-0.02em", fontSize: "1.5rem" }}>
+              Contact
+            </h3>
+            <p style={{ fontSize: "0.88rem", color: "var(--color-ink-2)", margin: "0 0 1.5rem", lineHeight: 1.6 }}>
+              Reach out to {siteInfo.contactName} — World of Physics.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              <a
+                href={`tel:${siteInfo.phone}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.75,
+                  color: "var(--color-accent-2-deep)",
+                  textDecoration: "none",
+                  fontFamily: "var(--font-body)",
+                  fontWeight: 600,
+                  fontSize: 1,
+                }}
+              >
+                <span style={{ fontSize: "1.25rem" }}>📞</span>
+                {siteInfo.phone}
+              </a>
+              <a
+                href={`mailto:${siteInfo.email}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.75,
+                  color: "var(--color-accent-2-deep)",
+                  textDecoration: "none",
+                  fontFamily: "var(--font-body)",
+                  fontWeight: 600,
+                  fontSize: 1,
+                }}
+              >
+                <span style={{ fontSize: "1.25rem" }}>✉️</span>
+                {siteInfo.email}
+              </a>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
