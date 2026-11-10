@@ -98,6 +98,17 @@ export default function CoursePage() {
     if (auth === "in" && step === "signin") setStep("payment");
   }, [auth, step]);
 
+  // Kick users off the payment step if they're no longer signed in
+  // (e.g. session expired, signed out elsewhere). Belt-and-suspenders
+  // on top of the auth === "in" guard in the payment step render.
+  useEffect(() => {
+    if (step === "payment" && auth !== "in") {
+      setStep("topic");
+      setSelectedTopic(null);
+      setAuthDialogOpen(true);
+    }
+  }, [step, auth, selectedTopic]);
+
   useEffect(() => {
     let mounted = true;
     fetchCourseGradesFromApi()
@@ -198,7 +209,9 @@ export default function CoursePage() {
 
   const handlePay = async () => {
     if (!selectedTopic) return;
-    if (auth !== "in") {
+    // Ironclad check: only a signed-in (phone-verified) Firebase user can pay
+    const authInst = getAuthInstance();
+    if (!authInst.currentUser) {
       setAuthDialogOpen(true);
       return;
     }
@@ -210,7 +223,7 @@ export default function CoursePage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${await getIdToken(getAuthInstance().currentUser!)}`,
+          Authorization: `Bearer ${await getIdToken(authInst.currentUser)}`,
         },
         body: JSON.stringify({
           topicId: selectedTopic.id,
@@ -602,7 +615,7 @@ export default function CoursePage() {
       )}
 
       {/* ---------- Step 3: Payment ---------- */}
-      {step === "payment" && selectedTopic && (
+      {step === "payment" && selectedTopic && auth === "in" && (
         <main className="course-main">
           <section className="course-card course-card-wide">
             <div className="course-step-head">
