@@ -94,12 +94,23 @@
   transition: border-color var(--dur-micro), color var(--dur-micro);
 }
 .ad-signout:hover { color: var(--color-on-panel); border-color: var(--color-on-panel); }
+.ad-signout--secondary {
+  margin-top: 8px;
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 12px; background: transparent;
+  border: 1px solid var(--color-panel-rule); border-radius: var(--radius-input);
+  color: var(--color-panel-dim); font-family: var(--font-mono); font-size: 0.66rem;
+  font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em;
+  cursor: pointer; white-space: nowrap; overflow: hidden; width: 100%; text-align: left;
+  transition: border-color var(--dur-micro), color var(--dur-micro);
+}
+.ad-signout--secondary:hover { color: var(--color-on-panel); border-color: var(--color-on-panel); }
 .ad-nav-icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; color: inherit; }
 .ad-brand-text { white-space: nowrap; }
 
 /* ---------- stats card ---------- */
 .ad-stats-card {
-  margin: 14px 12px 10px;
+  margin: 14px 12px 14px;
   padding: 10px 12px;
   background: var(--color-panel-2);
   border: 1px solid var(--color-panel-rule);

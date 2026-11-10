@@ -110,6 +110,10 @@ function NavIcon({ name }: { name: string }) {
       return (
         <svg {...common}><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" /><path d="M10 12h10M17 9l3 3-3 3" /></svg>
       );
+    case "globe":
+      return (
+        <svg {...common}><circle cx="12" cy="12" r="10" /><path d="M12 2a10 10 0 0 0-10 10c0 4.42 2.87 8.17 7 9.5V12a10 10 0 0 1 10-10c0 4.42-2.87 8.17-7 9.5V12a10 10 0 0 0 10-10" /></svg>
+      );
     default:
       return null;
   }
@@ -492,8 +496,8 @@ export default function AdminDashboard() {
           <span className="ad-nav-icon"><NavIcon name="signout" /></span>
           <span className="ad-nav-label">Sign out</span>
         </button>
-        <button className="ad-signout" onClick={() => router.push("/")} title="Back to website">
-          <span className="ad-nav-icon">🌐</span>
+        <button className="ad-signout--secondary" onClick={() => router.push("/")} title="Back to website">
+          <span className="ad-nav-icon"><NavIcon name="globe" /></span>
           <span className="ad-nav-label">Back to website</span>
         </button>
       </aside>
