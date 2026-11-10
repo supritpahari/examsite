@@ -1,13 +1,12 @@
 /* Hallmark · genre: playful · theme: Hum · macrostructure: Workbench · design-system: design.md · designed-as-app */
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AdSlot } from "./AdSlot";
 import {
   fetchCourseGradesFromApi,
-  recordPurchase,
   type CourseGrade,
   type CourseTopic,
 } from "@/lib/courses";
@@ -180,6 +179,23 @@ export default function CoursePage() {
     }
   };
 
+  const razorpayRef = useRef<boolean>(false);
+
+  const loadRazorpay = (): Promise<void> => {
+    if (razorpayRef.current) return Promise.resolve();
+    if (typeof window === "undefined") return Promise.reject();
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => {
+        razorpayRef.current = true;
+        resolve();
+      };
+      script.onerror = () => reject(new Error("Failed to load Razorpay"));
+      document.head.appendChild(script);
+    });
+  };
+
   const handlePay = async () => {
     if (!selectedTopic) return;
     if (auth !== "in") {
@@ -189,25 +205,84 @@ export default function CoursePage() {
     setPayError(null);
     setPaying(true);
     try {
-      // ---- Mock payment flow ----
-      // Replace this block with a real Razorpay / Stripe checkout integration.
-      await new Promise((resolve) => setTimeout(resolve, 1400)); // simulate gateway
-
-      const auth = getAuthInstance();
-      const uid = auth.currentUser ? auth.currentUser.uid : undefined;
-
-      await recordPurchase({
-        courseId: bucket ?? "",
-        topicId: selectedTopic.id,
-        gradeId: bucket ?? "",
-        amount: selectedTopic.price,
-        status: "paid",
-        userId: uid,
+      // 1. Create Razorpay order server-side
+      const createRes = await fetch("/api/course/payment/create-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await getIdToken(getAuthInstance().currentUser!)}`,
+        },
+        body: JSON.stringify({
+          topicId: selectedTopic.id,
+          amount: selectedTopic.price,
+          courseId: bucket ?? "",
+          gradeId: bucket ?? "",
+          topicName: selectedTopic.name,
+          gradeName: selectedTopic.gradeName,
+        }),
       });
 
-      setPurchased((prev) => ({ ...prev, [selectedTopic.id]: true }));
-      setPaidTopic(selectedTopic.id);
-      setStep("success");
+      if (!createRes.ok) {
+        const errData = await createRes.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to create payment order");
+      }
+
+      const { orderId, amount, currency, key } = await createRes.json();
+
+      // 2. Load Razorpay checkout script
+      await loadRazorpay();
+
+      // 3. Open Razorpay checkout
+      const options = {
+        key,
+        amount,
+        currency,
+        name: "World of Physics",
+        description: `Formula Sheet: ${selectedTopic.name}`,
+        order_id: orderId,
+        prefill: {
+          name: "",
+          contact: user?.phoneNumber?.replace("+91", "") || "",
+          email: "",
+        },
+        theme: {
+          color: "#f39c12",
+        },
+        handler: async (response: any) => {
+          // 4. Verify payment server-side
+          const verifyRes = await fetch("/api/course/payment/verify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${await getIdToken(getAuthInstance().currentUser!)}`,
+            },
+            body: JSON.stringify({
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature,
+            }),
+          });
+
+          if (!verifyRes.ok) {
+            const errData = await verifyRes.json().catch(() => ({}));
+            throw new Error(errData.error || "Payment verification failed");
+          }
+
+          // 5. Mark purchased locally
+          setPurchased((prev) => ({ ...prev, [selectedTopic.id]: true }));
+          setPaidTopic(selectedTopic.id);
+          setStep("success");
+        },
+        modal: {
+          ondismiss: () => {
+            setPayError("Payment cancelled.");
+            setPaying(false);
+          },
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
     } catch (err) {
       setPayError(
         err instanceof Error ? err.message : "Payment failed. Please try again."
