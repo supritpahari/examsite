@@ -40,6 +40,7 @@ import {
 import { fetchSiteStats } from "@/lib/stats";
 import NoticesPanel from "./notices/panel";
 import FormulaSheetsPage from "./formula-sheets/FormulaSheets";
+import CouponsPanel from "./coupons/CouponsPanel";
 
 const NAV = [
   { key: "notices", label: "Notices" },
@@ -47,6 +48,7 @@ const NAV = [
   { key: "exams", label: "Exams" },
   { key: "students", label: "Students" },
   { key: "formula-sheets", label: "Formula Sheets" },
+  { key: "coupons", label: "Coupons" },
   { key: "information", label: "Information" },
   { key: "settings", label: "Settings" },
 ];
@@ -101,6 +103,10 @@ function NavIcon({ name }: { name: string }) {
     case "formula-sheets":
       return (
         <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M16 13h3M16 17h3" /></svg>
+      );
+    case "coupons":
+      return (
+        <svg {...common}><path d="M1 4l3 2v11l-3 2V4zm19 2l-3 2v11l3 2V8zM19 4l3 2v3l-3 2v-3l3 2V4zM10 14l3-2V4l-3 2zm0 0l3 2v3l-3 2v-3l3 2v-3z" /></svg>
       );
     case "control":
       return (
@@ -685,7 +691,9 @@ export default function AdminDashboard() {
 
         {active === "formula-sheets" && <FormulaSheetsPage />}
 
-        {active !== "notices" && active !== "questions" && active !== "settings" && active !== "exams" && active !== "students" && active !== "information" && active !== "formula-sheets" && (
+        {active === "coupons" && <CouponsPanel />}
+
+        {active !== "notices" && active !== "questions" && active !== "settings" && active !== "exams" && active !== "students" && active !== "information" && active !== "formula-sheets" && active !== "coupons" && (
           <div className="ad-head">
             <h1 className="ad-title">{NAV.find((n) => n.key === active)?.label}</h1>
             <span className="ad-count">coming soon</span>
