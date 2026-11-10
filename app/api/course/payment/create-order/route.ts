@@ -107,9 +107,16 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     if (!orderRes.ok) {
       const errorText = await orderRes.text();
-      console.error("[Razorpay order creation failed]", errorText);
+      console.error("[Razorpay order creation failed]", {
+        status: orderRes.status,
+        statusText: orderRes.statusText,
+        body: errorText,
+        hasKeyId: !!RAZORPAY_KEY_ID,
+        hasKeySecret: !!RAZORPAY_KEY_SECRET,
+        keyIdPrefix: RAZORPAY_KEY_ID ? RAZORPAY_KEY_ID.slice(0, 8) + "..." : "none",
+      });
       return NextResponse.json(
-        { error: "Failed to create payment order" },
+        { error: "Failed to create payment order", details: errorText.slice(0, 200) },
         { status: 500, headers: cors() }
       );
     }
@@ -140,7 +147,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       { status: 200, headers: cors() }
     );
   } catch (err: unknown) {
-    console.error("[POST /api/course/payment/create-order]", err);
+    console.error("[POST /api/course/payment/create-order]", {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      hasKeyId: !!RAZORPAY_KEY_ID,
+      hasKeySecret: !!RAZORPAY_KEY_SECRET,
+    });
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal server error" },
       { status: 500, headers: cors() }
