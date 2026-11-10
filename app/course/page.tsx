@@ -375,6 +375,8 @@ export default function CoursePage() {
         .course-topic-btn { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; background: var(--color-paper); border: 1.5px solid var(--color-rule); border-radius: var(--radius-input); padding: 0.8rem 1rem; text-align: left; cursor: pointer; transition: border-color var(--dur-micro), background var(--dur-micro); }
         .course-topic-btn:not(.course-topic-bought):hover { border-color: var(--color-accent-2); background: var(--color-tint-cyan); }
         .course-topic-btn.course-topic-bought { background: var(--color-tint-mint); border-color: oklch(80% 0.16 150 / 0.6); cursor: default; }
+        .course-topic-btn.course-topic-disabled { opacity: 0.6; cursor: not-allowed; border-color: var(--color-rule-2); }
+        .course-topic-btn.course-topic-disabled:hover { border-color: var(--color-rule-2); background: var(--color-paper); }
         .course-topic-info { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 0; }
         .course-topic-name { font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
         .course-topic-price { font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.1em; }
@@ -545,9 +547,9 @@ export default function CoursePage() {
                   return (
                     <button
                       key={t.id}
-                      className={`course-topic-btn${already ? " course-topic-bought" : ""}`}
+                      className={`course-topic-btn${already ? " course-topic-bought" : ""}${auth !== "in" ? " course-topic-disabled" : ""}`}
                       onClick={() => selectTopic(t)}
-                      disabled={already}
+                      disabled={already || auth !== "in"}
                     >
                       <span className="course-topic-info">
                         <span className="course-topic-name">{t.name}</span>
