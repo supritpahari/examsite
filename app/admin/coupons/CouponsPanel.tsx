@@ -144,7 +144,6 @@ export default function CouponsPanel() {
         <button
           className="btn"
           onClick={openCreate}
-          style={{ marginLeft: "auto" }}
         >
           + Add Coupon
         </button>
@@ -218,81 +217,83 @@ export default function CouponsPanel() {
         </div>
       )}
 
-      <div className="ad-coupon-form">
-        <h3>
-          {editingId ? "Edit Coupon" : "Add Coupon"}
-        </h3>
-        <div className="ad-form-grid">
-          <div className="ad-field">
-            <label>Code</label>
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="e.g. SAVE10"
-            />
-          </div>
-          <div className="ad-field">
-            <label>Type</label>
-            <select value={discountType} onChange={(e) => setDiscountType(e.target.value as "percent" | "fixed")}>
-              <option value="percent">Percent off</option>
-              <option value="fixed">Fixed ₹ off</option>
-            </select>
-          </div>
-          <div className="ad-field">
-            <label>Value</label>
-            <input
-              type="number"
-              value={discountValue}
-              onChange={(e) => setDiscountValue(e.target.value)}
-              placeholder="e.g. 10 or 50"
-            />
-          </div>
-          <div className="ad-field">
-            <label>Min Order (₹)</label>
-            <input
-              type="number"
-              value={minAmount}
-              onChange={(e) => setMinAmount(e.target.value)}
-              placeholder="optional"
-            />
-          </div>
-          <div className="ad-field">
-            <label>Max Discount (₹)</label>
-            <input
-              type="number"
-              value={maxDiscount}
-              onChange={(e) => setMaxDiscount(e.target.value)}
-              placeholder="optional"
-            />
-          </div>
-          <div className="ad-field">
-            <label>Uses Left</label>
-            <input
-              type="number"
-              value={usesLeft}
-              onChange={(e) => setUsesLeft(e.target.value)}
-              placeholder="optional"
-            />
-          </div>
-          <div className="ad-field">
-            <label>Active</label>
-            <select value={active ? "true" : "false"} onChange={(e) => setActive(e.target.value === "true")}>
-              <option value="true">Yes</option>
-              <option value="false">No</option>
-            </select>
-          </div>
-          <div className="ad-field">
-            <button className="btn" onClick={save} disabled={!code.trim()}>
-              {editingId ? "Update Coupon" : "Create Coupon"}
-            </button>
-            {!editingId && (
-              <button className="btn btn--soft" onClick={openCreate}>
-                Cancel
+      {editingId || coupons.length === 0 && (
+        <div className="ad-coupon-form">
+          <h3>
+            {editingId ? "Edit Coupon" : "Add Coupon"}
+          </h3>
+          <div className="ad-coupon-grid">
+            <div className="ad-coupon-field">
+              <label>Code</label>
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="e.g. SAVE10"
+              />
+            </div>
+            <div className="ad-coupon-field">
+              <label>Type</label>
+              <select value={discountType} onChange={(e) => setDiscountType(e.target.value as "percent" | "fixed")}>
+                <option value="percent">Percent off</option>
+                <option value="fixed">Fixed ₹ off</option>
+              </select>
+            </div>
+            <div className="ad-coupon-field">
+              <label>Value</label>
+              <input
+                type="number"
+                value={discountValue}
+                onChange={(e) => setDiscountValue(e.target.value)}
+                placeholder="e.g. 10 or 50"
+              />
+            </div>
+            <div className="ad-coupon-field">
+              <label>Min Order (₹)</label>
+              <input
+                type="number"
+                value={minAmount}
+                onChange={(e) => setMinAmount(e.target.value)}
+                placeholder="optional"
+              />
+            </div>
+            <div className="ad-coupon-field">
+              <label>Max Discount (₹)</label>
+              <input
+                type="number"
+                value={maxDiscount}
+                onChange={(e) => setMaxDiscount(e.target.value)}
+                placeholder="optional"
+              />
+            </div>
+            <div className="ad-coupon-field">
+              <label>Uses Left</label>
+              <input
+                type="number"
+                value={usesLeft}
+                onChange={(e) => setUsesLeft(e.target.value)}
+                placeholder="optional"
+              />
+            </div>
+            <div className="ad-coupon-field">
+              <label>Active</label>
+              <select value={active ? "true" : "false"} onChange={(e) => setActive(e.target.value === "true")}>
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+            <div className="ad-coupon-field ad-coupon-actions">
+              <button className="btn" onClick={save} disabled={!code.trim()}>
+                {editingId ? "Update Coupon" : "Create Coupon"}
               </button>
-            )}
+              {!editingId && (
+                <button className="btn btn--soft" onClick={openCreate}>
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <ConfirmDialog
         open={!!pendingConfirm}

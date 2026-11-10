@@ -547,6 +547,59 @@
 .ad-skel-row { display: flex; gap: 0.6rem; margin-bottom: 0.7rem; }
 .ad-skel-line { height: 0.8rem; border-radius: 6px; background: linear-gradient(90deg, var(--color-paper-2) 25%, var(--color-paper-3) 37%, var(--color-paper-2) 63%); background-size: 400% 100%; animation: ad-shimmer 1.4s ease infinite; }
 .ad-skel-line.w20 { width: 20%; }
+
+/* ---------- coupon panel ---------- */
+.ad-coupon-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+.ad-coupon-table th {
+  font-family: var(--font-mono); font-size: 0.6rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.12em; color: var(--color-muted);
+  text-align: left; padding: 0.85rem 0.9rem; border-bottom: 1px solid var(--color-rule);
+}
+.ad-coupon-table td {
+  padding: 0.85rem 0.9rem; border-bottom: 1px solid var(--color-rule);
+  font-size: 0.9rem; color: var(--color-ink);
+}
+.ad-coupon-table tr:last-child td { border-bottom: 0; }
+.ad-coupon-table tr:hover { background: var(--color-paper-2); }
+
+.ad-coupon-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.ad-coupon-actions .btn { font-size: 0.78rem; padding: 0.5rem 0.85rem; }
+
+.status-badge {
+  font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em; padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-pill);
+}
+.status-badge.active { background: var(--color-tint-mint); color: var(--color-mint-deep); }
+.status-badge.inactive { background: var(--color-paper-2); color: var(--color-muted); }
+
+.ad-coupon-form { margin-top: 1.75rem; max-width: 720px; }
+.ad-coupon-form h3 {
+  font-family: var(--font-display); font-weight: 600; font-size: 1.4rem;
+  letter-spacing: -0.025em; margin: 0 0 1.1rem; color: var(--color-ink);
+}
+.ad-coupon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.9rem;
+}
+.ad-coupon-field { display: flex; flex-direction: column; gap: 0.4rem; }
+.ad-coupon-field label {
+  font-family: var(--font-mono); font-size: 0.6rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.16em; color: var(--color-muted);
+}
+.ad-coupon-field input, .ad-coupon-field select {
+  width: 100%; background: var(--color-paper-2);
+  border: 1.5px solid transparent; border-radius: var(--radius-input);
+  padding: 0.7rem 0.8rem; font-family: var(--font-body); font-size: 0.92rem;
+  color: var(--color-ink); outline: none;
+  transition: border-color var(--dur-micro), background var(--dur-micro);
+}
+.ad-coupon-field input:focus, .ad-coupon-field select:focus {
+  border-color: var(--color-accent-2); background: var(--color-paper);
+}
+.ad-coupon-actions { display: flex; gap: 0.75rem; align-items: flex-end; margin-top: 0.4rem; }
+.ad-coupon-actions .btn { font-size: 0.88rem; padding: 0.7rem 1.2rem; }
 .ad-skel-line.w40 { width: 40%; }
 .ad-skel-line.w60 { width: 60%; }
 .ad-skel-line.w80 { width: 80%; margin-bottom: 0.5rem; }
