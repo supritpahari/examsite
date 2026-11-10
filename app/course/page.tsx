@@ -15,6 +15,11 @@ import { getIdToken, type User } from "firebase/auth";
 import FormulaMarks from "../_components/FormulaMarks";
 import PhoneAuth from "../_components/PhoneAuth";
 import Image from "next/image";
+import {
+  addToCart,
+  getCartCount,
+  type CartItem,
+} from "@/lib/cart";
 
 type Step = "grade" | "topic" | "signin" | "payment" | "success";
 type BucketKey = "c11" | "c12" | "jee" | "other";
@@ -83,6 +88,11 @@ export default function CoursePage() {
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [paidTopic, setPaidTopic] = useState<string | null>(null);
+  const [cartCount, setCartCount] = useState(0);
+
+  useEffect(() => {
+    setCartCount(getCartCount());
+  }, []);
 
   useEffect(() => {
     const unsub = onAuthState((u) => {
@@ -173,10 +183,23 @@ export default function CoursePage() {
   }, []);
 
   const selectTopic = (topic: BucketedTopic) => {
-    setSelectedTopic(topic);
     // Gate: buying requires a signed-in (phone-verified) account.
-    if (auth === "in") setStep("payment");
-    else setAuthDialogOpen(true);
+    if (auth !== "in") {
+      setAuthDialogOpen(true);
+      return;
+    }
+    // Add to cart instead of direct purchase
+    const cartItem: CartItem = {
+      topicId: topic.id,
+      topicName: topic.name,
+      gradeId: bucket ?? "",
+      gradeName: topic.gradeName,
+      amount: topic.price,
+    };
+    addToCart(cartItem);
+    setSelectedTopic(null);
+    setCartCount(getCartCount());
+    setStep("topic"); // stay on topic list, item added to cart
   };
 
   const goBack = () => {
@@ -389,8 +412,7 @@ export default function CoursePage() {
         .course-topic-name { font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
         .course-topic-price { font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.1em; }
         .course-topic-btn.course-topic-bought .course-topic-price { color: var(--color-mint-deep); font-weight: 600; }
-        .course-topic-check, .course-topic-arrow { font-size: 1rem; flex: 0 0 auto; color: var(--color-muted); }
-        .course-topic-lock { font-size: 1rem; flex: 0 0 auto; color: var(--color-muted); }
+        .course-topic-check, .course-topic-arrow, .course-topic-add, .course-topic-lock { font-size: 1rem; flex: 0 0 auto; color: var(--color-muted); }
         .course-topic-btn.course-topic-bought .course-topic-check { color: var(--color-mint-deep); font-weight: 700; }
         .course-empty { border: 1.5px dashed var(--color-rule-2); border-radius: var(--radius-input); padding: var(--space-xl); text-align: center; color: var(--color-muted); line-height: 1.6; }
 
@@ -456,6 +478,14 @@ export default function CoursePage() {
         </Link>
         <Link href="/" className="co-back">
           ← Back to portal
+        </Link>
+        <Link href="/cart" className="co-cart">
+          <svg className="co-cart-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="9" cy="21" r="1" />
+            <circle cx="20" cy="21" r="1" />
+            <path d="M1 1h4l2.69 11H9.41l-1.25 6H1z" />
+          </svg>
+          <span className="co-cart-count">{cartCount}</span>
         </Link>
       </nav>
       )}
@@ -597,7 +627,7 @@ export default function CoursePage() {
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12.5l5 5L20 6.5" /></svg>
                         </span>
                       ) : (
-                        <span className="course-topic-arrow" aria-hidden="true">→</span>
+                        <span className="course-topic-add" aria-hidden="true">+</span>
                       )}
                     </button>
                   );
