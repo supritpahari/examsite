@@ -97,6 +97,28 @@
 .ad-nav-icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; color: inherit; }
 .ad-brand-text { white-space: nowrap; }
 
+/* ---------- stats card ---------- */
+.ad-stats-card {
+  margin: 14px 12px 10px;
+  padding: 10px 12px;
+  background: var(--color-panel-2);
+  border: 1px solid var(--color-panel-rule);
+  border-radius: var(--radius-input);
+}
+.ad-stats-row {
+  display: flex; justify-content: space-between; gap: 8px;
+  margin-bottom: 6px;
+}
+.ad-stats-row:last-child { margin-bottom: 0; }
+.ad-stats-label {
+  font-family: var(--font-mono); font-size: 0.62rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-panel-dim);
+}
+.ad-stats-value {
+  font-family: var(--font-mono); font-size: 0.85rem; font-weight: 600;
+  color: var(--color-on-panel);
+}
+
 /* ---------- main canvas ---------- */
 .ad-main { position: relative; padding: 1.75rem 2.5rem; overflow-y: auto; }
 .ad-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap; }

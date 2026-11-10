@@ -5,6 +5,7 @@ import { MaintenanceWrapper } from "./providers/MaintenanceWrapper";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import LogCapture from "./providers/LogCapture";
+import { VisitorTracker } from "./_components/VisitorTracker";
 
 export const metadata: Metadata = {
   title: "World of Physics - The exam before the exam.",
@@ -33,6 +34,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <LogCapture />
+        <VisitorTracker />
         <MaintenanceWrapper>{children}</MaintenanceWrapper>
         <Analytics />
         <SpeedInsights />

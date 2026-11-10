@@ -37,6 +37,7 @@ import {
   DEFAULT_SITE_INFO,
   type SiteInfo,
 } from "@/lib/settings";
+import { fetchSiteStats } from "@/lib/stats";
 import NoticesPanel from "./notices/panel";
 import FormulaSheetsPage from "./formula-sheets/FormulaSheets";
 
@@ -137,6 +138,7 @@ export default function AdminDashboard() {
   const [loadingExams, setLoadingExams] = useState(true);
   const [checking, setChecking] = useState(true);
   const [authed, setAuthed] = useState(false);
+  const [stats, setStats] = useState<{ totalVisitors: number; onlineUsers: number } | null>(null);
   const [explain, setExplain] = useState<{
     q: Question;
     text: string;
@@ -181,6 +183,9 @@ export default function AdminDashboard() {
         loadSiteInfo()
           .then(setSiteInfo)
           .catch(() => setSiteInfo(DEFAULT_SITE_INFO));
+        fetchSiteStats()
+          .then(setStats)
+          .catch(() => setStats(null));
       } else {
         router.replace("/admin/login");
       }
@@ -471,9 +476,25 @@ export default function AdminDashboard() {
             <span className="ad-nav-label">{n.label}</span>
           </button>
         ))}
+        {stats && (
+          <div className="ad-stats-card">
+            <div className="ad-stats-row">
+              <span className="ad-stats-label">Visitors</span>
+              <span className="ad-stats-value">{stats.totalVisitors}</span>
+            </div>
+            <div className="ad-stats-row">
+              <span className="ad-stats-label">Online</span>
+              <span className="ad-stats-value">{stats.onlineUsers}</span>
+            </div>
+          </div>
+        )}
         <button className="ad-signout" onClick={handleSignOut} title="Sign out">
           <span className="ad-nav-icon"><NavIcon name="signout" /></span>
           <span className="ad-nav-label">Sign out</span>
+        </button>
+        <button className="ad-signout" onClick={() => router.push("/")} title="Back to website">
+          <span className="ad-nav-icon">🌐</span>
+          <span className="ad-nav-label">Back to website</span>
         </button>
       </aside>
 
