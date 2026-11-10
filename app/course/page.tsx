@@ -313,11 +313,6 @@ export default function CoursePage() {
       maximumFractionDigits: 0,
     });
 
-  const downloadPdf = () => {
-    if (!selectedTopic) return;
-    window.open(selectedTopic.pdfUrl, "_blank");
-  };
-
   const stepIndex: Record<Step, number> = { grade: 1, topic: 2, signin: 3, payment: 3, success: 4 };
   const topics = bucket ? bucketTopics(bucket) : [];
 
@@ -646,7 +641,7 @@ export default function CoursePage() {
         </main>
       )}
 
-      {/* ---------- Step 4: Success / Download ---------- */}
+      {/* ---------- Step 4: Success / Access in App ---------- */}
       {step === "success" && paidTopic && (
         <main className="course-main">
           <section className="course-card course-card-wide course-success">
@@ -654,26 +649,12 @@ export default function CoursePage() {
               <div className="course-star" />
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5" /></svg>
             </div>
-            <h1 className="course-step-title">Payment successful</h1>
+            <h1 className="course-step-title">Bought successfully</h1>
             <p className="course-desc">
-              Your formula sheet is ready to download. Click below to open or save the PDF.
+              Your formula sheet has been purchased. You can access it anytime
+              in the <strong>World of Physics</strong> mobile app.
             </p>
-            <div className="course-download">
-              <a
-                href={
-                  bucket
-                    ? bucketTopics(bucket).find((t) => t.id === paidTopic)?.pdfUrl ?? "#"
-                    : "#"
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn"
-                onClick={downloadPdf}
-              >
-                Download PDF
-              </a>
-              <p className="course-download-hint">Opens in a new tab · re-download anytime from this page</p>
-            </div>
+            <p className="course-download-hint">Download the app to view your sheets</p>
             <div className="course-actions">
               <button className="btn btn--soft" onClick={() => { setStep("grade"); setBucket(null); setPaidTopic(null); setSelectedTopic(null); }}>
                 Browse more sheets
