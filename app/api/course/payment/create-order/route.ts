@@ -77,8 +77,8 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     // Razorpay amount is in paise (smallest currency unit)
     const amountPaise = Math.round(Number(amount) * 100);
-
-    const receipt = `rcpt_${uid}_${topicId}_${Date.now()}`;
+    // Razorpay receipt must be <= 56 chars — use short unique id
+    const receipt = `rcpt_${Date.now()}`;
 
     const authHeader = Buffer.from(
       `${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`
