@@ -382,6 +382,7 @@ export default function CoursePage() {
         .course-topic-price { font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.1em; }
         .course-topic-btn.course-topic-bought .course-topic-price { color: var(--color-mint-deep); font-weight: 600; }
         .course-topic-check, .course-topic-arrow { font-size: 1rem; flex: 0 0 auto; color: var(--color-muted); }
+        .course-topic-lock { font-size: 1rem; flex: 0 0 auto; color: var(--color-muted); }
         .course-topic-btn.course-topic-bought .course-topic-check { color: var(--color-mint-deep); font-weight: 700; }
         .course-empty { border: 1.5px dashed var(--color-rule-2); border-radius: var(--radius-input); padding: var(--space-xl); text-align: center; color: var(--color-muted); line-height: 1.6; }
 
@@ -548,7 +549,14 @@ export default function CoursePage() {
                     <button
                       key={t.id}
                       className={`course-topic-btn${already ? " course-topic-bought" : ""}${auth !== "in" ? " course-topic-disabled" : ""}`}
-                      onClick={() => selectTopic(t)}
+                      onClick={() => {
+                        if (auth !== "in") {
+                          setPayError("Please sign in with your mobile number before buying.");
+                          setAuthDialogOpen(true);
+                          return;
+                        }
+                        selectTopic(t);
+                      }}
                       disabled={already || auth !== "in"}
                     >
                       <span className="course-topic-info">
@@ -557,7 +565,9 @@ export default function CoursePage() {
                           {already ? "Purchased" : `${formatPrice(t.price)} · ${t.gradeName}`}
                         </span>
                       </span>
-                      {already ? (
+                      {auth !== "in" ? (
+                        <span className="course-topic-lock" aria-hidden="true">🔒 Sign in</span>
+                      ) : already ? (
                         <span className="course-topic-check" aria-hidden="true">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12.5l5 5L20 6.5" /></svg>
                         </span>
