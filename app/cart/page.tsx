@@ -97,6 +97,7 @@ export default function CartPage() {
         .co-summary-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--color-ink); }
         .co-summary-row.discount { color: var(--color-accent-2-deep); }
         .co-summary-row.total { font-weight: 600; font-size: 1.05rem; border-top: 1px solid var(--color-rule); padding-top: 0.5rem; margin-top: 0.5rem; }
+        .co-summary-row span:last-child { text-align: right; }
         .co-coupon { display: flex; gap: 0.5rem; margin-bottom: var(--space-lg); flex-wrap: wrap; }
         .co-coupon input { flex: 1; min-width: 0; background: var(--color-paper-2); border: 1.5px solid transparent; border-radius: var(--radius-input); padding: 0.7rem 0.8rem; font-family: var(--font-body); font-size: 0.95rem; color: var(--color-ink); }
         .co-coupon-msg { font-size: 0.78rem; margin-top: 0.3rem; color: var(--color-accent-2-deep); }
