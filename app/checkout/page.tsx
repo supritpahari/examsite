@@ -33,7 +33,6 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => {
-    // Load cart from localStorage
     try {
       const raw = window.localStorage.getItem("examsite_cart");
       if (raw) setItems(JSON.parse(raw));
@@ -44,9 +43,8 @@ export default function CheckoutPage() {
     }
   }, []);
 
-  const subtotal = items.reduce((sum, i) => sum + i.amount, 0);
-  const discount = couponDiscount;
-  const total = Math.max(0, subtotal - discount);
+  const subtotal = items.reduce((sum, i) => sum + (i.amount || 0), 0);
+  const total = Math.max(0, subtotal - couponDiscount);
 
   const loadRazorpay = (): Promise<void> => {
     if (razorpayRef.current) return Promise.resolve();
@@ -150,10 +148,9 @@ export default function CheckoutPage() {
             throw new Error(errData.error || "Payment verification failed");
           }
 
-          // Clear cart
           window.localStorage.removeItem("examsite_cart");
           setItems([]);
-          setLoading(false);
+          router.push("/course?checkout=success");
         },
         modal: {
           ondismiss: () => {
@@ -182,8 +179,11 @@ export default function CheckoutPage() {
 
   if (auth !== "in") {
     return (
-      <div className="co-guard" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <PhoneAuth dialog onClose={() => setAuthDialogOpen(true)} />
+      <div className="co-root">
+        <FormulaMarks />
+        <div className="co-guard" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <PhoneAuth dialog onClose={() => setAuthDialogOpen(true)} />
+        </div>
       </div>
     );
   }
@@ -236,7 +236,7 @@ export default function CheckoutPage() {
           {items.map((item) => (
             <div className="co-row" key={`${item.gradeId}-${item.topicId}`}>
               <div className="co-row-main">
-                <div className="co-row-title">{item.topicName}</div>
+                <div className="co-row-title">{item.topicName || item.topicId}</div>
                 <div className="co-row-sub">{item.gradeName}</div>
               </div>
               <div className="co-row-sub" style={{ textAlign: "right" }}>
