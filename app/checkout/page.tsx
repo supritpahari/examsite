@@ -216,6 +216,44 @@ export default function CheckoutPage() {
   return (
     <div className="co-root">
       <FormulaMarks />
+      <style>{`
+        .co-root { min-height: 100vh; background: var(--color-paper); color: var(--color-ink); position: relative; isolation: isolate; overflow-x: clip; font-family: var(--font-body); }
+        .co-nav { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem var(--page-gutter); border-bottom: 1px solid var(--color-rule); max-width: var(--page-max); margin-inline: auto; }
+        .co-brand { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; letter-spacing: -0.03em; color: var(--color-ink); text-decoration: none; display: inline-flex; align-items: center; gap: 0.6rem; }
+        .co-brand-logo { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--color-rule-2); flex: 0 0 auto; }
+        .co-back { font-family: var(--font-mono); font-size: 0.68rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: var(--color-muted); text-decoration: none; }
+        .co-back:hover { color: var(--color-accent-2-deep); }
+        .co-main { max-width: var(--page-max); margin-inline: auto; padding: var(--space-xl) var(--page-gutter) var(--space-2xl); }
+        .co-kicker { font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--color-accent-2-deep); margin: 0 0 0.5rem; }
+        .co-h1 { font-size: var(--text-display); line-height: 1.02; margin: 0 0 var(--space-xl); letter-spacing: -0.03em; }
+        .co-card { background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: var(--space-lg); margin-bottom: var(--space-lg); }
+        .co-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-md); }
+        .co-card-title { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.02em; font-size: 1.15rem; margin: 0; }
+        .co-card-hint { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-muted); }
+        .co-empty { border: 1.5px dashed var(--color-rule-2); border-radius: var(--radius-input); padding: var(--space-lg); text-align: center; color: var(--color-muted); font-size: 0.9rem; line-height: 1.65; }
+        .co-empty a { color: var(--color-accent-2-deep); font-weight: 600; }
+        .co-row { display: flex; align-items: center; gap: 0.85rem; padding: 0.7rem 0.75rem; border: 1px solid var(--color-rule); border-radius: var(--radius-input); background: var(--color-paper); }
+        .co-row + .co-row { margin-top: 0.55rem; }
+        .co-row-main { flex: 1; min-width: 0; }
+        .co-row-title { font-weight: 600; font-size: 0.92rem; overflow-wrap: anywhere; }
+        .co-row-sub { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-muted); margin-top: 0.15rem; }
+        .co-row-action { flex: 0 0 auto; }
+        .co-summary { background: var(--color-paper-2); border: 1px solid var(--color-rule); border-radius: var(--radius-card); padding: var(--space-lg); margin-bottom: var(--space-lg); }
+        .co-summary-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--color-ink); }
+        .co-summary-row.discount { color: var(--color-accent-2-deep); }
+        .co-summary-row.total { font-weight: 600; font-size: 1.05rem; border-top: 1px solid var(--color-rule); padding-top: 0.5rem; margin-top: 0.5rem; }
+        .co-coupon { display: flex; gap: 0.5rem; margin-bottom: var(--space-lg); flex-wrap: wrap; }
+        .co-coupon input { flex: 1; min-width: 0; background: var(--color-paper-2); border: 1.5px solid transparent; border-radius: var(--radius-input); padding: 0.7rem 0.8rem; font-family: var(--font-body); font-size: 0.95rem; color: var(--color-ink); }
+        .co-coupon-msg { font-size: 0.78rem; margin-top: 0.3rem; color: var(--color-accent-2-deep); }
+        .co-coupon-msg.err { color: var(--color-danger); }
+        .co-actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
+        @media (max-width: 760px) {
+          .co-coupon { flex-direction: column; }
+          .co-coupon input { width: 100%; }
+          .co-actions { flex-direction: column; }
+          .co-actions button { width: 100%; }
+        }
+      `}</style>
       <nav className="co-nav">
         <Link href="/" className="co-brand">
           <Image src="/logo.png" alt="" width={30} height={30} className="co-brand-logo" priority />
