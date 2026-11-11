@@ -517,9 +517,9 @@ export default function CoursePage() {
         </Link>
         <Link href="/cart" className="co-cart">
           <svg className="co-cart-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="9" cy="21" r="1" />
+            <circle cx="8" cy="21" r="1" />
             <circle cx="20" cy="21" r="1" />
-            <path d="M1 1h4l2.69 11H9.41l-1.25 6H1z" />
+            <path d="M2 3h1l6 14h9l-3-14H3z" />
           </svg>
           <span className="co-cart-count">{cartCount}</span>
         </Link>
