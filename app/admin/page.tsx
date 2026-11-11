@@ -118,7 +118,7 @@ function NavIcon({ name }: { name: string }) {
       );
     case "globe":
       return (
-        <svg {...common}><circle cx="12" cy="12" r="10" /><path d="M12 2a10 10 0 0 0-10 10c0 4.42 2.87 8.17 7 9.5V12a10 10 0 0 1 10-10c0 4.42-2.87 8.17-7 9.5V12a10 10 0 0 0 10-10" /></svg>
+        <svg {...common}><circle cx="12" cy="12" r="10" /><path d="M12 2v20M2 12h20M5 6a7 7 0 1 1 14 0a7 7 0 0 1-14 0" /></svg>
       );
     default:
       return null;
