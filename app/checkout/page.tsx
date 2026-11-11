@@ -295,7 +295,7 @@ export default function CheckoutPage() {
             onClick={handlePay}
             disabled={paying || total <= 0}
           >
-            {paying ? "Processing…" : `Pay ₹{total}`}
+            {paying ? "Processing…" : `Pay ₹${total}`}
           </button>
           {payError && <div className="course-pay-err" role="alert">{payError}</div>}
         </div>
