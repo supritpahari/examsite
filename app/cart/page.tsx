@@ -178,25 +178,6 @@ export default function CartPage() {
               </div>
             </section>
 
-            <section className="co-card">
-              <div className="co-coupon">
-                <input
-                  placeholder="Enter coupon code"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && applyCoupon()}
-                />
-                <button className="btn" onClick={applyCoupon}>
-                  Apply
-                </button>
-              </div>
-              {couponMessage && (
-                <p className={`co-coupon-msg ${couponDiscount > 0 ? "" : "err"}`}>
-                  {couponMessage}
-                </p>
-              )}
-            </section>
-
             <div className="co-actions">
               <button
                 className="btn btn--soft"
