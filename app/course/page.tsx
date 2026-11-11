@@ -372,6 +372,18 @@ export default function CoursePage() {
         .co-brand-logo { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--color-rule-2); flex: 0 0 auto; }
         .co-back { font-family: var(--font-mono); font-size: 0.68rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: var(--color-muted); text-decoration: none; }
         .co-back:hover { color: var(--color-accent-2-deep); }
+        .co-cart {
+          font-family: var(--font-mono); font-size: 0.68rem; font-weight: 500;
+          text-transform: uppercase; letter-spacing: 0.14em; color: var(--color-muted);
+          text-decoration: none; display: inline-flex; align-items: center;
+          gap: 0.6rem; transition: color var(--dur-micro);
+        }
+        .co-cart:hover { color: var(--color-accent-2-deep); }
+        .co-cart-icon { flex: 0 0 auto; }
+        .co-cart-label { flex: 0 0 auto; color: var(--color-accent-2-deep); font-weight: 600; }
+        .co-cart-count { flex: 0 0 auto; background: var(--color-accent-2);
+          color: var(--color-on-accent-2); border-radius: 999px;
+          padding: 0.15rem 0.5rem; font-size: 0.58rem; font-weight: 700; }
 
         /* ---------- Hero ---------- */
         .co-hero { max-width: var(--page-max); margin-inline: auto; padding: clamp(1.5rem, 3vw, 2.5rem) var(--page-gutter) clamp(1.25rem, 2.5vw, 2rem); display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: var(--space-xl); align-items: center; }
@@ -516,11 +528,12 @@ export default function CoursePage() {
           ← Back to portal
         </Link>
         <Link href="/cart" className="co-cart">
-          <svg className="co-cart-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="co-cart-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="8" cy="21" r="1" />
             <circle cx="20" cy="21" r="1" />
             <path d="M2 3h1l6 14h9l-3-14H3z" />
           </svg>
+          <span className="co-cart-label">Cart</span>
           <span className="co-cart-count">{cartCount}</span>
         </Link>
       </nav>
