@@ -562,7 +562,7 @@
 .ad-coupon-table tr:last-child td { border-bottom: 0; }
 .ad-coupon-table tr:hover { background: var(--color-paper-2); }
 
-.ad-coupon-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.ad-coupon-actions { display: flex; gap: 0.5rem; flex-wrap: nowrap; }
 .ad-coupon-actions .btn { font-size: 0.78rem; padding: 0.5rem 0.85rem; }
 
 .status-badge {
