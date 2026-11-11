@@ -89,10 +89,22 @@ export default function CoursePage() {
   const [payError, setPayError] = useState<string | null>(null);
   const [paidTopic, setPaidTopic] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
+  const [cartToast, setCartToast] = useState<string | null>(null);
+  const [toastTimer, setToastTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setCartCount(getCartCount());
   }, []);
+
+  useEffect(() => {
+    if (cartToast) {
+      if (toastTimer) clearTimeout(toastTimer);
+      const timer = setTimeout(() => {
+        setCartToast(null);
+      }, 3000);
+      setToastTimer(timer);
+    }
+  }, [cartToast]);
 
   useEffect(() => {
     const unsub = onAuthState((u) => {
@@ -199,6 +211,7 @@ export default function CoursePage() {
     addToCart(cartItem);
     setSelectedTopic(null);
     setCartCount(getCartCount());
+    setCartToast(topic.name);
     setStep("topic"); // stay on topic list, item added to cart
   };
 
@@ -444,6 +457,29 @@ export default function CoursePage() {
 
         /* ---------- Footer ---------- */
         .co-foot { max-width: var(--page-max); margin-inline: auto; padding: var(--space-md) var(--page-gutter) var(--space-lg); border-top: 1px solid var(--color-rule); display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-md); flex-wrap: wrap; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); }
+
+        /* ---------- Cart toast ---------- */
+        .co-toast {
+          position: fixed;
+          top: 1.5rem;
+          right: 1.5rem;
+          z-index: var(--z-toast);
+          background: var(--color-paper);
+          border: 1px solid var(--color-rule);
+          border-radius: var(--radius-card);
+          padding: 0.9rem 1rem;
+          box-shadow: var(--shadow-lift);
+          min-width: 260px;
+          animation: co-toast-slide 320ms var(--ease-out);
+        }
+        .co-toast-body { display: flex; align-items: center; gap: 0.75rem; }
+        .co-toast-icon { width: 28px; height: 28px; border-radius: 999px; background: var(--color-tint-mint); color: var(--color-mint-deep); display: grid; place-items: center; flex: 0 0 auto; }
+        .co-toast-title { font-family: var(--font-display); font-weight: 600; font-size: 0.92rem; color: var(--color-ink); }
+        .co-toast-desc { font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-ink-2); }
+        @keyframes co-toast-slide {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
 
         /* ---------- Responsive ---------- */
         @media (max-width: 1080px) {
@@ -700,6 +736,19 @@ export default function CoursePage() {
           <span>World of Physics</span>
           <span>For practice only · Not affiliated with NTA</span>
         </footer>
+      )}
+
+      {/* Cart added toast */}
+      {cartToast && (
+        <div className="co-toast" role="status" aria-label="Added to cart">
+          <div className="co-toast-body">
+            <div className="co-toast-icon" aria-hidden="true">✓</div>
+            <div>
+              <div className="co-toast-title">Added to cart</div>
+              <div className="co-toast-desc">{cartToast}</div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
