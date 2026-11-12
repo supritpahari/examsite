@@ -438,48 +438,9 @@ export default function FormulaSheetsPage() {
         </div>
       </div>
 
-      <button className="ad-fab" onClick={() => setOpen(true)} aria-label="Add formula sheet">
-        <span className="plus">+</span> New Formula Sheet
-      </button>
-
       {error && <div className="ad-set-status err">{error}</div>}
       {saved && <div className="ad-set-status ok">{saved}</div>}
 
-      <div className="ad-sheets-list">
-        {sheets.length === 0 ? (
-          <div className="ad-empty">No formula sheets yet. Tap “+ New Formula Sheet” to add your first one.</div>
-        ) : (
-          sheets.map((s) => (
-            <article className="ad-sheet-card" key={s.id}>
-              <div className="ad-sheet-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 3h9l4 4v14H6z" />
-                  <path d="M9 8h5M9 12h5M9 16h5" />
-                </svg>
-              </div>
-              <div className="ad-sheet-body">
-                <h2 className="ad-sheet-title">{s.title || s.chapter}</h2>
-                <div className="ad-sheet-meta">
-                  <span className="ad-sheet-chip grade">{s.grade || "Uncategorized"}</span>
-                  <span className="ad-sheet-chip price tnum">₹{s.price}</span>
-                  <span className="ad-sheet-chip chapter">{s.chapter}</span>
-                </div>
-              </div>
-              <div className="ad-sheet-actions" role="group" aria-label="Sheet actions">
-                <a className="ad-icon-btn" href={s.pdfUrl} target="_blank" rel="noopener" title="Download PDF" aria-label={`Download ${s.pdfName}`}>
-                  <SheetIcon name="download" />
-                </a>
-                <button className="ad-icon-btn" onClick={() => openEdit(s)} title="Edit sheet" aria-label={`Edit ${s.title || s.chapter}`}>
-                  <SheetIcon name="edit" />
-                </button>
-                <button className="ad-icon-btn danger" onClick={() => handleDelete(s.id)} title="Delete sheet" aria-label={`Delete ${s.title || s.chapter}`}>
-                  <SheetIcon name="trash" />
-                </button>
-              </div>
-            </article>
-          ))
-        )}
-      </div>
 
       {/* Add / Edit modal */}
       <div className="ad-overlay" onClick={() => setOpen(false)} style={{ display: open ? "flex" : "none" }}>
